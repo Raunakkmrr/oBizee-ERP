@@ -1,65 +1,96 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import { AppShell } from "@/components/shell/app-shell";
+import { PageHeader } from "@/components/shared/page-header";
+import { QueryBoundary } from "@/components/data-states/query-boundary";
+import { TodaySnapshot } from "@/components/home/today-snapshot";
+import { NeedsYourCall } from "@/components/home/needs-your-call";
+import { AgainstLastWeek } from "@/components/home/against-last-week";
+import { ComingUp } from "@/components/home/coming-up";
+import { getHomeSnapshot, type HomeSnapshot } from "@/lib/data/home";
+import { loading, type Query } from "@/lib/data/result";
+import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
+import { formatDateLong, greetingFor } from "@/lib/datetime";
+
+/**
+ * The primary post-login screen — Phase 1.
+ *
+ * Carries `futuristic-product-build`'s four mandatory beats in sequence:
+ * situation → what needs me → is that good or bad → what's coming.
+ *
+ * | Beat | Section |
+ * |---|---|
+ * | State of the business now | `TodaySnapshot` |
+ * | What needs me | `NeedsYourCall` |
+ * | Trend and comparison | `AgainstLastWeek` |
+ * | Where this is heading | `ComingUp` |
+ *
+ * **Layout reasoning.** `Needs your call` sits in the wider column at
+ * `xl`, beside the two analytical sections, because it is the only block that
+ * produces an *action*. §6.13.7's density thinking applies: the owner's eye goes
+ * left-to-right, top-to-bottom, and the thing he must do belongs where he looks
+ * first after the numbers.
+ *
+ * **All data flows through `QueryBoundary`**, so all four §6.3 states are
+ * handled by construction rather than by remembering to. The fixture ships a
+ * deliberate partial failure (the ledger), so the degraded path is visible on
+ * every load instead of being discovered in production.
+ */
+export default function HomePage() {
+  const [query, setQuery] = useState<Query<HomeSnapshot>>(loading());
+  const [hideAmounts, setHideAmounts] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getHomeSnapshot().then((result) => {
+      if (!cancelled) setQuery(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const today = new Date();
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <AppShell
+      role={CURRENT_USER.role}
+      userName={CURRENT_USER.name}
+      today={today}
+      freshness={{ kind: "fresh", at: today }}
+      badges={{ unassigned_today: 3, leads_overdue: 7 }}
+      hideAmounts={hideAmounts}
+      onToggleAmounts={() => setHideAmounts((v) => !v)}
+    >
+      <div className="p-4 md:p-6">
+        <PageHeader
+          title={`${greetingFor(today)}, ${CURRENT_USER.name.split(" ")[0]}`}
+          description={`${SEED_TENANT.businessName} · ${formatDateLong(today)}`}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+
+        <QueryBoundary query={query} label="today's summary" loadingRows={4}>
+          {(data) => (
+            <div className="space-y-4">
+              <TodaySnapshot today={data.today} hideAmounts={hideAmounts} />
+
+              <div className="grid gap-4 xl:grid-cols-3">
+                <div className="xl:col-span-2">
+                  <NeedsYourCall
+                    attention={data.attention}
+                    comingUp={data.comingUp}
+                  />
+                </div>
+                <div className="space-y-4">
+                  <AgainstLastWeek comparisons={data.comparisons} />
+                </div>
+              </div>
+
+              <ComingUp comingUp={data.comingUp} hideAmounts={hideAmounts} />
+            </div>
+          )}
+        </QueryBoundary>
+      </div>
+    </AppShell>
   );
 }
