@@ -1,0 +1,336 @@
+/**
+ * Money — PRD §6.12. Two sides of one screen: *they owe us* and *we owe them*.
+ *
+ * The two rules that make this more than a dunning module:
+ *
+ * 1. **A customer with an unbroken promise is excluded from reminders** and
+ *    shown in a `Promised` group (FR-904). "Auto-reminding someone who has
+ *    already promised is how MSMEs damage relationships." A generic collections
+ *    tool does not have this restraint; it is deliberate.
+ *
+ * 2. **§43B(h)**: pay a micro or small supplier late and the expense stops being
+ *    deductible **this year**. The owner's CA tells him in October about an
+ *    April bill. The rupee figure at the top of the payables tab is the whole
+ *    pitch of the screen.
+ */
+import { z } from "zod";
+import { defineQuery, type Fetched } from "./source";
+
+/* ------------------------------------------------------------ receivables */
+
+/** §6.12.1's six ageing buckets, in order. Each cell is a filter. */
+export const AGEING_BUCKETS = [
+  "0–15",
+  "16–30",
+  "31–45",
+  "46–60",
+  "61–90",
+  "90+",
+] as const;
+
+export type AgeingBucket = (typeof AGEING_BUCKETS)[number];
+
+export function bucketFor(daysOverdue: number): AgeingBucket {
+  if (daysOverdue <= 15) return "0–15";
+  if (daysOverdue <= 30) return "16–30";
+  if (daysOverdue <= 45) return "31–45";
+  if (daysOverdue <= 60) return "46–60";
+  if (daysOverdue <= 90) return "61–90";
+  return "90+";
+}
+
+const receivableSchema = z.object({
+  id: z.string(),
+  customer: z.string(),
+  invoiceNumber: z.string(),
+  invoiceDate: z.string(),
+  daysOverdue: z.number().int().nonnegative(),
+  amountPaise: z.number().int(),
+  lastContact: z.string().nullable(),
+  /**
+   * A promise, if one was made. `broken` is derived by the caller against
+   * today's date — a promise whose date has passed is no protection.
+   */
+  promise: z
+    .object({ dateWord: z.string(), broken: z.boolean() })
+    .nullable(),
+});
+
+export type Receivable = z.infer<typeof receivableSchema>;
+
+/**
+ * §6.12.1's sort: **amount × days overdue**. Neither alone is the right order —
+ * a ₹5,000 invoice 200 days late and a ₹5,00,000 invoice 3 days late are both
+ * mis-ranked by a single-key sort.
+ */
+export function collectionPriority(row: Receivable): number {
+  return row.amountPaise * row.daysOverdue;
+}
+
+/**
+ * FR-904. Splits the queue into who may be chased and who has promised.
+ * An **unbroken** promise protects; a broken one returns the row to the chase
+ * list, because the restraint was earned by the promise, not by having made one.
+ */
+export function splitByPromise(rows: Receivable[]): {
+  chase: Receivable[];
+  promised: Receivable[];
+} {
+  const chase: Receivable[] = [];
+  const promised: Receivable[] = [];
+  for (const row of rows) {
+    if (row.promise !== null && !row.promise.broken) promised.push(row);
+    else chase.push(row);
+  }
+  const byPriority = (a: Receivable, b: Receivable) =>
+    collectionPriority(b) - collectionPriority(a);
+  return { chase: chase.sort(byPriority), promised: promised.sort(byPriority) };
+}
+
+export function ageingTotals(
+  rows: Receivable[],
+): Record<AgeingBucket, { paise: number; count: number }> {
+  const totals = Object.fromEntries(
+    AGEING_BUCKETS.map((b) => [b, { paise: 0, count: 0 }]),
+  ) as Record<AgeingBucket, { paise: number; count: number }>;
+  for (const row of rows) {
+    const cell = totals[bucketFor(row.daysOverdue)];
+    cell.paise += row.amountPaise;
+    cell.count += 1;
+  }
+  return totals;
+}
+
+/* --------------------------------------------------------------- payables */
+
+/** §6.12.2's MSME classes, rendered as words on every row. */
+export const MSME_CLASSES = [
+  "MICRO",
+  "SMALL",
+  "MEDIUM",
+  "NOT_REGISTERED",
+  "UNVERIFIED",
+] as const;
+
+export type MsmeClass = (typeof MSME_CLASSES)[number];
+
+export const MSME_LABEL: Record<MsmeClass, string> = {
+  MICRO: "Micro",
+  SMALL: "Small",
+  MEDIUM: "Medium",
+  NOT_REGISTERED: "Not registered",
+  UNVERIFIED: "Unverified",
+};
+
+const payableSchema = z.object({
+  id: z.string(),
+  vendor: z.string(),
+  msmeClass: z.enum(MSME_CLASSES),
+  udyamNumber: z.string().nullable(),
+  /** §6.12.2: a trading registration does not attract the MSMED timeline. */
+  udyamActivity: z.enum(["MANUFACTURING", "SERVICE", "TRADING"]).nullable(),
+  hasWrittenAgreement: z.boolean(),
+  billDate: z.string(),
+  amountPaise: z.number().int(),
+  daysElapsed: z.number().int().nonnegative(),
+});
+
+export type Payable = z.infer<typeof payableSchema>;
+
+/**
+ * The §43B(h) countdown for one bill.
+ *
+ * Modelled as a discriminated union so that **"we cannot calculate this"** is a
+ * different shape from **"day 38 of 45"** — a suppressed countdown must never be
+ * mistaken for a comfortable one, and an unverified vendor must never render a
+ * confident number. FR-1301's reasoning applied to money.
+ */
+export type Countdown =
+  | { kind: "counting"; day: number; limit: 15 | 45; basis: string }
+  | { kind: "not_applicable"; reason: string }
+  | { kind: "unknown"; reason: string };
+
+export function countdownFor(bill: Payable): Countdown {
+  if (bill.msmeClass === "UNVERIFIED") {
+    // §6.12.2: grouped above the fold, because an unverified vendor is an
+    // unquantified risk — not a zero one.
+    return {
+      kind: "unknown",
+      reason: "Udyam status unknown — verify to see the deduction risk",
+    };
+  }
+  if (bill.msmeClass === "MEDIUM" || bill.msmeClass === "NOT_REGISTERED") {
+    return {
+      kind: "not_applicable",
+      reason: `${MSME_LABEL[bill.msmeClass]} — the MSMED payment timeline does not apply`,
+    };
+  }
+  if (bill.udyamActivity === "TRADING") {
+    return {
+      kind: "not_applicable",
+      reason:
+        "Udyam registration is for trading — the MSMED payment timeline does not apply",
+    };
+  }
+  // §15 of the MSMED Act: 45 days where there is a written agreement, 15 where
+  // there is not. The basis is stated in words on the row, because the number
+  // alone is not actionable — attaching an agreement changes it.
+  const limit = bill.hasWrittenAgreement ? 45 : 15;
+  return {
+    kind: "counting",
+    day: bill.daysElapsed,
+    limit,
+    basis: bill.hasWrittenAgreement
+      ? "45-day limit — written agreement on file"
+      : "15-day limit — no written agreement on record",
+  };
+}
+
+/**
+ * The sentence at the top of the payables tab: how much deduction is at risk.
+ * Only counting bills contribute — an unknown vendor's amount is *not* silently
+ * folded in, because that would make an unquantified risk look quantified.
+ */
+export function deductionAtRiskPaise(bills: Payable[]): number {
+  return bills.reduce((sum, bill) => {
+    const countdown = countdownFor(bill);
+    return countdown.kind === "counting" ? sum + bill.amountPaise : sum;
+  }, 0);
+}
+
+/* ---------------------------------------------------------------- queries */
+
+export const moneySchema = z.object({
+  receivables: z.array(receivableSchema),
+  payables: z.array(payableSchema),
+  /** §6.12.3's empty state needs the upcoming figure, not just a zero. */
+  dueNext15Paise: z.number().int(),
+  /** §6.12.3's partial state: a stored status with a date is honest. */
+  udyamVerifiedAsOf: z.string().nullable(),
+});
+
+export type MoneyData = z.infer<typeof moneySchema>;
+
+const FIXTURE = {
+  receivables: [
+    {
+      id: "rcv_1",
+      customer: "Grand Plaza Hotel",
+      invoiceNumber: "INV-2627-0104",
+      invoiceDate: "12 Jun 2026",
+      daysOverdue: 21,
+      amountPaise: 1_18_000_00,
+      lastContact: "24 Jul — spoke to accounts, said next week",
+      promise: null,
+    },
+    {
+      id: "rcv_2",
+      customer: "Deshmukh Hospital",
+      invoiceNumber: "INV-2627-0098",
+      invoiceDate: "2 Jun 2026",
+      daysOverdue: 31,
+      amountPaise: 2_40_000_00,
+      // Unbroken promise — excluded from reminders (FR-904).
+      lastContact: "24 Jul — promised 5 Aug",
+      promise: { dateWord: "5 Aug", broken: false },
+    },
+    {
+      id: "rcv_3",
+      customer: "Sunrise Apartments",
+      invoiceNumber: "INV-2627-0071",
+      invoiceDate: "18 Apr 2026",
+      daysOverdue: 96,
+      amountPaise: 42_500_00,
+      // A promise that has passed is no protection — back on the chase list.
+      lastContact: "10 Jul — promised 20 Jul",
+      promise: { dateWord: "20 Jul", broken: true },
+    },
+    {
+      id: "rcv_4",
+      customer: "Metro Retail",
+      invoiceNumber: "INV-2627-0112",
+      invoiceDate: "1 Jul 2026",
+      daysOverdue: 8,
+      amountPaise: 64_000_00,
+      lastContact: null,
+      promise: null,
+    },
+    {
+      id: "rcv_5",
+      customer: "Shakti Industries",
+      invoiceNumber: "INV-2627-0089",
+      invoiceDate: "26 May 2026",
+      daysOverdue: 52,
+      amountPaise: 86_400_00,
+      lastContact: "19 Jul — no answer",
+      promise: null,
+    },
+  ],
+  payables: [
+    {
+      id: "pay_1",
+      vendor: "Kumar Refrigeration Spares",
+      msmeClass: "MICRO" as const,
+      udyamNumber: "UDYAM-DL-05-0012345",
+      udyamActivity: "MANUFACTURING" as const,
+      hasWrittenAgreement: true,
+      billDate: "26 Jun 2026",
+      amountPaise: 38_200_00,
+      daysElapsed: 38,
+    },
+    {
+      id: "pay_2",
+      vendor: "Delhi Chemical Traders",
+      msmeClass: "SMALL" as const,
+      udyamNumber: "UDYAM-DL-05-0067890",
+      // Trading activity — countdown suppressed, stated in words.
+      udyamActivity: "TRADING" as const,
+      hasWrittenAgreement: false,
+      billDate: "20 Jul 2026",
+      amountPaise: 12_400_00,
+      daysElapsed: 14,
+    },
+    {
+      id: "pay_3",
+      vendor: "Nehru Place Electricals",
+      msmeClass: "SMALL" as const,
+      udyamNumber: "UDYAM-DL-03-0044556",
+      udyamActivity: "SERVICE" as const,
+      // No agreement — 15 days, not 45. Already past it.
+      hasWrittenAgreement: false,
+      billDate: "16 Jul 2026",
+      amountPaise: 26_000_00,
+      daysElapsed: 18,
+    },
+    {
+      id: "pay_4",
+      vendor: "Ashoka Transport",
+      msmeClass: "UNVERIFIED" as const,
+      udyamNumber: null,
+      udyamActivity: null,
+      hasWrittenAgreement: false,
+      billDate: "10 Jul 2026",
+      amountPaise: 9_800_00,
+      daysElapsed: 24,
+    },
+    {
+      id: "pay_5",
+      vendor: "Bharat Tools Pvt Ltd",
+      msmeClass: "NOT_REGISTERED" as const,
+      udyamNumber: null,
+      udyamActivity: null,
+      hasWrittenAgreement: true,
+      billDate: "4 Jul 2026",
+      amountPaise: 55_000_00,
+      daysElapsed: 30,
+    },
+  ],
+  dueNext15Paise: 86_400_00,
+  udyamVerifiedAsOf: "12 Jul 2026",
+};
+
+export const getMoney = defineQuery<void, MoneyData>({
+  key: "money.overview",
+  schema: moneySchema,
+  fixture: (): Fetched<unknown> => ({ raw: FIXTURE }),
+});
