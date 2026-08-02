@@ -1,26 +1,264 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Obez Service ERP — theme.
+ *
+ * This is an extension of the oBizee product family, so the brand truth is
+ * oBizee's, not this product's own invention: warm orange #D17C45 primary,
+ * warm surfaces, brown accents, white sidebar, Inter. Mirrored from
+ * `obizee-dashboard/src/app/globals.css` and `src/lib/design/tokens.ts`, which
+ * in turn mirror the React Native app at `OrderManagement/src/constants/`.
+ *
+ * RULE, inherited from the dashboard: never hardcode a hex in a component. Use
+ * a Tailwind token class (bg-primary, text-success…) or import from
+ * `@/lib/design/tokens`.
+ *
+ * ⚠️ ACCEPTED DEVIATION FROM THE PRD — see PRODUCT_LOG DR-13.
+ * PRD §9.6 sets a 7:1 contrast floor on all money, numerics, status and body
+ * text, above WCAG AA, because of the sub-₹10,000 LCD panels in daylight that
+ * §3.3 describes. The oBizee palette does not clear it — measured: white on
+ * #D17C45 is 3.14:1, #F5A623 warning on white is 2.03:1, #1FA968 on its own
+ * tint is 2.71:1, #82766B muted text on the page background is 4.14:1. Several
+ * of those fail plain WCAG AA too.
+ *
+ * The client chose brand continuity over the floor, knowingly. The contrast CI
+ * gate is therefore no longer part of `pnpm verify`. The consequence recorded
+ * with that decision: §9.6's mandatory outdoor-daylight test on a cheap LCD
+ * cannot be passed by this palette, and the technician app will need its own
+ * corrected tokens if that requirement is ever reinstated.
+ */
+
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-sans);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive: var(--destructive);
+  --color-info-foreground: var(--info-foreground);
+  --color-info: var(--info);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning: var(--warning);
+  --color-success-foreground: var(--success-foreground);
+  --color-success: var(--success);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-brand-bg-warm: var(--brand-bg-warm);
+  --color-brand-brown: var(--brand-brown);
+
+  /* Status tints — the background half of each tone pair. The dashboard ships
+     successBg and dangerBg in tokens.ts; the remaining three are derived in the
+     same warm register so the six job-state tones are a complete set. */
+  --color-success-bg: var(--success-bg);
+  --color-warning-bg: var(--warning-bg);
+  --color-info-bg: var(--info-bg);
+  --color-destructive-bg: var(--destructive-bg);
+  --color-primary-bg: var(--primary-bg);
+  --color-muted-bg: var(--muted-bg);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+
+  /* --- Product-specific, non-brand tokens ------------------------------- */
+  /* Density contracts (PRD §6.13.7). Not colour, so unaffected by DR-13 —
+     these are about how many rows a coordinator sees before scrolling, which
+     is a workflow constraint rather than a brand one. The Today board's 44px
+     row is the binding one: at 1366×768 it guarantees 10 job rows above the
+     fold, and a row grown to 52px costs her two of them. */
+  --row-today: 44px;
+  --row-tech-panel: 56px;
+  --row-leads: 52px;
+  --row-money: 40px;
+  --row-timeline: 36px;
+  --size-topbar: 56px; /* h-14, matching the dashboard's top bar */
+
+  /* Touch targets (§6.13.9) — above the 44px web floor, because hands are
+     gloved and oily. 56px for the technician's primary action. */
+  --tap-min: 48px;
+  --tap-primary: 56px;
+
+  /* Z-index scale (§6.13.7). The offline strip outranks everything including
+     modals: the technician must always be able to see whether his work saved. */
+  --z-rail: 10;
+  --z-topbar: 30; /* matches the dashboard's sticky header z-30 */
+  --z-sticky: 35;
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-offline: 70;
+
+  /* Motion (§6.13.8) — motion explains a change of state, never pleases.
+     Forbidden outright: list entrance animations, parallax, decorative loops,
+     and KPI count-ups (an owner reading a still-animating figure reads a wrong
+     number). */
+  --duration-press: 120ms;
+  --duration-state: 180ms;
+  --duration-drawer-in: 220ms;
+  --duration-drawer-out: 160ms;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0.625rem;
+
+  /* Inter for Latin and every numeral, matching the dashboard. The Indic face
+     is appended for the seven Indic scripts (§9.7) and picked up by per-glyph
+     fallback; it is undefined on English, so it MUST carry an inline fallback —
+     a `var()` that resolves to nothing invalidates the whole declaration and
+     silently drops the page to the browser's default serif. */
+  --font-sans:
+    var(--font-latin), var(--font-indic, ui-sans-serif), ui-sans-serif,
+    system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, monospace;
+
+  --background: #fbf7f3; /* warm off-white page */
+  --foreground: #1a1a1a; /* near-black text */
+
+  --card: #ffffff;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+
+  --primary: #d17c45; /* brand orange */
+  --primary-foreground: #ffffff;
+
+  --secondary: #f3e9e0; /* warm sand */
+  --secondary-foreground: #5c4326;
+
+  --muted: #f4efea; /* warm muted surface */
+  --muted-foreground: #82766b; /* warm grey */
+
+  --accent: #fbe7d6; /* peach accent (hover/active) */
+  --accent-foreground: #8a4a1e;
+
+  --destructive: #d6193c; /* brand red */
+  --destructive-foreground: #ffffff;
+
+  --success: #1fa968;
+  --success-foreground: #ffffff;
+  --warning: #f5a623;
+  --warning-foreground: #1a1a1a;
+  --info: #457dd1;
+  --info-foreground: #ffffff;
+
+  --border: #ece3da; /* warm hairline */
+  --input: #e4d8cc;
+  --ring: #d17c45; /* focus ring = brand */
+
+  --chart-1: #d17c45; /* orange */
+  --chart-2: #1fa968; /* green */
+  --chart-3: #457dd1; /* blue */
+  --chart-4: #7c633a; /* brown */
+  --chart-5: #e6a93c; /* gold */
+
+  /* extra brand aliases */
+  --brand-bg-warm: #fff6ee;
+  --brand-brown: #7c633a;
+
+  /* Status tints. successBg and dangerBg are the dashboard's own values from
+     tokens.ts; the other three are mixed to the same weight so a row of status
+     pills reads as one family rather than three borrowed ones. */
+  --success-bg: #eaf5ef;
+  --destructive-bg: #fce8ec;
+  --warning-bg: #fdf1dd;
+  --info-bg: #e8f0fa;
+  --primary-bg: #fbe7d6; /* peach — same as accent, deliberately */
+  --muted-bg: #f4efea;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #5c5043;
+  --sidebar-primary: #d17c45;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fbe7d6; /* active/hover row */
+  --sidebar-accent-foreground: #8a4a1e;
+  --sidebar-border: #ece3da;
+  --sidebar-ring: #d17c45;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  /* §6.13.8: honour both the OS reduced-motion setting and Android's "Remove
+     animations". State changes become instant rather than merely faster. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* --- Numeral utilities (PRD §6.13.6) ----------------------------------- */
+/* These survive DR-13 untouched: they are about legibility of figures rather
+   than colour, and a column of amounts that will not align is unscannable for
+   magnitude regardless of palette. */
+
+/* Mandatory on money, quantities, dates, times, durations, counters, phone
+   numbers, GSTIN, PAN, invoice numbers, job numbers and IRNs. A job number
+   whose digit widths shift is measurably harder to read aloud on a phone call —
+   which the coordinator does twenty times a day. */
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Additionally on GSTIN, PAN, serial numbers, IRNs and vehicle numbers, where
+   confusing 0 with O has a real cost. */
+@utility tnum-id {
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* Money is always right-aligned in tables and label/value pairs, and always
+   shows two decimals — `₹4,500.00`, never `₹4,500`, because a missing decimal
+   makes a user check whether it was truncated. */
+@utility money {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
