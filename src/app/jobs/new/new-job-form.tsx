@@ -127,6 +127,7 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
         </Button>
 
         <PageHeader
+          breadcrumb={[{ label: "Work" }, { label: "Jobs", href: "/jobs" }]}
           className="mb-4"
           title="New work order"
           description={

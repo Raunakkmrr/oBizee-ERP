@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MessageCircle, Phone, Plus } from "lucide-react";
+import { HandCoins, MessageCircle, Phone, Plus, ReceiptIndianRupee } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/shared/panel";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
@@ -119,7 +120,7 @@ function ReceivableRow({
   primary: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2.5 text-sm last:border-b-0">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-muted/40">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium">{row.customer}</span>
@@ -184,15 +185,27 @@ function Receivables({ data }: { data: MoneyData }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm">
-        <MoneyText
-          amount={asPaise(totalOverdue)}
-          className="font-semibold"
-        />{" "}
-        <span className="text-muted-foreground">
-          overdue across {data.receivables.length} invoices
-        </span>
-      </p>
+      {/*
+        The headline, given the weight it deserves. A sentence in body text is
+        the same size as a row label; this is the number the screen exists for.
+      */}
+      <Card className="gap-0 py-0">
+        <div className="flex flex-wrap items-center gap-4 p-4">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-warning/10 text-warning">
+            <HandCoins className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <MoneyText
+              amount={asPaise(totalOverdue)}
+              className="block text-2xl font-semibold tracking-tight"
+            />
+            <p className="text-xs text-muted-foreground tabular-nums">
+              overdue across {data.receivables.length} invoices ·{" "}
+              {chase.length} to chase, {promised.length} promised
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <AgeingStrip
         rows={data.receivables}
@@ -201,20 +214,18 @@ function Receivables({ data }: { data: MoneyData }) {
       />
 
       {chase.length > 0 ? (
-        <div>
-          <p className="mb-1 px-1 text-sm font-medium">
-            To chase{" "}
-            <span className="text-muted-foreground tabular-nums">
-              ({chase.length})
-            </span>
-          </p>
-          <Card className="gap-0 overflow-hidden py-0">
-            {chase.map((row, index) => (
-              // §6.12.4: one filled Remind, on the top row of the chase queue.
-              <ReceivableRow key={row.id} row={row} primary={index === 0} />
-            ))}
-          </Card>
-        </div>
+        <Panel
+          title="To chase"
+          icon={ReceiptIndianRupee}
+          count={chase.length}
+          caption="Ordered by amount × days late — neither alone gets this right"
+          flush
+        >
+          {chase.map((row, index) => (
+            // §6.12.4: one filled Remind, on the top row of the chase queue.
+            <ReceivableRow key={row.id} row={row} primary={index === 0} />
+          ))}
+        </Panel>
       ) : (
         <Card className="p-6 text-sm">
           {/* §6.12.3: never a bare zero — the upcoming figure is the answer. */}
@@ -225,24 +236,18 @@ function Receivables({ data }: { data: MoneyData }) {
       )}
 
       {promised.length > 0 ? (
-        <div>
-          <p className="mb-1 px-1 text-sm font-medium">
-            Promised{" "}
-            <span className="text-muted-foreground tabular-nums">
-              ({promised.length})
-            </span>
-          </p>
-          {/* The reason, stated once — it is the restraint, not an oversight. */}
-          <p className="mb-1 px-1 text-xs text-muted-foreground">
-            Excluded from reminders while the promise holds. Auto-chasing someone
-            who has already promised is how relationships get damaged.
-          </p>
-          <Card className="gap-0 overflow-hidden py-0">
-            {promised.map((row) => (
-              <ReceivableRow key={row.id} row={row} primary={false} />
-            ))}
-          </Card>
-        </div>
+        <Panel
+          title="Promised"
+          icon={HandCoins}
+          count={promised.length}
+          // The reason, stated once — it is the restraint, not an oversight.
+          caption="Excluded from reminders while the promise holds — auto-chasing someone who has already promised is how relationships get damaged"
+          flush
+        >
+          {promised.map((row) => (
+            <ReceivableRow key={row.id} row={row} primary={false} />
+          ))}
+        </Panel>
       ) : null}
     </div>
   );
@@ -253,7 +258,7 @@ function Receivables({ data }: { data: MoneyData }) {
 function PayableRow({ bill, primary }: { bill: Payable; primary: boolean }) {
   const countdown = countdownFor(bill);
   return (
-    <div className="border-b px-3 py-2.5 text-sm last:border-b-0">
+    <div className="border-b px-4 py-3 text-sm last:border-b-0">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
@@ -379,31 +384,32 @@ function Payables({ data }: { data: MoneyData }) {
       ) : null}
 
       {unverified.length > 0 ? (
-        <div>
-          {/* Above the fold on purpose — an unverified vendor is an
-              unquantified risk, not a zero one. */}
-          <p className="mb-1 px-1 text-sm font-medium">
-            Can&apos;t calculate — Udyam status unknown{" "}
-            <span className="text-muted-foreground tabular-nums">
-              ({unverified.length})
-            </span>
-          </p>
-          <Card className="gap-0 overflow-hidden py-0">
-            {unverified.map((bill) => (
-              <PayableRow key={bill.id} bill={bill} primary={false} />
-            ))}
-          </Card>
-        </div>
+        <Panel
+          // Above the fold on purpose — an unverified vendor is an
+          // unquantified risk, not a zero one.
+          title="Can't calculate — Udyam status unknown"
+          icon={HandCoins}
+          count={unverified.length}
+          caption="These amounts are excluded from the at-risk figure above"
+          flush
+        >
+          {unverified.map((bill) => (
+            <PayableRow key={bill.id} bill={bill} primary={false} />
+          ))}
+        </Panel>
       ) : null}
 
-      <div>
-        <p className="mb-1 px-1 text-sm font-medium">Vendor bills</p>
-        <Card className="gap-0 overflow-hidden py-0">
-          {ordered.map((bill, index) => (
-            <PayableRow key={bill.id} bill={bill} primary={index === 0} />
-          ))}
-        </Card>
-      </div>
+      <Panel
+        title="Vendor bills"
+        icon={ReceiptIndianRupee}
+        count={ordered.length}
+        caption="Closest to its limit first"
+        flush
+      >
+        {ordered.map((bill, index) => (
+          <PayableRow key={bill.id} bill={bill} primary={index === 0} />
+        ))}
+      </Panel>
     </div>
   );
 }
@@ -436,7 +442,8 @@ export default function MoneyPage() {
     >
       <div className="p-4 md:p-6">
         <PageHeader
-          className="mb-3"
+          className="mb-4"
+          breadcrumb={[{ label: "Money" }]}
           title="Money"
           description="Who owes us, and which bill costs a deduction if it slips."
           actions={

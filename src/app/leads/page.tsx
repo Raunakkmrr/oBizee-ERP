@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, MessageCircle, Phone, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, MessageCircle, Phone, PhoneCall, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { LogOutcome } from "@/components/leads/log-outcome";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ColumnHeader, GroupHeader, Panel } from "@/components/shared/panel";
 import {
   Empty,
   EmptyContent,
@@ -134,7 +135,8 @@ export default function LeadsPage() {
 
       <div className="p-4 md:p-6">
         <PageHeader
-          className="mb-3"
+          className="mb-4"
+          breadcrumb={[{ label: "Work" }]}
           title="Leads"
           description="Who to call right now, in follow-up order."
           actions={
@@ -209,30 +211,49 @@ export default function LeadsPage() {
             }
 
             return (
-              <div className="space-y-2">
+              <Panel
+                title="Follow-up queue"
+                icon={PhoneCall}
+                count={flat.length}
+                caption="Unassigned first, then by how late — a lead with no owner is the worse failure"
+                flush
+              >
+                <ColumnHeader>
+                  <span className="min-w-0 flex-1">Lead</span>
+                  <span className="w-20 shrink-0 text-right">Quoted</span>
+                  <span className="hidden w-28 shrink-0 lg:block">Source</span>
+                  <span className="hidden w-28 shrink-0 xl:block">Owner</span>
+                  <span className="w-[268px] shrink-0 text-right">Act</span>
+                </ColumnHeader>
+
                 {sections.map((section) => {
                   const isCollapsed = collapsed.has(section.group);
                   return (
                     <div key={section.group}>
-                      <button
-                        type="button"
-                        onClick={() => toggle(section.group)}
-                        aria-expanded={!isCollapsed}
-                        className="mb-1 flex items-center gap-1.5 rounded px-1 py-1 text-sm font-medium focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-                      >
-                        {isCollapsed ? (
-                          <ChevronRight className="size-4" />
-                        ) : (
-                          <ChevronDown className="size-4" />
-                        )}
-                        {GROUP_LABEL[section.group]}
-                        <span className="text-muted-foreground tabular-nums">
-                          ({section.rows.length})
-                        </span>
-                      </button>
+                      {/* The group band replaces a bare heading: it belongs to
+                          the table, not to the page above it. */}
+                      <GroupHeader
+                        label={GROUP_LABEL[section.group]}
+                        count={section.rows.length}
+                        right={
+                          <button
+                            type="button"
+                            onClick={() => toggle(section.group)}
+                            aria-expanded={!isCollapsed}
+                            aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${GROUP_LABEL[section.group]}`}
+                            className="grid size-5 place-items-center rounded text-muted-foreground hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                          >
+                            {isCollapsed ? (
+                              <ChevronRight className="size-4" />
+                            ) : (
+                              <ChevronDown className="size-4" />
+                            )}
+                          </button>
+                        }
+                      />
 
                       {!isCollapsed ? (
-                        <Card className="gap-0 overflow-hidden py-0">
+                        <>
                           {section.rows.map((lead) => {
                             const index = flat.findIndex((l) => l.id === lead.id);
                             return (
@@ -242,7 +263,7 @@ export default function LeadsPage() {
                                   rowRefs.current[lead.id] = el;
                                 }}
                                 tabIndex={-1}
-                                className="flex h-[52px] items-center gap-3 border-b px-3 text-sm last:border-b-0 focus:bg-muted/60 focus:outline-none"
+                                className="flex h-[52px] items-center gap-3 border-b px-4 text-sm transition-colors last:border-b-0 hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
                               >
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 leading-[18px]">
@@ -376,12 +397,12 @@ export default function LeadsPage() {
                               </div>
                             );
                           })}
-                        </Card>
+                        </>
                       ) : null}
                     </div>
                   );
                 })}
-              </div>
+              </Panel>
             );
           }}
         </QueryBoundary>

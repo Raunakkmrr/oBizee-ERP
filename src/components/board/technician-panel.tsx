@@ -1,7 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Panel } from "@/components/shared/panel";
+import { Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toneClasses } from "@/lib/design/tokens";
 import { recommendTechnician, type JobRow, type Technician } from "@/lib/data/board";
@@ -56,21 +57,21 @@ export function TechnicianPanel({
     : null;
 
   return (
-    <Card className="flex h-full min-h-0 flex-col">
-      <CardHeader className="shrink-0">
-        <CardTitle className="text-base">
-          Technicians
-          {selectedJob ? (
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
-              assigning {selectedJob.jobNumber}
-            </span>
-          ) : null}
-        </CardTitle>
-      </CardHeader>
+    <Panel
+      title="Technicians"
+      icon={Users}
+      count={technicians.filter((t) => t.status.kind !== "leave").length}
+      caption={
+        selectedJob
+          ? `Assigning ${selectedJob.jobNumber} — pick who goes`
+          : "Who is free, where they are, and what they can do"
+      }
+      className="flex h-full min-h-0 flex-col"
+    >
       {/* Scrolls independently of the job list (§6.4.1) — the coordinator
           compares a job at the top of one column with a technician at the
           bottom of the other. */}
-      <CardContent className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <ul className="space-y-2">
           {technicians.map((tech) => {
             const onLeave = tech.status.kind === "leave";
@@ -158,7 +159,7 @@ export function TechnicianPanel({
             );
           })}
         </ul>
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }

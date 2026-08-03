@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardList, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { StateStrip } from "@/components/board/state-strip";
@@ -16,7 +16,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/shared/panel";
 import { cn } from "@/lib/utils";
 import { loading, type Query } from "@/lib/data/result";
 import {
@@ -186,10 +186,21 @@ export default function TodayBoardPage() {
                 never permanently sitting underneath it. */}
             <div className="grid gap-4 p-3 pb-20 sm:pb-3 lg:p-4 xl:grid-cols-5">
               {/* Job rows — 60% (§6.4.1). */}
-              <Card className="gap-0 overflow-hidden py-0 xl:col-span-3">
+              <Panel
+                title={filter ? FILTER_LABEL[filter] : "Today's jobs"}
+                icon={ClipboardList}
+                count={rows.length}
+                caption={
+                  selectedJob
+                    ? `Choosing a technician for ${selectedJob.jobNumber}`
+                    : "Worst first — late, then unassigned"
+                }
+                flush
+                className="xl:col-span-3"
+              >
                 {/* Column headers belong to the row layout; below `sm` the
                     rows are cards (§6.4.7) and there are no columns to head. */}
-                <div className="hidden h-10 items-center gap-3 border-b bg-muted/50 px-3 text-xs font-medium text-muted-foreground sm:flex">
+                <div className="hidden items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground sm:flex">
                   <span className="w-12 shrink-0">Slot</span>
                   <span className="flex-1">Job</span>
                   <span className="w-36 shrink-0 text-right">Technician</span>
@@ -271,7 +282,7 @@ export default function TodayBoardPage() {
                     })()}
                   </div>
                 )}
-              </Card>
+              </Panel>
 
               {/* Technician panel — 40%, scrolls independently (§6.4.1). */}
               <div className="xl:col-span-2">

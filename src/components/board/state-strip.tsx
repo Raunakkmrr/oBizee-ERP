@@ -1,6 +1,14 @@
 "use client";
 
-import { X } from "lucide-react";
+import {
+  CircleDollarSign,
+  MapPin,
+  PackageX,
+  UserX,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -26,6 +34,37 @@ import {
  * available to a screen reader and the whole strip is keyboard-operable — §6.6.3
  * makes the coordinator's fastest path keyboard-only by design.
  */
+/**
+ * Each counter gets an icon and a tone.
+ *
+ * These were five identical outlined boxes, which is a filter row wearing a
+ * dashboard's clothes: the coordinator had to read every label to find the one
+ * that matters. §6.4.1 already ranks them — `unassigned` is "the most expensive
+ * number on the screen" and `done_not_billed` is "the number that makes an owner
+ * buy the product" — so the strip now shows that ranking rather than describing
+ * it in a comment.
+ *
+ * The tone is never the only channel: the label is always present (§6.13.4).
+ */
+const COUNTER_META: Record<
+  BoardFilter,
+  { icon: LucideIcon; tone: "bad" | "info" | "brand" | "warn" | "good" }
+> = {
+  unassigned: { icon: UserX, tone: "bad" },
+  en_route: { icon: MapPin, tone: "info" },
+  on_site: { icon: Wrench, tone: "brand" },
+  parts_awaited: { icon: PackageX, tone: "warn" },
+  done_not_billed: { icon: CircleDollarSign, tone: "good" },
+};
+
+const CHIP_TONE = {
+  bad: "bg-destructive/10 text-destructive",
+  info: "bg-info/10 text-info",
+  brand: "bg-primary/10 text-primary",
+  warn: "bg-warning/15 text-brand-brown",
+  good: "bg-success/10 text-success",
+} as const;
+
 export function StateStrip({
   counters,
   active,
@@ -36,7 +75,7 @@ export function StateStrip({
   onToggle: (filter: BoardFilter | null) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 overflow-x-auto border-b bg-card px-3 py-2 lg:px-4">
+    <div className="flex items-stretch gap-2 overflow-x-auto border-b bg-card px-3 py-2.5 lg:px-4">
       {BOARD_FILTERS.map((filter) => {
         const count = counters[filter];
         const isActive = active === filter;
@@ -47,18 +86,31 @@ export function StateStrip({
             aria-pressed={isActive}
             onClick={() => onToggle(isActive ? null : filter)}
             className={cn(
-              "flex shrink-0 items-baseline gap-2 rounded-lg border px-3 py-1.5 text-left transition-colors",
+              "flex min-w-[136px] shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
               "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
               isActive
-                ? "border-primary bg-primary/10"
+                ? "border-primary bg-primary/10 ring-1 ring-primary/20"
                 : "border-border bg-background hover:bg-muted",
             )}
           >
-            <span className="text-lg leading-none font-semibold tabular-nums">
-              {count}
+            <span
+              className={cn(
+                "grid size-8 shrink-0 place-items-center rounded-lg",
+                CHIP_TONE[COUNTER_META[filter].tone],
+              )}
+            >
+              {(() => {
+                const Icon = COUNTER_META[filter].icon;
+                return <Icon className="size-4" />;
+              })()}
             </span>
-            <span className="text-xs text-muted-foreground">
-              {FILTER_LABEL[filter]}
+            <span className="min-w-0">
+              <span className="block text-xl leading-none font-semibold tabular-nums">
+                {count}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                {FILTER_LABEL[filter]}
+              </span>
             </span>
           </button>
         );

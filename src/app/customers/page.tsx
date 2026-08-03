@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapPin, MessageCircle, Phone } from "lucide-react";
+import { MapPin, MessageCircle, Phone, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/shared/panel";
 import { Badge } from "@/components/ui/badge";
 import {
   Empty,
@@ -85,12 +86,11 @@ function SitePanel({ site }: { site: Site }) {
           </Button>
         </Card>
 
-        <Card className="gap-0 overflow-hidden py-0">
-          <p className="border-b px-3 py-2 text-sm font-medium">Contacts</p>
+        <Panel title="Contacts" icon={Users} count={site.contacts.length} flush>
           {contactOrder(site.contacts).map((contact) => (
             <div
               key={contact.id}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2 text-sm last:border-b-0"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-muted/40"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-2">
@@ -145,7 +145,7 @@ function SitePanel({ site }: { site: Site }) {
               </div>
             </div>
           ))}
-        </Card>
+        </Panel>
 
         <div>
           <p className="mb-2 text-sm font-medium">
@@ -329,7 +329,8 @@ export default function CustomersPage() {
     >
       <div className="p-4 md:p-6">
         <PageHeader
-          className="mb-3"
+          className="mb-4"
+          breadcrumb={[{ label: "Work" }]}
           title="Customers &amp; sites"
           description="Everything about one customer, and whether this is a repeat problem."
         />

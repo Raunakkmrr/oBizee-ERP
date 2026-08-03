@@ -151,6 +151,7 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
         </Button>
 
         <PageHeader
+          breadcrumb={[{ label: "Work" }, { label: "Contracts", href: "/contracts" }]}
           className="mb-4"
           title="New AMC contract"
           description={

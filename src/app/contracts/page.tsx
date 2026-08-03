@@ -7,7 +7,8 @@ import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Panel } from "@/components/shared/panel";
+import { FileClock } from "lucide-react";
 import { MoneyText } from "@/components/shared/money-text";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
@@ -36,31 +37,30 @@ import { useStoreState } from "@/lib/data/use-store";
  */
 function ContractCard({ contract }: { contract: Contract }) {
   return (
-    <Card>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="font-medium">{contract.customer}</p>
-            <p className="text-sm text-muted-foreground">{contract.site}</p>
-            <p className="text-xs text-muted-foreground tnum-id">
-              {contract.reference}
-            </p>
-          </div>
-          <div className="text-right">
-            <MoneyText
-              amount={asPaise(contract.annualValuePaise)}
-              className="text-lg font-semibold"
-            />
-            {/* Billing frequency stated beside the value, because the value
-                alone does not say when the money arrives (FR-505). */}
-            <p className="text-xs text-muted-foreground">
-              {BILLING_LABEL[contract.billing]}
-            </p>
-          </div>
+    <Panel
+      title={contract.customer}
+      icon={FileClock}
+      caption={contract.site}
+      actions={
+        <div className="text-right">
+          <MoneyText
+            amount={asPaise(contract.annualValuePaise)}
+            className="block text-lg leading-tight font-semibold"
+          />
+          {/* Billing frequency stated beside the value, because the value
+              alone does not say when the money arrives (FR-505). */}
+          <p className="text-xs text-muted-foreground">
+            {BILLING_LABEL[contract.billing]}
+          </p>
         </div>
-
-        <p className="text-xs text-muted-foreground">
-          {COVERAGE_LABEL[contract.coverage]} ·{" "}
+      }
+    >
+      <div className="space-y-3">
+        <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+          <span className="tnum-id">{contract.reference}</span>
+          <span aria-hidden="true">·</span>
+          {COVERAGE_LABEL[contract.coverage]}
+          <span aria-hidden="true">·</span>
           {/* Days remaining as a word — §6.14 wants the period legible, not
               computed by the reader. */}
           <span className="tabular-nums">
@@ -147,8 +147,8 @@ function ContractCard({ contract }: { contract: Contract }) {
             );
           })}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }
 
@@ -182,6 +182,7 @@ export default function ContractsPage() {
       <div className="p-4 md:p-6">
         <PageHeader
           className="mb-4"
+          breadcrumb={[{ label: "Work" }]}
           title="Contracts"
           description="Recurring revenue, and the engine that generates future jobs."
           actions={

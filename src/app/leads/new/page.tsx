@@ -237,6 +237,7 @@ export default function NewLeadPage() {
         </Button>
 
         <PageHeader
+          breadcrumb={[{ label: "Work" }, { label: "Leads", href: "/leads" }]}
           className="mb-4"
           title="New lead"
           description="Enough to call this person back — nothing more."

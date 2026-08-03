@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { ChartColumn, Download } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Panel } from "@/components/shared/panel";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
@@ -57,21 +57,21 @@ function ReportCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="gap-0 overflow-hidden py-0">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">{title}</p>
-          {/* FR-1002: the filters travel with every export, so they are on
-              screen too — a figure without its period is not evidence. */}
-          <p className="text-xs text-muted-foreground">{caption}</p>
-        </div>
+    <Panel
+      title={title}
+      icon={ChartColumn}
+      // FR-1002: the filters travel with every export, so they are on screen
+      // too — a figure without its period is not evidence.
+      caption={caption}
+      actions={
         <Button variant="outline" size="sm">
           <Download className="size-3.5" />
           Export
         </Button>
-      </div>
-      <div className="p-3">{children}</div>
-    </Card>
+      }
+    >
+      {children}
+    </Panel>
   );
 }
 
@@ -99,7 +99,8 @@ export default function ReportsPage() {
     >
       <div className="p-4 md:p-6">
         <PageHeader
-          className="mb-3"
+          className="mb-4"
+          breadcrumb={[{ label: "Money" }]}
           title="Reports &amp; GST"
           description="What changed this week, and who needs attention."
         />

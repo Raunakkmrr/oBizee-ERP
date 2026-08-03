@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Wrench } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { ColumnHeader, Panel } from "@/components/shared/panel";
 import { cn } from "@/lib/utils";
 import { EM_DASH, loading, renderComputed, type Query } from "@/lib/data/result";
 import { formatMoney } from "@/lib/money";
@@ -69,7 +69,8 @@ export default function JobsPage() {
     >
       <div className="p-4 md:p-6">
         <PageHeader
-          className="mb-3"
+          className="mb-4"
+          breadcrumb={[{ label: "Work" }]}
           title="Jobs"
           description="Every work order, and where it has got to."
           actions={
@@ -107,14 +108,27 @@ export default function JobsPage() {
                 ? data.jobs
                 : data.jobs.filter((job) => matchesFilter(job, filter));
             return (
-              <Card className="gap-0 overflow-hidden py-0">
+              <Panel
+                title={filter === null ? "All work orders" : FILTER_LABEL[filter]}
+                icon={Wrench}
+                count={rows.length}
+                caption="Newest first — the record, not the dispatch board"
+                flush
+              >
+                <ColumnHeader>
+                  <span className="w-32 shrink-0">Number</span>
+                  <span className="min-w-0 flex-1">Customer</span>
+                  <span className="w-[104px] shrink-0">Status</span>
+                  <span className="hidden w-32 shrink-0 sm:block">Technician</span>
+                  <span className="w-28 shrink-0 text-right">Billed</span>
+                </ColumnHeader>
                 {rows.map((job) => {
                   const value = jobValue(job);
                   return (
                     <Link
                       key={job.id}
                       href={`/jobs/${job.jobNumber}`}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2.5 text-sm last:border-b-0 hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none"
                     >
                       <span className="w-32 shrink-0 text-xs text-muted-foreground tnum-id">
                         {job.jobNumber}
@@ -125,11 +139,9 @@ export default function JobsPage() {
                           {job.locality} · {job.serviceType}
                         </p>
                       </div>
-                      <StatusBadge
-                        status={job.status}
-                        kind="job"
-                        className="shrink-0 text-[11px]"
-                      />
+                      <span className="w-[104px] shrink-0">
+                        <StatusBadge status={job.status} kind="job" className="text-[11px]" />
+                      </span>
                       <span className="hidden w-32 shrink-0 truncate text-xs text-muted-foreground sm:block">
                         {/* Unassigned is a state worth naming, not a blank. */}
                         {job.technician?.name ?? "Unassigned"}
@@ -167,7 +179,7 @@ export default function JobsPage() {
                     No jobs match {filter === null ? "this view" : FILTER_LABEL[filter]}.
                   </p>
                 ) : null}
-              </Card>
+              </Panel>
             );
           }}
         </QueryBoundary>
