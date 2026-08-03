@@ -27,6 +27,16 @@ import {
  */
 const serverSnapshot = seedState();
 
+/**
+ * Module-level, not an inline literal.
+ *
+ * `getServerSnapshot` must return a **cached** value: an object literal in the
+ * callback is a new reference on every call, React sees the snapshot as always
+ * changed, and it warns about an infinite render loop. Same reason
+ * `serverSnapshot` above is built once.
+ */
+const SERVER_STATUS: HydrationStatus = { kind: "ready", restored: false };
+
 export function useStoreState(): StoreState {
   useEffect(() => {
     void hydrate();
@@ -39,7 +49,7 @@ export function useHydrationStatus(): HydrationStatus {
     subscribe,
     getStatus,
     // The server never has stored data, so it is never mid-hydration.
-    () => ({ kind: "ready", restored: false }) as HydrationStatus,
+    () => SERVER_STATUS,
   );
 }
 

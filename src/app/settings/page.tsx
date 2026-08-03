@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { LocalDataPanel } from "@/components/shared/local-data-panel";
+import { ColumnHeader, Panel, ValuePill } from "@/components/shared/panel";
+import { Building2, ShieldCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/money";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
@@ -33,39 +32,49 @@ import {
  *   used** — it is the setting that lets an invoice exist for work nobody
  *   confirmed happened.
  */
-const SECTIONS = ["people", "business", "policy"] as const;
-type Section = (typeof SECTIONS)[number];
-
-const SECTION_LABEL: Record<Section, string> = {
-  people: "People & roles",
-  business: "Business & tax",
-  policy: "Policy",
-};
-
-function Row({
+/**
+ * A policy row: the state, and what turning it on actually does.
+ *
+ * A switch with a label is a preference. A switch with its consequence beside it
+ * is a decision — and both of these change what the business can legally bill.
+ */
+function PolicyRow({
   label,
-  value,
-  hint,
+  on,
+  consequence,
+  dangerWhenOn = false,
 }: {
   label: string;
-  value: React.ReactNode;
-  hint?: string;
+  on: boolean;
+  consequence: string;
+  dangerWhenOn?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b px-3 py-2 text-sm last:border-b-0">
-      <div className="min-w-0">
-        <span>{label}</span>
-        {hint ? (
-          <p className="text-xs text-muted-foreground">{hint}</p>
-        ) : null}
+    <div className="border-b px-4 py-3 last:border-b-0">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium">{label}</span>
+        <Badge
+          variant="outline"
+          className={cn(
+            "text-xs",
+            on && dangerWhenOn
+              ? "border-destructive/25 bg-destructive/10 text-destructive"
+              : on
+                ? "border-success/25 bg-success/12 text-success"
+                : "bg-muted text-muted-foreground",
+          )}
+        >
+          {on ? "On" : "Off"}
+        </Badge>
       </div>
-      <span className="shrink-0 text-right">{value}</span>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        {consequence}
+      </p>
     </div>
   );
 }
 
 export default function SettingsPage() {
-  const [section, setSection] = useState<Section>("people");
   const today = new Date();
 
   return (
@@ -77,60 +86,121 @@ export default function SettingsPage() {
     >
       <div className="p-4 md:p-6">
         <PageHeader
-          className="mb-3"
+          className="mb-4"
+          breadcrumb={[{ label: "oBizee Service ERP" }]}
           title="Settings &amp; people"
           description="Who can do what, and what this business bills as."
         />
 
-        <div className="mb-3 flex items-center gap-1 border-b">
-          {SECTIONS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={section === value}
-              onClick={() => setSection(value)}
-              className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
-                "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                section === value
-                  ? "border-primary font-medium text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {SECTION_LABEL[value]}
-            </button>
-          ))}
-        </div>
+        <div className="space-y-4">
+          {/*
+            The tenant masthead — GATE V2's second brand. Until now this
+            product showed *whose software* it is and never *whose books these
+            are*; a 14px grey line would read identically for every customer
+            on the platform. Gradient lifted from the dashboard's own home
+            masthead so the two products share one device.
+          */}
+          <section className="overflow-hidden rounded-xl bg-gradient-to-br from-primary to-primary/85 p-5 text-primary-foreground">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-medium tracking-wide uppercase text-primary-foreground/80">
+                  Registered business
+                </p>
+                <h2 className="mt-0.5 truncate text-2xl font-semibold">
+                  {SEED_TENANT.legalName}
+                </h2>
+                <p className="mt-0.5 text-sm text-primary-foreground/85">
+                  Trading as {SEED_TENANT.businessName}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <div className="rounded-lg bg-primary-foreground/15 px-3 py-2 backdrop-blur-sm">
+                  <p className="text-[11px] leading-none text-primary-foreground/80">
+                    Annual turnover
+                  </p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">
+                    {formatMoney(SEED_TENANT.aatoPaise)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-primary-foreground/15 px-3 py-2 backdrop-blur-sm">
+                  <p className="text-[11px] leading-none text-primary-foreground/80">
+                    Tax scheme
+                  </p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {SEED_TENANT.taxScheme === "REGULAR"
+                      ? "Regular"
+                      : "Composition 6%"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
 
-        {section === "people" ? (
-          <Card className="gap-0 overflow-hidden py-0">
+          <Panel
+            title="People &amp; roles"
+            icon={Users}
+            count={SEED_USERS.filter((u) => u.active).length}
+            caption="Everyone who can sign in, and what each one may do"
+            flush
+            actions={
+              <Button size="sm">
+                <Users className="size-4" />
+                Invite person
+              </Button>
+            }
+          >
+            <ColumnHeader>
+              <span className="min-w-0 flex-1">Person</span>
+              <span className="hidden w-40 shrink-0 sm:block">Role</span>
+              <span className="hidden w-36 shrink-0 md:block">Language</span>
+              <span className="w-20 shrink-0 text-right">Access</span>
+            </ColumnHeader>
+
             {SEED_USERS.map((user) => (
               <div
                 key={user.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2.5 text-sm last:border-b-0"
+                className="flex items-center gap-3 border-b px-4 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-muted/50"
               >
+                {/*
+                  An avatar gives every row an anchor and a shape. Inactive
+                  members stay visible and legible — hiding them is how a
+                  departed technician quietly keeps a login.
+                */}
+                <span
+                  className={cn(
+                    "grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold",
+                    user.active
+                      ? "bg-primary/10 text-primary"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {user.name
+                    .split(" ")
+                    .slice(0, 2)
+                    .map((part) => part[0])
+                    .join("")}
+                </span>
+
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2">
                     <span
                       className={cn(
-                        "font-medium",
-                        // An inactive member stays visible and legible — hiding
-                        // them is how a departed technician keeps a login.
+                        "truncate font-medium",
                         !user.active && "text-muted-foreground",
                       )}
                     >
                       {user.name}
                     </span>
-                    <Badge variant="outline" className="text-xs">
-                      {ROLE_LABELS[user.role as Role]}
-                    </Badge>
                     {!user.active ? (
-                      <span className="text-xs text-muted-foreground">
+                      <Badge
+                        variant="outline"
+                        className="border-destructive/25 bg-destructive/10 text-xs text-destructive"
+                      >
                         Disabled
-                      </span>
+                      </Badge>
                     ) : null}
                   </div>
-                  <p className="text-xs text-muted-foreground tabular-nums">
+                  <p className="truncate text-xs text-muted-foreground tabular-nums">
                     {/* §7.3: the phone is the login identity in this market;
                         email is optional and its absence is normal. */}
                     {user.phone}
@@ -138,147 +208,123 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                {user.languageOverride ? (
-                  // FR-1304: a per-user override of the tenant default.
-                  <Badge variant="outline" className="shrink-0 text-xs">
-                    Language: {user.languageOverride}
+                <div className="hidden w-40 shrink-0 sm:block">
+                  <Badge
+                    variant="outline"
+                    className="border-primary/25 bg-primary/12 text-xs text-primary"
+                  >
+                    {ROLE_LABELS[user.role as Role]}
                   </Badge>
-                ) : null}
+                </div>
 
-                <Button variant="outline" size="sm">
-                  {user.active ? "Edit" : "Re-enable"}
-                </Button>
+                <div className="hidden w-36 shrink-0 md:block">
+                  {user.languageOverride ? (
+                    // FR-1304: a per-user override of the tenant default.
+                    <span className="text-xs text-muted-foreground">
+                      Override:{" "}
+                      <span className="font-medium text-foreground uppercase">
+                        {user.languageOverride}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Tenant default
+                    </span>
+                  )}
+                </div>
+
+                <div className="w-20 shrink-0 text-right">
+                  <Button variant="outline" size="sm">
+                    {user.active ? "Edit" : "Restore"}
+                  </Button>
+                </div>
               </div>
             ))}
-          </Card>
-        ) : null}
-
-        {section === "business" ? (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="gap-0 overflow-hidden py-0">
-              <p className="border-b px-3 py-2 text-sm font-medium">Business</p>
-              <Row label="Legal name" value={SEED_TENANT.legalName} />
-              <Row label="Trading name" value={SEED_TENANT.businessName} />
-              <Row
-                label="Tax scheme"
-                value={
-                  SEED_TENANT.taxScheme === "REGULAR"
-                    ? "Regular"
-                    : "Composition — services, 6%"
-                }
-              />
-              <Row
-                label="Annual turnover declared"
-                value={
-                  <span className="tabular-nums">
-                    {formatMoney(SEED_TENANT.aatoPaise)}
-                  </span>
-                }
-                // The two rules this number silently drives, named here so a
-                // change to it is never made casually.
-                hint="Drives SAC/HSN digit count and whether e-invoicing applies"
-              />
-            </Card>
-
-            <Card className="gap-0 overflow-hidden py-0">
-              <p className="border-b px-3 py-2 text-sm font-medium">
-                Branches &amp; GSTINs
-              </p>
-              {SEED_TENANT.branches.map((branch) => (
-                <Row
-                  key={branch.gstin}
-                  label={branch.name}
-                  value={
-                    <span className="tnum-id text-xs">{branch.gstin}</span>
-                  }
-                  // FR-811: numbering is per (branch, doc type, financial year),
-                  // so the prefix belongs to the branch, not the tenant.
-                  hint={`State ${branch.stateCode} · invoice series ${branch.invoiceSeriesPrefix}`}
-                />
-              ))}
-            </Card>
-
-            <Card className="gap-0 overflow-hidden py-0">
-              <p className="border-b px-3 py-2 text-sm font-medium">
-                Working slots
-              </p>
-              {SEED_TENANT.slots.map((slot) => (
-                <Row
-                  key={slot.label}
-                  label={slot.label}
-                  value={
-                    <span className="tabular-nums">
-                      {slot.from}–{slot.to}
+          </Panel>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Panel title="Branches &amp; GSTINs" icon={Building2} flush>
+                <ColumnHeader>
+                  <span className="min-w-0 flex-1">Branch</span>
+                  <span className="w-44 shrink-0">GSTIN</span>
+                  <span className="w-24 shrink-0 text-right">Series</span>
+                </ColumnHeader>
+                {SEED_TENANT.branches.map((branch) => (
+                  <div
+                    key={branch.gstin}
+                    className="flex items-center gap-3 border-b px-4 py-2.5 text-sm last:border-b-0"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{branch.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        State {branch.stateCode}
+                      </p>
+                    </div>
+                    <span className="w-44 shrink-0 text-xs tnum-id">
+                      {branch.gstin}
                     </span>
-                  }
-                />
-              ))}
-              <div className="px-3 py-2">
-                {/* FR-203: the reason slots exist at all. */}
-                <p className="text-xs text-muted-foreground">
-                  Customers are told a window, never a single time that cannot
-                  be honoured.
-                </p>
-              </div>
-            </Card>
-          </div>
-        ) : null}
+                    {/* FR-811: numbering is per branch, doc type and financial
+                        year — so the series belongs to the branch row. */}
+                    <span className="w-24 shrink-0 text-right">
+                      <ValuePill tone="brand">
+                        {branch.invoiceSeriesPrefix}
+                      </ValuePill>
+                    </span>
+                  </div>
+                ))}
+              </Panel>
 
-        {section === "policy" ? (
-          <div className="space-y-4">
-          <Card className="max-w-3xl gap-0 overflow-hidden py-0">
-            <p className="border-b px-3 py-2 text-sm font-medium">
-              Policy — each of these has a money consequence
-            </p>
-
-            <div className="space-y-2 px-3 py-3 text-sm">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-medium">
-                  Technicians can see job values
-                </span>
-                <Badge variant="outline">
-                  {SEED_TENANT.toggles.technicianSeesPrices ? "On" : "Off"}
-                </Badge>
-              </div>
-              {/* FR-1302. Stated as a consequence, not as a toggle label. */}
-              <p className="text-xs text-muted-foreground">
-                When off, a technician sees the work and the parts but not what
-                the customer is being charged. Off is the common choice where
-                technicians are paid per job rather than salaried.
-              </p>
-
-              <Separator />
-
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-medium">
-                  Allow billing without a customer sign-off
-                </span>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    SEED_TENANT.toggles.allowBillingWithoutSignoff &&
-                      "border-destructive/40 text-destructive",
-                  )}
-                >
-                  {SEED_TENANT.toggles.allowBillingWithoutSignoff ? "On" : "Off"}
-                </Badge>
-              </div>
-              {/*
-                §4.2: off by default and audited when used. This is the setting
-                that permits an invoice for work nobody confirmed happened, so
-                the screen says exactly that rather than calling it "flexible
-                billing".
-              */}
-              <p className="text-xs text-muted-foreground">
-                Off by default. Turning it on lets an invoice be raised for a
-                job the customer never confirmed, and every such invoice is
-                recorded in the audit trail with the person who raised it.
-              </p>
+              <Panel
+                title="Working slots"
+                icon={Building2}
+                caption="Customers are told a window, never a single time we cannot honour"
+                flush
+              >
+                {SEED_TENANT.slots.map((slot) => (
+                  <div
+                    key={slot.label}
+                    className="flex items-center justify-between gap-3 border-b px-4 py-2.5 text-sm last:border-b-0"
+                  >
+                    <span className="font-medium">{slot.label}</span>
+                    <ValuePill>
+                      {slot.from}–{slot.to}
+                    </ValuePill>
+                  </div>
+                ))}
+              </Panel>
             </div>
-          </Card>
-          <LocalDataPanel />
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel
+              title="Policy"
+              icon={ShieldCheck}
+              caption="Each of these has a money consequence"
+              flush
+            >
+              {/*
+                Stated as consequences, not as toggle labels. Calling the second
+                one "flexible billing" would be a lie by euphemism.
+              */}
+              <PolicyRow
+                label="Technicians can see job values"
+                on={SEED_TENANT.toggles.technicianSeesPrices}
+                consequence="When off, a technician sees the work and the parts but not what the customer is charged. Off is the common choice where technicians are paid per job."
+              />
+              <PolicyRow
+                label="Allow billing without a customer sign-off"
+                on={SEED_TENANT.toggles.allowBillingWithoutSignoff}
+                dangerWhenOn
+                consequence="Off by default. Turning it on lets an invoice be raised for a job the customer never confirmed, and every such invoice is recorded in the audit trail with the person who raised it."
+              />
+              <PolicyRow
+                label="Coordinators can raise invoices"
+                on={SEED_TENANT.toggles.coordinatorCanBill}
+                consequence="When off, only the Accountant or Owner can finalise an invoice. The coordinator can still prepare one."
+              />
+            </Panel>
+
+            <LocalDataPanel />
           </div>
-        ) : null}
+        </div>
       </div>
     </AppShell>
   );

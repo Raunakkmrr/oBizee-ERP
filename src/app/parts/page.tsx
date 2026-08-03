@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PackageSearch } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  ActionBar,
+  ColumnHeader,
+  GroupHeader,
+  Panel,
+  ValuePill,
+} from "@/components/shared/panel";
 import { Badge } from "@/components/ui/badge";
 import {
   Empty,
@@ -31,6 +39,7 @@ import {
   urgencyFor,
   type PartsData,
   type PartsTab,
+  type ReorderRow,
 } from "@/lib/data/parts";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
 
@@ -47,6 +56,29 @@ const TAB_KEY = "obez.parts.tab";
 
 function Reorder({ data }: { data: PartsData }) {
   const rows = [...data.reorder].sort(byUrgency);
+  /**
+   * Which parts are actually going on the order.
+   *
+   * The reference ERP's load screen is built around exactly this: a list you
+   * *select from*, with a pinned bar showing what you are committing to. A
+   * reorder screen without it is a report — you read it, then do the ordering
+   * somewhere else.
+   *
+   * Everything below its reorder level starts selected, because that is what
+   * the screen is recommending; unticking is the deliberate act.
+   */
+  const [chosen, setChosen] = useState<Set<string>>(
+    () => new Set(rows.filter((r) => urgencyFor(r) !== "at").map((r) => r.id)),
+  );
+
+  function toggle(id: string) {
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   if (rows.length === 0) {
     return (
@@ -64,71 +96,152 @@ function Reorder({ data }: { data: PartsData }) {
     );
   }
 
+  const selected = rows.filter((row) => chosen.has(row.id));
+  const orderValue = selected.reduce(
+    (sum, row) =>
+      sum + (row.unitCostPaise === null ? 0 : row.unitCostPaise * suggestedOrderQty(row)),
+    0,
+  );
+  // A part with no cost on record cannot contribute to a total — and the total
+  // must say so rather than quietly under-reporting what the order will cost.
+  const unpriced = selected.filter((row) => row.unitCostPaise === null).length;
+
+  const groups: { urgency: ReturnType<typeof urgencyFor>; rows: ReorderRow[] }[] =
+    (["out", "below", "at"] as const)
+      .map((urgency) => ({
+        urgency,
+        rows: rows.filter((row) => urgencyFor(row) === urgency),
+      }))
+      .filter((group) => group.rows.length > 0);
+
   return (
-    <Card className="gap-0 overflow-hidden py-0">
-      {rows.map((row, index) => {
-        const urgency = urgencyFor(row);
-        const qty = suggestedOrderQty(row);
-        return (
-          <div
-            key={row.id}
-            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2.5 text-sm last:border-b-0"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-x-2">
-                <span className="font-medium">{row.name}</span>
-                <span className="text-xs text-muted-foreground tnum-id">
-                  HSN {row.hsn}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {/* The vendor is the next step, so its absence is stated
-                    rather than left blank. */}
-                {row.preferredVendor ?? "No preferred vendor on record"}
-                {" · "}
-                <span className="tabular-nums">
-                  {row.monthlyConsumption} used last month
-                </span>
-              </p>
-            </div>
+    <>
+      <Panel
+        title="Needs reordering"
+        icon={PackageSearch}
+        count={rows.length}
+        caption="Grouped by how urgent it is, worst first"
+        flush
+      >
+        <ColumnHeader>
+          <span className="w-6 shrink-0" />
+          <span className="min-w-0 flex-1">Part</span>
+          <span className="hidden w-40 shrink-0 sm:block">Stock</span>
+          <span className="hidden w-24 shrink-0 text-right md:block">Used /mo</span>
+          <span className="w-20 shrink-0 text-right">Order</span>
+          <span className="w-28 shrink-0 text-right">Value</span>
+        </ColumnHeader>
 
-            {/* The word, not the colour (§6.13.4). */}
-            <Badge
-              variant="outline"
-              className={cn(
-                "shrink-0 text-xs",
-                urgency === "out" && "border-destructive/40 text-destructive",
-                urgency === "below" && "text-brand-brown",
-              )}
-            >
-              {URGENCY_WORD[urgency]}
-            </Badge>
+        {groups.map((group) => (
+          <div key={group.urgency}>
+            {/* The word carries the state; the group is not colour alone. */}
+            <GroupHeader
+              label={URGENCY_WORD[group.urgency]}
+              count={group.rows.length}
+            />
+            {group.rows.map((row) => {
+              const qty = suggestedOrderQty(row);
+              const on = chosen.has(row.id);
+              return (
+                <label
+                  key={row.id}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-3 border-b px-4 py-2.5 text-sm transition-colors last:border-b-0",
+                    on ? "bg-primary/[0.04]" : "hover:bg-muted/50",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => toggle(row.id)}
+                    className="size-4 shrink-0 accent-primary"
+                    aria-label={`Include ${row.name} in this order`}
+                  />
 
-            <span className="w-28 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-              {row.onHand} on hand · level {row.reorderLevel}
-            </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="truncate font-medium">{row.name}</span>
+                      <span className="text-xs text-muted-foreground tnum-id">
+                        HSN {row.hsn}
+                      </span>
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {row.preferredVendor ?? "No preferred vendor on record"}
+                    </p>
+                  </div>
 
-            <span className="w-24 shrink-0 text-right tabular-nums">
-              {/* Cost unknown renders an em-dash — never ₹0, which would read
-                  as a free part and size the order wrongly. */}
-              {row.unitCostPaise === null ? (
-                <span className="text-muted-foreground">{EM_DASH}</span>
-              ) : (
-                <MoneyText amount={asPaise(row.unitCostPaise * qty)} />
-              )}
-            </span>
+                  <span className="hidden w-40 shrink-0 text-xs text-muted-foreground tabular-nums sm:block">
+                    {row.onHand} on hand · level {row.reorderLevel}
+                  </span>
 
-            <Button
-              size="sm"
-              // §6.13.2: one primary, on the most urgent row.
-              variant={index === 0 ? "default" : "outline"}
-            >
-              Order {qty}
-            </Button>
+                  <span className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground tabular-nums md:block">
+                    {row.monthlyConsumption}
+                  </span>
+
+                  <span className="w-20 shrink-0 text-right">
+                    {/* The number the screen exists to produce. */}
+                    <ValuePill tone={on ? "brand" : "neutral"}>{qty}</ValuePill>
+                  </span>
+
+                  <span className="w-28 shrink-0 text-right tabular-nums">
+                    {row.unitCostPaise === null ? (
+                      <span className="text-muted-foreground">{EM_DASH}</span>
+                    ) : (
+                      <MoneyText amount={asPaise(row.unitCostPaise * qty)} />
+                    )}
+                  </span>
+                </label>
+              );
+            })}
           </div>
-        );
-      })}
-    </Card>
+        ))}
+      </Panel>
+
+      {/*
+        The commitment bar. An action in a page header tells you nothing about
+        what you are about to buy; here the totals and the button are one object.
+      */}
+      <ActionBar
+        primary={
+          <>
+            <Button variant="outline" size="sm">
+              Save draft
+            </Button>
+            <Button size="sm" disabled={selected.length === 0}>
+              Raise purchase order
+            </Button>
+          </>
+        }
+      >
+        <div>
+          <p className="text-xs text-muted-foreground">Parts selected</p>
+          <p className="text-sm font-semibold tabular-nums">
+            {selected.length}{" "}
+            <span className="font-normal text-muted-foreground">
+              of {rows.length}
+            </span>
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Units</p>
+          <p className="text-sm font-semibold tabular-nums">
+            {selected.reduce((sum, row) => sum + suggestedOrderQty(row), 0)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Order value</p>
+          <p className="text-sm font-semibold">
+            <MoneyText amount={asPaise(orderValue)} />
+            {unpriced > 0 ? (
+              // Honest rather than tidy: the figure excludes what it cannot price.
+              <span className="ml-1.5 text-xs font-normal text-brand-brown">
+                + {unpriced} unpriced
+              </span>
+            ) : null}
+          </p>
+        </div>
+      </ActionBar>
+    </>
   );
 }
 

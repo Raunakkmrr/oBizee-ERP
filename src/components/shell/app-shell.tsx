@@ -40,7 +40,7 @@ export function AppShell({
 }) {
   return (
     <SidebarProvider>
-      <AppSidebar role={role} badges={badges} />
+      <AppSidebar role={role} badges={badges} userName={userName} />
       <SidebarInset>
         <TopBar
           role={role}

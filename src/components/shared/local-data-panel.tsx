@@ -1,8 +1,9 @@
 "use client";
 
+import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Panel } from "@/components/shared/panel";
 import { cn } from "@/lib/utils";
 import { useDispatch, useHydrationStatus, useStoreState } from "@/lib/data/use-store";
 
@@ -31,9 +32,11 @@ export function LocalDataPanel() {
   ];
 
   return (
-    <Card className="max-w-3xl gap-0 overflow-hidden py-0">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
-        <p className="text-sm font-medium">Local data</p>
+    <Panel
+      title="Local data"
+      icon={Lock}
+      caption="Stored in this browser, encrypted at rest"
+      actions={
         <Badge
           variant="outline"
           className={cn(
@@ -52,9 +55,9 @@ export function LocalDataPanel() {
                 ? "Cleared"
                 : "Not saved"}
         </Badge>
-      </div>
-
-      <div className="space-y-3 px-3 py-3 text-sm">
+      }
+    >
+      <div className="space-y-3 text-sm">
         <p className="tabular-nums text-muted-foreground">
           {counts.map((entry, index) => (
             <span key={entry.many}>
@@ -100,6 +103,6 @@ export function LocalDataPanel() {
           the seed.
         </p>
       </div>
-    </Card>
+    </Panel>
   );
 }
