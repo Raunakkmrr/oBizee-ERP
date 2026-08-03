@@ -930,3 +930,50 @@ offered as filters, since selecting one can only produce an empty list.
   which is a visible flicker on every load.
 - The job row is **two layouts**, not one squeezed one: §6.4.7's 96px three-line card below `sm`, the
   44px row above. `[+ Create job]` becomes a pinned labelled pill at 390px, never a bare `+`.
+
+---
+
+## Phase 4 — the four screens the navigation was promising
+
+`/customers`, `/parts`, `/reports`, `/settings` existed in `navigation.ts` with no pages behind them, so
+four of nine first-level destinations 404'd. A nav item that goes nowhere is worse than a missing one:
+it teaches the user the product is unfinished everywhere else too. All 15 routes now return 200.
+Tests 154 → **174**.
+
+Each screen follows §6.14's abbreviated but binding spec, and each keeps the one rule that spec is
+insistent about:
+
+- **Parts** — three visible tabs with **Reorder default, because it is the only tab that produces an
+  action**. The other two answer questions; this one ends in a purchase order. `suggestedOrderQty` never
+  returns 0, since an "order 0" row has no business on a reorder screen. Vans are listed **with their
+  technician named** — "Van 3" is not actionable, "Ramesh's van" is. Negative on-hand is shown as
+  negative rather than clamped, because it is the evidence the Exceptions tab is built on, and each
+  exception kind states *why* it cannot be ignored rather than just naming itself.
+- **Customers & sites** — §7.5's "a site is a first-class entity, not a text field on the customer",
+  rendered: two sites under one customer, each with its own address, assets and place-of-supply state.
+  `landmark` gets its own line and says `— none recorded` when absent, because the technician needs to
+  know to ask. Every contact carries its role label next to the number (§7.6) so nobody rings the gate
+  desk about a compressor, and contacts sort into call order rather than insertion order.
+- **Reports** — a short fixed set, not a builder. Charts are permitted here and only here, and every bar
+  carries its own figures inline, so the bar aids comparison and never becomes the only channel.
+- **Settings** — the two policy toggles state their **consequence**, not their name.
+  `allow_billing_without_signoff` reads "lets an invoice be raised for a job the customer never
+  confirmed", which is what it does; calling it "flexible billing" would be a lie by euphemism.
+
+### Two more places a zero would have lied
+
+- **`WarrantyState` is a discriminated union** so *no warranty on record* cannot be confused with
+  *warranty expired*. Render only a date and they look identical; they are opposite facts when a customer
+  is disputing a repair bill. All three states plus "expiring in 59 days" are visible on one site.
+- **Conversion rate is suppressed below five leads.** Three leads and one win is not "33% conversion", it
+  is three leads — and §6.14 notes this table is what incentives are paid on, so the sample has to earn
+  the percentage. The row says "too few to rate" rather than going blank, because a blank reads as a bug.
+  Same reasoning suppresses a technician's average rating: a `0.0` beside a name is an accusation the
+  data cannot support.
+
+`worstDwell` ranks by **total** hours, not average — one job stuck for a month and thirty stuck for a day
+are different problems, and only the total finds both. It surfaces `Parts awaited` (7 jobs × 71.5h),
+which §6.14 calls "usually the biggest hidden loss in the business", as a sentence at the top of the
+screen rather than a pattern to be spotted.
+
+16 route × width combinations swept for overflow: clean.
