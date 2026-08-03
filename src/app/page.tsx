@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/app-shell";
-import { PageHeader } from "@/components/shared/page-header";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
+import { DayMasthead } from "@/components/home/day-masthead";
 import { TodaySnapshot } from "@/components/home/today-snapshot";
 import { NeedsYourCall } from "@/components/home/needs-your-call";
 import { AgainstLastWeek } from "@/components/home/against-last-week";
@@ -64,14 +64,21 @@ export default function HomePage() {
       onToggleAmounts={() => setHideAmounts((v) => !v)}
     >
       <div className="p-4 md:p-6">
-        <PageHeader
-          title={`${greetingFor(today)}, ${CURRENT_USER.name.split(" ")[0]}`}
-          description={`${SEED_TENANT.businessName} · ${formatDateLong(today)}`}
-        />
-
         <QueryBoundary query={query} label="today's summary" loadingRows={4}>
           {(data) => (
             <div className="space-y-4">
+              {/*
+                Identity first (GATE V2's second brand), then the four figures.
+                The masthead carries the day's *shape* — a channel the tiles do
+                not have — and never restates their numbers.
+              */}
+              <DayMasthead
+                businessName={SEED_TENANT.businessName}
+                greeting={`${greetingFor(today)}, ${CURRENT_USER.name.split(" ")[0]}`}
+                dateWord={formatDateLong(today)}
+                today={data.today}
+              />
+
               <TodaySnapshot today={data.today} hideAmounts={hideAmounts} />
 
               <div className="grid gap-4 xl:grid-cols-3">

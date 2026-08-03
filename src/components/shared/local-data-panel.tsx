@@ -36,6 +36,7 @@ export function LocalDataPanel() {
       title="Local data"
       icon={Lock}
       caption="Stored in this browser, encrypted at rest"
+      tone="support"
       actions={
         <Badge
           variant="outline"

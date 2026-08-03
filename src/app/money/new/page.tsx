@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, Info, Star, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { MoneyText } from "@/components/shared/money-text";
@@ -17,6 +17,8 @@ import {
   type InvoiceLine,
 } from "@/lib/tax";
 import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
+import { Panel } from "@/components/shared/panel";
+import { Briefcase, Send, ShieldCheck } from "lucide-react";
 import { useStoreState } from "@/lib/data/use-store";
 
 /**
@@ -349,21 +351,23 @@ export default function CreateInvoicePage() {
 
           {/* ---------------- Right: evidence and compliance ---------------- */}
           <div className="space-y-4 xl:col-span-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  From job{" "}
-                  <span className="font-normal text-muted-foreground tnum-id">
-                    {jobRef}
-                  </span>
-                </CardTitle>
-              </CardHeader>
+            {/*
+              The right column is *evidence*, not the document — so it sits on
+              the secondary sand ground and the invoice keeps the white surface.
+              The hierarchy is then visible before a word is read.
+            */}
+            <Panel
+              title="From job"
+              icon={Briefcase}
+              caption={jobRef}
+              tone="support"
+            >
               {/*
                 Non-editable on purpose. This panel is "here so the accountant
                 can bill without opening the job — the reason he will use this
                 screen instead of asking the coordinator" (§6.11.1).
               */}
-              <CardContent className="space-y-2 text-sm">
+              <div className="space-y-2 text-sm">
                 <p className="text-muted-foreground tabular-nums">
                   30 Jul 2026 · Ramesh Yadav
                 </p>
@@ -385,14 +389,11 @@ export default function CreateInvoicePage() {
                     </span>
                   </span>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </Panel>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Compliance</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <Panel title="Compliance" icon={ShieldCheck} tone="support">
+              <div>
                 <ul className="space-y-2 text-sm">
                   {checks.map((check) => (
                     <li key={check.label} className="flex items-start gap-2">
@@ -423,14 +424,11 @@ export default function CreateInvoicePage() {
                     </li>
                   ))}
                 </ul>
-              </CardContent>
-            </Card>
+              </div>
+            </Panel>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Send</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
+            <Panel title="Send" icon={Send} tone="support">
+              <div className="space-y-2 text-sm">
                 <p className="text-muted-foreground">
                   WhatsApp to{" "}
                   <span className="tabular-nums">98200 12345</span> · in English
@@ -438,8 +436,8 @@ export default function CreateInvoicePage() {
                 <p className="text-muted-foreground">
                   UPI link and QR included · due in 15 days
                 </p>
-              </CardContent>
-            </Card>
+              </div>
+            </Panel>
 
             {/*
               §6.11.5: ONE combined primary. "The accountant's actual intent is

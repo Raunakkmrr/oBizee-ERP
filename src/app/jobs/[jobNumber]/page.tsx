@@ -9,6 +9,9 @@ import {
   MapPin,
   MessageCircle,
   Phone,
+  History,
+  Package,
+  CircleCheck,
   ReceiptIndianRupee,
   TriangleAlert,
   WifiOff,
@@ -16,9 +19,9 @@ import {
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/shared/panel";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
 import { getState } from "@/lib/data/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyText } from "@/components/shared/money-text";
@@ -216,11 +219,8 @@ export default function JobDetailPage({
 
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 {/* ---- 5. WHERE ------------------------------------------- */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Where</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
+                <Panel title="Where" icon={MapPin}>
+                  <div className="space-y-3 text-sm">
                     <p>{job.site.addressLine}</p>
                     {job.site.landmark ? (
                       // On its own line — a landmark is how an Indian address is
@@ -286,15 +286,12 @@ export default function JobDetailPage({
                         </li>
                       ))}
                     </ul>
-                  </CardContent>
-                </Card>
+                  </div>
+                </Panel>
 
                 {/* ---- 6. ASSET ------------------------------------------- */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Asset</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
+                <Panel title="Asset" icon={Package} tone="support">
+                  <div className="space-y-3 text-sm">
                     {job.asset ? (
                       <>
                         <p className="font-medium">{job.asset.description}</p>
@@ -335,16 +332,22 @@ export default function JobDetailPage({
                         </Button>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </Panel>
               </div>
 
               {/* ---- Below the fold: TIMELINE --------------------------- */}
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle className="text-base">Timeline</CardTitle>
-                </CardHeader>
-                <CardContent>
+              <Panel title="Timeline" icon={History} tone="support" className="mt-4">
+                <div>
+                  {job.timeline.length === 0 ? (
+                    // A panel with nothing in it reads as a rendering failure.
+                    // A job created in this session genuinely has no history
+                    // yet, and saying so is the honest state.
+                    <p className="text-sm text-muted-foreground">
+                      Nothing recorded yet — events appear here as the
+                      technician works the job.
+                    </p>
+                  ) : null}
                   <ul className="space-y-3 text-sm">
                     {job.timeline.map((event) => (
                       <li key={event.id} className="flex gap-3">
@@ -373,16 +376,13 @@ export default function JobDetailPage({
                       </li>
                     ))}
                   </ul>
-                </CardContent>
-              </Card>
+                </div>
+              </Panel>
 
               {/* ---- Below the fold: PARTS + SIGN-OFF ------------------- */}
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Parts consumed</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm">
+                <Panel title="Parts consumed" icon={Package} tone="support">
+                  <div className="text-sm">
                     {job.parts.length === 0 ? (
                       <p className="text-muted-foreground">
                         No parts recorded on this job.
@@ -399,14 +399,11 @@ export default function JobDetailPage({
                         ))}
                       </ul>
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </Panel>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Sign-off</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
+                <Panel title="Sign-off" icon={CircleCheck} tone="support">
+                  <div className="space-y-2 text-sm">
                     {job.signOff ? (
                       <>
                         <p>
@@ -433,8 +430,8 @@ export default function JobDetailPage({
                         the work.
                       </p>
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </Panel>
               </div>
               </div>
             );

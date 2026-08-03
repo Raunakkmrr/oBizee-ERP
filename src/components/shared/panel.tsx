@@ -23,6 +23,15 @@ import { cn } from "@/lib/utils";
  *
  * `flush` drops body padding for `divide-y` row lists, which is how every dense
  * screen in the dashboard is actually built (there is no `<table>` in it at all).
+ *
+ * **`tone="support"` is the product's secondary surface.** `--secondary`
+ * (`#f3e9e0`, warm sand) existed in the token file and was painted nowhere, so
+ * every panel on every screen was the same white rectangle and the layout
+ * carried no hierarchy of its own — the reader had to get it from the headings.
+ * Supporting panels — the technician rail, compliance, evidence, local data —
+ * now sit on sand, so a screen reads as *primary work plus context* before a
+ * single word is read. Primary content stays white; if everything is tinted,
+ * nothing is.
  */
 export function Panel({
   title,
@@ -31,6 +40,7 @@ export function Panel({
   caption,
   actions,
   flush = false,
+  tone = "default",
   className,
   children,
 }: {
@@ -41,12 +51,26 @@ export function Panel({
   caption?: string;
   actions?: React.ReactNode;
   flush?: boolean;
+  /** `support` paints the panel on the secondary sand ground. */
+  tone?: "default" | "support";
   className?: string;
   children: React.ReactNode;
 }) {
+  const support = tone === "support";
   return (
-    <Card className={cn("gap-0 overflow-hidden py-0", className)}>
-      <div className="flex flex-wrap items-center gap-3 border-b bg-muted/60 px-4 py-2.5">
+    <Card
+      className={cn(
+        "gap-0 overflow-hidden py-0",
+        support && "bg-secondary/40",
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-3 border-b px-4 py-2.5",
+          support ? "bg-secondary/70" : "bg-muted/60",
+        )}
+      >
         {Icon ? (
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
             <Icon className="size-4" />

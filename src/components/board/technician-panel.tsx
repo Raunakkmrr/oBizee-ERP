@@ -66,6 +66,7 @@ export function TechnicianPanel({
           ? `Assigning ${selectedJob.jobNumber} — pick who goes`
           : "Who is free, where they are, and what they can do"
       }
+      tone="support"
       className="flex h-full min-h-0 flex-col"
     >
       {/* Scrolls independently of the job list (§6.4.1) — the coordinator
