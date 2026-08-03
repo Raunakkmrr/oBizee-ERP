@@ -129,7 +129,7 @@ export function groupLeads(leads: Lead[]): { group: LeadGroup; rows: Lead[] }[] 
 
 /* ----------------------------------------------------------------- fixture */
 
-const FIXTURE: LeadsData = {
+export const SEED_LEADS: LeadsData = {
   tomorrowCount: 5,
   leads: [
     {
@@ -333,8 +333,12 @@ const FIXTURE: LeadsData = {
 export const getLeads = defineQuery<void, LeadsData>({
   key: "leads.queue",
   schema: leadsSchema,
-  fixture: (): Fetched<unknown> => ({
-    raw: FIXTURE,
+  // Reads from the local store, whose seed is SEED_LEADS. Deferred import so
+  // the static graph stays acyclic: the store imports this module for its seed,
+  // and a static import back would be a cycle waiting to bite the first person
+  // who adds a top-level const that reads state.
+  fixture: async (): Promise<Fetched<unknown>> => ({
+    raw: (await import("./store")).getState().leads,
     partialFailures: [
       {
         region: "Last activity for 1 lead",

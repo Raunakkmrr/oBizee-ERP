@@ -17,6 +17,7 @@ import {
   type InvoiceLine,
 } from "@/lib/tax";
 import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
+import { useStoreState } from "@/lib/data/use-store";
 
 /**
  * Create invoice from job — PRD §6.11.
@@ -39,6 +40,7 @@ import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
  */
 
 const SITE_STATE = "27"; // Maharashtra — the job's site
+/** Fallback only — used when nothing has been billed yet in this session. */
 const JOB_NUMBER = "J-2607-0431";
 
 const LINES: InvoiceLine[] = [
@@ -63,18 +65,42 @@ const LINES: InvoiceLine[] = [
 type Check = { label: string; state: "ok" | "info" | "warn"; detail?: string };
 
 export default function CreateInvoicePage() {
+  /**
+   * The most recently created invoice, if there is one.
+   *
+   * This screen used to render a hard-coded fixture and was reachable only by
+   * typing the URL — so "create invoice" was never actually reached from a job.
+   * It now shows the real document the job produced, and falls back to the
+   * worked example from §6.11.1 when nothing has been billed yet, so the screen
+   * still demonstrates the tax engine on a cold start.
+   */
+  const storeState = useStoreState();
+  const created = storeState.invoices[0] ?? null;
+
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
   const [overridden, setOverridden] = useState(false);
 
   const supplierState = SEED_TENANT.branches[0].stateCode;
+  const lines = created?.lines ?? LINES;
+  // Every reference on this screen follows the same invoice, so the header,
+  // the line table and the evidence panel cannot describe different jobs.
+  const jobRef = created?.jobNumber ?? JOB_NUMBER;
   const derivation = useMemo(
-    () => derivePlaceOfSupply(SITE_STATE, supplierState),
-    [supplierState],
+    () =>
+      created
+        ? {
+            head: created.head,
+            explanation: created.explanation,
+            siteState: supplierState,
+            supplierState,
+          }
+        : derivePlaceOfSupply(SITE_STATE, supplierState),
+    [created, supplierState],
   );
   const totals = useMemo(
-    () => computeTotals(LINES, derivation.head),
-    [derivation.head],
+    () => computeTotals(lines, derivation.head),
+    [lines, derivation.head],
   );
 
   const aato = SEED_TENANT.aatoPaise;
@@ -111,11 +137,11 @@ export default function CreateInvoicePage() {
           variant="ghost"
           size="sm"
           className="mb-3 -ml-2"
-          render={<Link href={`/jobs/${JOB_NUMBER}`} />}
+          render={<Link href={`/jobs/${jobRef}`} />}
           nativeButton={false}
         >
           <ArrowLeft className="size-4" />
-          Back to {JOB_NUMBER}
+          Back to {jobRef}
         </Button>
 
         {/* 62 / 38 (§6.11.1). */}
@@ -129,7 +155,9 @@ export default function CreateInvoicePage() {
                     TAX INVOICE
                   </h1>
                   <span className="text-sm text-muted-foreground tnum-id">
-                    SVC/26-27/0148 · {("0" + today.getDate()).slice(-2)}/08/2026
+                    {created?.number ?? "SVC/26-27/0148"} ·{" "}
+                    {created?.dateWord ??
+                      `${("0" + today.getDate()).slice(-2)}/08/2026`}
                   </span>
                 </div>
 
@@ -138,7 +166,9 @@ export default function CreateInvoicePage() {
                     <p className="text-xs font-medium text-muted-foreground">
                       Bill to
                     </p>
-                    <p className="mt-1 text-sm font-medium">Shakti Industries</p>
+                    <p className="mt-1 text-sm font-medium">
+                      {created?.customer ?? "Shakti Industries"}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       Registered office, Pune
                     </p>
@@ -248,7 +278,7 @@ export default function CreateInvoicePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {LINES.map((line, index) => (
+                      {lines.map((line, index) => (
                         <tr key={line.description} className="border-b">
                           <td className="py-2 tabular-nums">{index + 1}</td>
                           <td className="py-2">{line.description}</td>
@@ -324,7 +354,7 @@ export default function CreateInvoicePage() {
                 <CardTitle className="text-base">
                   From job{" "}
                   <span className="font-normal text-muted-foreground tnum-id">
-                    {JOB_NUMBER}
+                    {jobRef}
                   </span>
                 </CardTitle>
               </CardHeader>

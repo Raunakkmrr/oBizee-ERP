@@ -29,6 +29,7 @@ import {
   type Technician,
 } from "@/lib/data/board";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { useDispatch, useStoreState } from "@/lib/data/use-store";
 import { can } from "@/lib/roles";
 
 /**
@@ -52,10 +53,12 @@ const VIEWS = ["Today", "Tomorrow", "This week"] as const;
 
 export default function TodayBoardPage() {
   const [query, setQuery] = useState<Query<Board>>(loading());
+  const dispatch = useDispatch();
+  // Subscribing keeps this screen live when another surface writes.
+  const storeState = useStoreState();
   const [filter, setFilter] = useState<BoardFilter | null>(null);
   const [selectedJob, setSelectedJob] = useState<JobRowData | null>(null);
   const [view, setView] = useState<(typeof VIEWS)[number]>("Today");
-  const [assigned, setAssigned] = useState<Record<string, string>>({});
   const [hideAmounts, setHideAmounts] = useState(false);
 
   useEffect(() => {
@@ -66,7 +69,7 @@ export default function TodayBoardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [storeState]);
 
   const today = new Date();
   const canAssign = can(CURRENT_USER.role, "job:dispatch");
@@ -75,28 +78,23 @@ export default function TodayBoardPage() {
 
   const rows = useMemo(() => {
     if (!board) return [];
-    const withLocalAssignments = board.jobs.map((job) =>
-      assigned[job.id]
-        ? {
-            ...job,
-            technician: {
-              id: assigned[job.id],
-              name:
-                board.technicians.find((t) => t.id === assigned[job.id])?.name ??
-                "",
-            },
-          }
-        : job,
-    );
+    // No local assignment overlay any more — the store is the single source, so
+    // an assignment made here is the same fact the Jobs list and job detail see.
     return filter
-      ? withLocalAssignments.filter((job) => matchesFilter(job, filter))
-      : withLocalAssignments;
-  }, [board, filter, assigned]);
+      ? board.jobs.filter((job) => matchesFilter(job, filter))
+      : board.jobs;
+  }, [board, filter]);
 
   function handleAssign(technician: Technician) {
     if (!selectedJob) return;
-    setAssigned((prev) => ({ ...prev, [selectedJob.id]: technician.id }));
+    dispatch({
+      type: "ASSIGN_JOB",
+      jobId: selectedJob.id,
+      technicianId: technician.id,
+      technicianName: technician.name,
+    });
     setSelectedJob(null);
+    void getBoard().then(setQuery);
   }
 
   return (

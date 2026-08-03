@@ -13,7 +13,7 @@
  * answer changes what she is allowed to charge.
  */
 import { z } from "zod";
-import { defineQuery, type Fetched } from "./source";
+import { DataSourceError, defineQuery, type Fetched } from "./source";
 
 /* ---------------------------------------------------------------- contract */
 
@@ -136,6 +136,42 @@ export function primaryActionFor(status: string): PrimaryAction {
 
 /* ----------------------------------------------------------------- fixture */
 
+/**
+ * The depth a board row does not carry.
+ *
+ * A job created in this session has no site record, asset history or timeline
+ * yet — so those sections render **legitimately empty** rather than borrowing
+ * another job's. Every nullable field here is null on purpose; none of them is
+ * a placeholder pretending to be data.
+ */
+const EMPTY_DEPTH: Omit<
+  JobDetail,
+  | "id"
+  | "jobNumber"
+  | "status"
+  | "priority"
+  | "customer"
+  | "serviceType"
+  | "valuePaise"
+> = {
+  statusSince: null,
+  visit: null,
+  site: {
+    addressLine: "Address not recorded yet",
+    landmark: null,
+    locality: "",
+    pincode: "",
+    mapQuery: "",
+    accessNotes: null,
+    contacts: [],
+  },
+  asset: null,
+  timeline: [],
+  parts: [],
+  signOff: null,
+  invoiceNumber: null,
+};
+
 const FIXTURES: Record<string, JobDetail> = {
   "J-2608-0398": {
     id: "j5",
@@ -227,12 +263,51 @@ const FIXTURES: Record<string, JobDetail> = {
 export const getJobDetail = defineQuery<string, JobDetail>({
   key: "job.detail",
   schema: jobDetailSchema,
-  fixture: (jobNumber): Fetched<unknown> => {
-    const job = FIXTURES[jobNumber] ?? FIXTURES["J-2608-0398"];
+  /**
+   * **The store is the source of truth for a job's live facts.**
+   *
+   * This used to read only from `FIXTURES`, and an unknown job number fell back
+   * to `FIXTURES["J-2608-0398"]` — so `/jobs/J-2608-0421` silently rendered a
+   * *different job's* customer, site and status under the URL you asked for.
+   * That is worse than a 404: it is a fabricated record, the same class of lie
+   * as rendering ₹0 for a value we could not compute.
+   *
+   * Now: status, technician and value come from the store, so this screen and
+   * the board can never disagree. The fixture supplies only the extra depth a
+   * board row does not carry — site, contacts, asset, timeline — and a job with
+   * no such fixture still renders, with those sections legitimately empty.
+   */
+  fixture: async (jobNumber): Promise<Fetched<unknown>> => {
+    const { getState } = await import("./store");
+    const row = getState().board.jobs.find(
+      (candidate) => candidate.jobNumber === jobNumber,
+    );
+
+    if (!row) {
+      throw new DataSourceError({
+        kind: "validation",
+        subject: jobNumber,
+        message: `No job numbered ${jobNumber}.`,
+        fix: "Check the number, or open it from the jobs list.",
+        code: "JOB_NOT_FOUND",
+      });
+    }
+
+    const depth = FIXTURES[jobNumber] ?? null;
+    const job: JobDetail = {
+      ...(depth ?? EMPTY_DEPTH),
+      id: row.id,
+      jobNumber: row.jobNumber,
+      // Live facts always win over the fixture.
+      status: row.status,
+      priority: row.priority,
+      customer: row.customer,
+      serviceType: row.serviceType,
+      valuePaise: row.valuePaise,
+    };
+
     return {
       raw: job,
-      // §6.5.2's named partial: asset history down. The block still renders its
-      // current details, so the coordinator can still answer "under warranty?".
       partialFailures: job.asset
         ? [
             {

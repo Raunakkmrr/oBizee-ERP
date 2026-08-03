@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
@@ -10,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { SEED_TENANT, SEED_USERS, CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { useDispatch } from "@/lib/data/use-store";
 
 /**
  * New job / work order — FR-106, FR-201, FR-203, FR-205, FR-207.
@@ -79,6 +81,8 @@ export type NewJobPrefill = {
 
 export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
   const { fromLead } = prefill;
+  const dispatch = useDispatch();
+  const router = useRouter();
 
   const [customer, setCustomer] = useState(
     prefill.customer ?? "Grand Plaza Hotel",
@@ -290,7 +294,24 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
         </div>
 
         <div className="mt-4 flex max-w-4xl gap-2">
-          <Button render={<Link href="/today" />} nativeButton={false}>
+          <Button
+            disabled={customer.trim() === "" || site.trim() === ""}
+            onClick={() => {
+              const primary = technicians.find((t) => t.id === technician);
+              dispatch({
+                type: "CREATE_JOB",
+                customer,
+                locality: site,
+                serviceType: service,
+                slot: slot === "Exact time" ? exactTime : slot,
+                priority: priority as "normal" | "urgent" | "breakdown",
+                technicianId: primary?.id ?? null,
+                technicianName: primary?.name ?? null,
+                fromLeadReference: fromLead,
+              });
+              router.push("/today");
+            }}
+          >
             Create work order
           </Button>
           <Button

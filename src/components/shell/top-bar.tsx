@@ -1,5 +1,7 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+
 import Link from "next/link";
 import { CircleCheck, Eye, EyeOff, RefreshCw, TriangleAlert } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -34,7 +36,31 @@ export type Freshness =
   | { kind: "stale"; at: Date }
   | { kind: "syncing" };
 
+/**
+ * A clock must not be server-rendered.
+ *
+ * "Updated 1:38 pm" was rendered on the server and again on the client; when the
+ * minute ticked between the two, React reported a hydration mismatch and
+ * regenerated the tree. Freshness is inherently *client* state — it answers
+ * "when did **your** copy last update" — so the time is withheld until after
+ * mount rather than being papered over with `suppressHydrationWarning`, which
+ * would hide the next real mismatch too.
+ */
+const noopSubscribe = () => () => {};
+
+function useMounted(): boolean {
+  // `useSyncExternalStore` with differing client/server snapshots is the
+  // sanctioned hydration probe — no effect, no cascading render, and React
+  // itself guarantees the server value is used for the hydrating pass.
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+}
+
 function FreshnessIndicator({ freshness }: { freshness: Freshness }) {
+  const mounted = useMounted();
   if (freshness.kind === "syncing") {
     return (
       <span
@@ -65,7 +91,7 @@ function FreshnessIndicator({ freshness }: { freshness: Freshness }) {
         {/* Word + shape + colour — never colour alone (§6.13.4). */}
         <TriangleAlert aria-hidden="true" className="size-4" />
         <span className="hidden tnum sm:inline">
-          From {formatTime(freshness.at)}
+          {mounted ? `From ${formatTime(freshness.at)}` : "From earlier"}
         </span>
       </span>
     );
@@ -78,7 +104,7 @@ function FreshnessIndicator({ freshness }: { freshness: Freshness }) {
     >
       <CircleCheck aria-hidden="true" className="size-4" />
       <span className="hidden tnum sm:inline">
-        Updated {formatTime(freshness.at)}
+        {mounted ? `Updated ${formatTime(freshness.at)}` : "Updated"}
       </span>
     </span>
   );

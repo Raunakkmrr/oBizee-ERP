@@ -22,6 +22,7 @@ import {
   type BoardFilter,
 } from "@/lib/data/board";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { useStoreState } from "@/lib/data/use-store";
 
 /**
  * Jobs — the searchable record of every work order, as distinct from `/today`.
@@ -44,6 +45,9 @@ export default function JobsPage() {
    */
   const [filter, setFilter] = useState<BoardFilter | null>(null);
 
+  // Re-reads whenever any surface writes to the store.
+  const storeState = useStoreState();
+
   useEffect(() => {
     let cancelled = false;
     getBoard().then((result) => {
@@ -52,7 +56,7 @@ export default function JobsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [storeState]);
 
   const today = new Date();
 

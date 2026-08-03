@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Info } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
@@ -29,6 +30,7 @@ import {
   type Recurrence,
 } from "@/lib/data/contracts";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { useDispatch } from "@/lib/data/use-store";
 
 /**
  * New AMC contract — FR-106, FR-501, FR-504, FR-505, FR-810, FR-1406.
@@ -86,6 +88,8 @@ export type NewContractPrefill = {
 
 export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
   const { fromLead } = prefill;
+  const dispatch = useDispatch();
+  const router = useRouter();
 
   // FR-106: pre-populated from the won lead — customer, site and quoted value
   // carried across so nothing is retyped.
@@ -369,8 +373,20 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
               {canCreate ? (
                 <Button
                   className="w-full"
-                  render={<Link href="/contracts" />}
-                  nativeButton={false}
+                  onClick={() => {
+                    dispatch({
+                      type: "CREATE_CONTRACT",
+                      customer,
+                      site,
+                      annualValuePaise: annualPaise,
+                      coverage,
+                      recurrence,
+                      billing,
+                      anchorDay: Number(anchorDay) || 1,
+                      fromLeadReference: fromLead,
+                    });
+                    router.push("/contracts");
+                  }}
                 >
                   Create contract &amp; generate visits
                 </Button>

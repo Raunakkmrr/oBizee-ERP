@@ -204,7 +204,7 @@ export const contractsSchema = z.object({
 export type Contract = z.infer<typeof contractSchema>;
 export type ContractSchedule = z.infer<typeof scheduleSchema>;
 
-const FIXTURE = {
+export const SEED_CONTRACTS = {
   contracts: [
     {
       id: "ctr_1",
@@ -308,5 +308,7 @@ const FIXTURE = {
 export const getContracts = defineQuery<void, z.infer<typeof contractsSchema>>({
   key: "contracts.list",
   schema: contractsSchema,
-  fixture: (): Fetched<unknown> => ({ raw: FIXTURE }),
+  fixture: async (): Promise<Fetched<unknown>> => ({
+    raw: { contracts: (await import("./store")).getState().contracts },
+  }),
 });

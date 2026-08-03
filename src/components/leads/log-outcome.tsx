@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Popover,
   PopoverContent,
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { OUTCOMES, isTerminalOutcome, type Lead } from "@/lib/data/leads";
+import { useDispatch } from "@/lib/data/use-store";
 
 /**
  * Log outcome — PRD §6.6.3.
@@ -56,6 +57,8 @@ export function LogOutcome({
   lead: Lead;
   onSaved: () => void;
 }) {
+  const dispatch = useDispatch();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   // Pre-filled +2 days (§6.6.3) — a default she can change, never a blank she
@@ -78,11 +81,32 @@ export function LogOutcome({
   }).toString();
 
   function save() {
+    if (!outcome) return;
+    // The write. Previously this closed the popover and changed nothing.
+    dispatch({
+      type: "LOG_LEAD_OUTCOME",
+      leadId: lead.id,
+      outcome,
+      note,
+      followUp: terminal ? null : followUp,
+    });
     setOpen(false);
     setOutcome(null);
     setNote("");
     setFollowUp(plusDays(2));
     onSaved();
+  }
+
+  /** Log the outcome first, then navigate — conversion implies the lead is won. */
+  function convertTo(href: string) {
+    dispatch({
+      type: "LOG_LEAD_OUTCOME",
+      leadId: lead.id,
+      outcome: "Won",
+      note: note.trim() || "Won — converted",
+      followUp: null,
+    });
+    router.push(href);
   }
 
   return (
@@ -179,16 +203,14 @@ export function LogOutcome({
               <div className="grid gap-1.5">
                 <Button
                   size="sm"
-                  render={<Link href={`/contracts/new?${carry}`} />}
-                  nativeButton={false}
+                  onClick={() => convertTo(`/contracts/new?${carry}`)}
                 >
                   AMC contract — recurring visits
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  render={<Link href={`/jobs/new?${carry}`} />}
-                  nativeButton={false}
+                  onClick={() => convertTo(`/jobs/new?${carry}`)}
                 >
                   One-off work order
                 </Button>

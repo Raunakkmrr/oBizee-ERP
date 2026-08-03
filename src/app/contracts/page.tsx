@@ -21,6 +21,7 @@ import {
   type Contract,
 } from "@/lib/data/contracts";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { useStoreState } from "@/lib/data/use-store";
 
 /**
  * Contracts — PRD §6.14's contract detail, rendered as a list of cards.
@@ -156,6 +157,9 @@ export default function ContractsPage() {
     loading(),
   );
 
+  // Re-reads whenever any surface writes to the store.
+  const storeState = useStoreState();
+
   useEffect(() => {
     let cancelled = false;
     getContracts().then((result) => {
@@ -164,7 +168,7 @@ export default function ContractsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [storeState]);
 
   const today = new Date();
 

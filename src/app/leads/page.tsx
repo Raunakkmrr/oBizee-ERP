@@ -31,6 +31,7 @@ import {
   type LeadsData,
 } from "@/lib/data/leads";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { useStoreState } from "@/lib/data/use-store";
 
 /**
  * Leads — PRD §6.6. **The one decision:** *who do I call right now?*
@@ -58,6 +59,9 @@ export default function LeadsPage() {
   // FR-101: an 8-second Undo toast showing the new lead reference.
   const [savedRef, setSavedRef] = useState<string | null>(null);
 
+  // Re-reads whenever any surface writes to the store.
+  const storeState = useStoreState();
+
   useEffect(() => {
     let cancelled = false;
     getLeads().then((result) => {
@@ -66,7 +70,7 @@ export default function LeadsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [storeState]);
 
   /**
    * §6.6.5: `[+ New lead]` carries the keyboard shortcut `N`. This is "the one

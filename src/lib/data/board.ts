@@ -216,7 +216,7 @@ export function recommendTechnician(
  * customer name long enough to need truncation; and a technician on leave who
  * must not be offered for assignment.
  */
-const FIXTURE: Board = {
+export const SEED_BOARD: Board = {
   counters: {
     unassigned: 3,
     en_route: 2,
@@ -482,7 +482,9 @@ const FIXTURE: Board = {
 export const getBoard = defineQuery<void, Board>({
   key: "board.today",
   schema: boardSchema,
-  fixture: (): Fetched<unknown> => ({ raw: FIXTURE }),
+  fixture: async (): Promise<Fetched<unknown>> => ({
+    raw: (await import("./store")).getState().board,
+  }),
 });
 
 /** Exposed so the technician-panel-down state can be exercised in review. */

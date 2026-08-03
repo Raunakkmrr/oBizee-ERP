@@ -2,18 +2,22 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Flag,
   MapPin,
   MessageCircle,
   Phone,
+  ReceiptIndianRupee,
   TriangleAlert,
   WifiOff,
 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { Button } from "@/components/ui/button";
+import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { getState } from "@/lib/data/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -58,6 +62,9 @@ export default function JobDetailPage({
   params: Promise<{ jobNumber: string }>;
 }) {
   const { jobNumber } = use(params);
+  const dispatch = useDispatch();
+  const router = useRouter();
+  const storeState = useStoreState();
   const [query, setQuery] = useState<Query<JobDetail>>(loading());
   const [hideAmounts, setHideAmounts] = useState(false);
 
@@ -69,7 +76,7 @@ export default function JobDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [jobNumber]);
+  }, [jobNumber, storeState]);
 
   const today = new Date();
   const showValue = can(CURRENT_USER.role, "price:view_selling");
@@ -98,6 +105,8 @@ export default function JobDetailPage({
         <QueryBoundary query={query} label="this job" loadingRows={6}>
           {(job) => {
             const primary = primaryActionFor(job.status);
+            const billable =
+              job.status === "WORK_DONE" || job.status === "SIGNED_OFF";
             return (
               <div>
               <Button
@@ -168,6 +177,35 @@ export default function JobDetailPage({
                 <Button variant="outline" size="sm">
                   Reschedule
                 </Button>
+                {/*
+                  Bill this job — FR-701, and the link that was missing entirely.
+                  `/money/new` was previously reachable only by typing the URL,
+                  so "create invoice" was never actually reached from a job.
+
+                  Offered only once the work is done: billing a job nobody has
+                  finished is exactly what §4.2's sign-off toggle exists to
+                  govern, and it is off by default.
+                */}
+                {billable ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const match = getState().board.jobs.find(
+                        (candidate) => candidate.jobNumber === job.jobNumber,
+                      );
+                      if (!match) return;
+                      dispatch({
+                        type: "CREATE_INVOICE_FROM_JOB",
+                        jobId: match.id,
+                      });
+                      router.push("/money/new");
+                    }}
+                  >
+                    <ReceiptIndianRupee className="size-4" />
+                    Bill this job
+                  </Button>
+                ) : null}
                 {/* Exactly one primary, always top-right (§6.5.3). */}
                 {primary ? (
                   <Button size="sm" className="ml-auto">
