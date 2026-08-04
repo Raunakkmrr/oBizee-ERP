@@ -372,6 +372,20 @@ let status: HydrationStatus = { kind: "hydrating" };
 const listeners = new Set<() => void>();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let hydration: Promise<void> | null = null;
+let hydrated = false;
+/**
+ * Actions dispatched *before* the vault finished opening.
+ *
+ * They are applied optimistically so the UI responds immediately, and replayed
+ * on top of the decrypted state once it arrives — because the optimistic apply
+ * was against the seed, not against what is actually stored.
+ *
+ * Without this, a screen that only calls `useDispatch` (a create form does not
+ * need to read the store) runs against the seed, and the *next* screen's
+ * `hydrate()` silently overwrites the write that just happened. That is exactly
+ * how a created work order vanished between the form and the board.
+ */
+const pending: Action[] = [];
 
 function emit(): void {
   for (const listener of listeners) listener();
@@ -411,6 +425,9 @@ export function subscribe(listener: () => void): () => void {
 }
 
 export function dispatch(action: Action, now: Date = new Date()): void {
+  // Optimistic: the user sees the result now. If the vault is still opening,
+  // the action is replayed on top of the real state when it lands.
+  if (!hydrated && action.type !== "RESET") pending.push(action);
   state = reduce(state, action, now);
   emit();
   if (action.type === "RESET") {
@@ -446,6 +463,12 @@ export function hydrate(): Promise<void> {
     switch (result.kind) {
       case "opened":
         state = result.value;
+        // Replay anything dispatched while the vault was opening. Those actions
+        // were applied to the seed for an immediate UI response; this puts them
+        // on top of what was actually stored.
+        for (const action of pending) {
+          state = reduce(state, action, new Date());
+        }
         status = { kind: "ready", restored: true };
         break;
       case "absent":
@@ -470,6 +493,10 @@ export function hydrate(): Promise<void> {
         status = { kind: "unavailable", message: unavailableMessage(result.error) };
         break;
     }
+    hydrated = true;
+    pending.length = 0;
+    // Anything applied optimistically now needs writing under the real state.
+    schedulePersist();
     emit();
   })();
 

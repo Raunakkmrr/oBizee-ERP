@@ -1,5 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { useStoreState } from "@/lib/data/use-store";
 import { AppSidebar, type BadgeCounts } from "./app-sidebar";
 import { TopBar, type Freshness } from "./top-bar";
 import type { Role } from "@/lib/roles";
@@ -38,6 +41,15 @@ export function AppShell({
   onToggleAmounts?: () => void;
   children: ReactNode;
 }) {
+  /**
+   * Every screen opens the vault on mount, including create forms that only
+   * write. Leaving hydration to `useStoreState` meant a form that used
+   * `useDispatch` alone ran against the seed, and the next screen's hydration
+   * silently overwrote the write — a created work order disappeared between the
+   * form and the board.
+   */
+  useStoreState();
+
   return (
     <SidebarProvider>
       <AppSidebar role={role} badges={badges} userName={userName} />

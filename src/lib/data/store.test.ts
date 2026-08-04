@@ -227,3 +227,32 @@ describe("the full flow, end to end, as data", () => {
     expect(billed.invoices[0].grandTotalPaise).toBeGreaterThan(0);
   });
 });
+
+
+describe("actions dispatched before hydration are not lost", () => {
+  it("replays onto the stored state rather than being overwritten by it", () => {
+    // The bug this pins, exactly as it happened: a create form uses
+    // `useDispatch` only, so nothing on that screen opened the vault. The
+    // action applied to the SEED, then the next screen hydrated and replaced
+    // the whole state with what was stored — and the work order vanished
+    // between the form and the board.
+    //
+    // The fix replays pending actions on top of the decrypted state, which is
+    // what this asserts as pure reduction: an earlier write (the contract) and
+    // a later one (the job) must both survive.
+    const stored = reduce(
+      seedState(),
+      { type: "CREATE_CONTRACT", customer: "Grand Plaza Hotel", site: "Connaught Place", annualValuePaise: 3_60_000_00, coverage: "COMPREHENSIVE", recurrence: "MONTHLY", billing: "QUARTERLY", anchorDay: 15, fromLeadReference: "L-2608-0151" },
+      NOW,
+    );
+
+    // Dispatched against the seed while the vault was still opening.
+    const optimistic: Action = { type: "CREATE_JOB", customer: "Grand Plaza Hotel", locality: "Connaught Place", serviceType: "AC servicing", slot: "9-1", priority: "normal", technicianId: null, technicianName: null, fromLeadReference: "L-2608-0151" };
+
+    const replayed = reduce(stored, optimistic, NOW);
+
+    expect(replayed.contracts.length).toBe(seedState().contracts.length + 1);
+    expect(replayed.board.jobs.length).toBe(seedState().board.jobs.length + 1);
+    expect(replayed.board.jobs[0].customer).toBe("Grand Plaza Hotel");
+  });
+});
