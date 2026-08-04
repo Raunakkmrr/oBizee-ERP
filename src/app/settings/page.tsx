@@ -94,47 +94,51 @@ export default function SettingsPage() {
 
         <div className="space-y-4">
           {/*
-            The tenant masthead — GATE V2's second brand. Until now this
-            product showed *whose software* it is and never *whose books these
-            are*; a 14px grey line would read identically for every customer
-            on the platform. Gradient lifted from the dashboard's own home
-            masthead so the two products share one device.
+            The registered business, at the weight an admin screen deserves.
+
+            This was a 112px full-bleed gradient slab with its two facts set at
+            11px white-on-orange — a marketing banner bolted to the top of a
+            table. The mistake was mine and it was specific: GATE V2 puts the
+            tenant's identity on the masthead of their PRIMARY screen, and that
+            already exists on the home screen. Repeating it here turned Settings
+            into a landing page and made the figures unreadable at the one size
+            that matters.
+
+            Same four facts, legible, on the same surface as everything else.
           */}
-          <section className="overflow-hidden rounded-xl bg-gradient-to-br from-primary to-primary/85 p-5 text-primary-foreground">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <Panel title="Registered business" icon={Building2}>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="min-w-0">
-                <p className="text-xs font-medium tracking-wide uppercase text-primary-foreground/80">
-                  Registered business
+                <p className="text-xs text-muted-foreground">Legal name</p>
+                <p className="mt-0.5 font-medium">{SEED_TENANT.legalName}</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Trading as</p>
+                <p className="mt-0.5 font-medium">{SEED_TENANT.businessName}</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">
+                  Annual turnover declared
                 </p>
-                <h2 className="mt-0.5 truncate text-2xl font-semibold">
-                  {SEED_TENANT.legalName}
-                </h2>
-                <p className="mt-0.5 text-sm text-primary-foreground/85">
-                  Trading as {SEED_TENANT.businessName}
+                <p className="mt-0.5 font-semibold tabular-nums">
+                  {formatMoney(SEED_TENANT.aatoPaise)}
+                </p>
+                {/* The two rules this number silently drives, named so a change
+                    to it is never made casually. */}
+                <p className="text-xs text-muted-foreground">
+                  Drives SAC/HSN digits and e-invoicing
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <div className="rounded-lg bg-primary-foreground/15 px-3 py-2 backdrop-blur-sm">
-                  <p className="text-[11px] leading-none text-primary-foreground/80">
-                    Annual turnover
-                  </p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums">
-                    {formatMoney(SEED_TENANT.aatoPaise)}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-primary-foreground/15 px-3 py-2 backdrop-blur-sm">
-                  <p className="text-[11px] leading-none text-primary-foreground/80">
-                    Tax scheme
-                  </p>
-                  <p className="mt-1 text-sm font-semibold">
-                    {SEED_TENANT.taxScheme === "REGULAR"
-                      ? "Regular"
-                      : "Composition 6%"}
-                  </p>
-                </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Tax scheme</p>
+                <p className="mt-0.5 font-medium">
+                  {SEED_TENANT.taxScheme === "REGULAR"
+                    ? "Regular"
+                    : "Composition — services, 6%"}
+                </p>
               </div>
             </div>
-          </section>
+          </Panel>
 
           <Panel
             title="People &amp; roles"
