@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Building2,
+  Clock,
   Landmark,
   Lock,
   ShieldCheck,
@@ -11,9 +12,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { BorderBeam } from "@/components/ui/border-beam";
-import { GridPattern } from "@/components/ui/grid-pattern";
+import { MagicCard } from "@/components/ui/magic-card";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { LocalDataPanel } from "@/components/shared/local-data-panel";
 import { cn } from "@/lib/utils";
@@ -25,54 +24,52 @@ import {
 } from "@/lib/data/fixtures/tenant";
 
 /**
- * Settings & people — rebuilt.
+ * Settings & people — attempt 2.
  *
- * **What this replaces and why.** The previous version was eight full-width
- * panels stacked down the page, every one the same width, the same weight and
- * the same head band. Raunak's words: *"the structure and how the weight of the
- * separate lines has been used"*. Uniform stacking gives the eye no rank — a
- * seven-person table and a three-row policy list occupied identical visual
- * space, so the screen read as a list of boxes rather than a place with
- * priorities.
+ * **Dropped permanently from attempt 1** (the rule is drop, never refine): the
+ * section rail and focused pane, and — the thing named hardest — **every
+ * separator**. No `divide-y`, no `border-b` between rows, no ruled tables.
  *
- * The structure now is **a section rail plus one focused pane**. Only one
- * section is on screen at a time, so it gets the full width and the full
- * attention, and the rail carries the map. That is the shape settings actually
- * has — a handful of unrelated concerns — rather than a scroll.
+ * Raunak: *"I hate the separators so much… It's making it look like a 2D
+ * design."* He is describing something real. A ruled row is a 2012 data grid:
+ * the line does the work of saying "these are different things", which means
+ * the things themselves are doing none of it. Research into current dashboard
+ * work says the same in the positive — separate with **card modules, spacing
+ * and elevation**, never with lines.
  *
- * Registry components, each named with the artefact it produces:
+ * So the unit here is not a row. **Every person, branch, slot and policy is its
+ * own object with its own surface**, lifted off the ground by shadow and held
+ * apart by space. Nothing is ruled, because nothing needs to be: two floating
+ * objects are self-evidently two objects.
  *
- * - **`@magicui/number-ticker`** — the turnover figure counts up on arrival.
- *   The one number here that drives two statutory rules (SAC/HSN digit count,
- *   e-invoicing threshold) now announces itself instead of sitting in a row of
- *   static text.
- * - **`@magicui/border-beam`** — a light travels the border of the active pane,
- *   marking which section you are in without another static highlight.
- * - **`@magicui/grid-pattern`** — texture behind the identity block, so the one
- *   surface carrying the business name is not another flat rectangle.
+ * Depth is doing the work that lines used to:
+ *
+ * - the page carries a soft radial wash, so surfaces sit *on* something
+ * - cards use layered shadow that deepens on hover — elevation as a live
+ *   property, not a static border
+ * - **`@magicui/magic-card`** puts a spotlight that tracks the cursor on the two
+ *   surfaces that matter most, so the screen responds to being looked at
+ * - **`@magicui/number-ticker`** counts the turnover up, in Indian grouping
+ *
+ * The dark rail stays. It was the one thing that worked.
  */
 const SECTIONS = [
-  { key: "business", label: "Business & tax", icon: Landmark },
-  { key: "people", label: "People & roles", icon: Users },
-  { key: "branches", label: "Branches & slots", icon: Building2 },
+  { key: "business", label: "Business", icon: Landmark },
+  { key: "people", label: "People", icon: Users },
+  { key: "branches", label: "Branches", icon: Building2 },
   { key: "policy", label: "Policy", icon: ShieldCheck },
-  { key: "data", label: "Local data", icon: Lock },
+  { key: "data", label: "Data", icon: Lock },
 ] as const;
 
 type SectionKey = (typeof SECTIONS)[number]["key"];
 
-const BLURB: Record<SectionKey, string> = {
-  business: "What this business is registered as, and what it bills as.",
-  people: "Everyone who can sign in, and what each one may do.",
-  branches: "Where invoices are raised from, and when work happens.",
-  policy: "Each of these has a money consequence.",
-  data: "What is stored in this browser, and how to destroy it.",
-};
+/** Soft, layered elevation. The shadow is the separator now. */
+const FLOAT =
+  "rounded-2xl bg-card shadow-[0_1px_2px_rgba(74,64,56,0.06),0_8px_24px_-12px_rgba(74,64,56,0.18)] transition-all duration-300 hover:shadow-[0_2px_4px_rgba(74,64,56,0.08),0_16px_40px_-16px_rgba(74,64,56,0.28)] hover:-translate-y-0.5";
 
 export default function SettingsPage() {
   const [section, setSection] = useState<SectionKey>("business");
   const today = new Date();
-  const active = SECTIONS.find((s) => s.key === section)!;
 
   return (
     <AppShell
@@ -81,70 +78,53 @@ export default function SettingsPage() {
       today={today}
       freshness={{ kind: "fresh", at: today }}
     >
-      <div className="flex min-h-full flex-col lg:flex-row">
-        {/* ---------------- Section rail ---------------- */}
-        <nav
-          aria-label="Settings sections"
-          className="shrink-0 border-b bg-card/60 p-3 lg:w-60 lg:border-r lg:border-b-0"
-        >
-          <p className="px-2 pb-2 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
+      {/* A wash, so cards sit on something rather than on a flat fill. */}
+      <div className="relative min-h-full">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_600px_at_20%_-10%,rgba(209,124,69,0.10),transparent_60%),radial-gradient(900px_500px_at_100%_0%,rgba(124,99,58,0.08),transparent_55%)]"
+        />
+
+        <div className="relative p-5 md:p-8">
+          <h1 className="text-[28px] leading-tight font-semibold tracking-tight">
             Settings
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {SEED_TENANT.businessName}
           </p>
-          <ul className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+
+          {/* Pill switcher — floating, not a tab bar with a rule under it. */}
+          <div className="mt-5 inline-flex flex-wrap gap-1.5 rounded-2xl bg-card/70 p-1.5 shadow-[0_1px_2px_rgba(74,64,56,0.06),0_8px_24px_-16px_rgba(74,64,56,0.2)] backdrop-blur">
             {SECTIONS.map((item) => {
               const on = item.key === section;
               const Icon: LucideIcon = item.icon;
               return (
-                <li key={item.key} className="shrink-0 lg:shrink">
-                  <button
-                    type="button"
-                    aria-current={on ? "page" : undefined}
-                    onClick={() => setSection(item.key)}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
-                      "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                      on
-                        ? "bg-primary/12 font-medium text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" />
-                    <span className="whitespace-nowrap">{item.label}</span>
-                  </button>
-                </li>
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setSection(item.key)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm transition-all duration-200",
+                    "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                    on
+                      ? "bg-gradient-to-b from-primary to-primary/85 font-medium text-primary-foreground shadow-[0_2px_8px_-2px_rgba(209,124,69,0.6)]"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  <Icon className="size-4" />
+                  {item.label}
+                </button>
               );
             })}
-          </ul>
-        </nav>
-
-        {/* ---------------- Focused pane ---------------- */}
-        <div className="min-w-0 flex-1 p-4 md:p-6">
-          <div className="mb-5">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {active.label}
-            </h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              {BLURB[section]}
-            </p>
           </div>
 
-          {/* One pane, full width, and the beam says which one is live. */}
-          <div className="relative overflow-hidden rounded-xl border bg-card">
-            <BorderBeam
-              size={220}
-              duration={14}
-              className="from-transparent via-primary to-transparent"
-            />
-
-            {section === "business" ? <BusinessSection /> : null}
-            {section === "people" ? <PeopleSection /> : null}
-            {section === "branches" ? <BranchesSection /> : null}
-            {section === "policy" ? <PolicySection /> : null}
-            {section === "data" ? (
-              <div className="p-4">
-                <LocalDataPanel />
-              </div>
-            ) : null}
+          <div className="mt-6">
+            {section === "business" ? <Business /> : null}
+            {section === "people" ? <People /> : null}
+            {section === "branches" ? <Branches /> : null}
+            {section === "policy" ? <Policy /> : null}
+            {section === "data" ? <LocalDataPanel /> : null}
           </div>
         </div>
       </div>
@@ -154,100 +134,80 @@ export default function SettingsPage() {
 
 /* ------------------------------------------------------------- business */
 
-function BusinessSection() {
+function Business() {
   return (
-    <div>
-      {/* The identity block gets texture, so the one surface carrying the
-          business name is not another flat rectangle. */}
-      <div className="relative overflow-hidden border-b bg-secondary/40 px-6 py-7">
-        <GridPattern
-          width={28}
-          height={28}
-          className="absolute inset-0 h-full w-full stroke-primary/25 [mask-image:radial-gradient(320px_circle_at_left,white,transparent)]"
-        />
-        <div className="relative">
-          <p className="text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
+    <div className="grid gap-4 lg:grid-cols-3">
+      {/* The identity surface — cursor-tracked spotlight, so the screen
+          responds to being looked at. */}
+      <MagicCard
+        gradientColor="#f3e9e0"
+        gradientFrom="#d17c45"
+        gradientTo="#e6a93c"
+        gradientOpacity={0.5}
+        className="rounded-2xl shadow-[0_1px_2px_rgba(74,64,56,0.06),0_16px_40px_-20px_rgba(74,64,56,0.35)] lg:col-span-2"
+      >
+        <div className="p-7">
+          <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
             Registered business
           </p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight">
+          <h2 className="mt-2 text-2xl leading-tight font-semibold tracking-tight">
             {SEED_TENANT.legalName}
           </h2>
-          <p className="text-sm text-muted-foreground">
-            Trading as {SEED_TENANT.businessName}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Trading as {SEED_TENANT.businessName} · GSTIN{" "}
+            <span className="tnum-id">{SEED_TENANT.branches[0].gstin}</span>
           </p>
         </div>
+      </MagicCard>
+
+      {/* The number that drives two statutory rules, given its own object. */}
+      <div className={cn(FLOAT, "p-7")}>
+        <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+          Turnover declared
+        </p>
+        <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">
+          ₹
+          <NumberTicker
+            value={SEED_TENANT.aatoPaise / 100}
+            decimalPlaces={0}
+            locale="en-IN"
+            className="tabular-nums"
+          />
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          Sets SAC/HSN digit count and whether e-invoicing applies.
+        </p>
       </div>
 
-      <dl className="divide-y">
-        <Row label="Tax scheme">
-          {SEED_TENANT.taxScheme === "REGULAR"
-            ? "Regular"
-            : "Composition — services, 6%"}
-        </Row>
-        <Row
-          label="Annual turnover declared"
-          note="Drives SAC/HSN digit count and whether e-invoicing applies"
-        >
-          {/* The number that silently drives two statutory rules. It counts up,
-              so it is the thing you look at first on this pane. */}
-          <span className="text-2xl font-semibold tracking-tight tabular-nums">
-            ₹
-            <NumberTicker
-              value={SEED_TENANT.aatoPaise / 100}
-              decimalPlaces={0}
-              // Indian grouping: ₹4,20,00,000, never ₹42,000,000.
-              locale="en-IN"
-              className="tabular-nums"
-            />
-          </span>
-        </Row>
-        <Row label="Regional language">
-          {SEED_TENANT.regionalLanguage.toUpperCase()}
-        </Row>
-      </dl>
+      <Tile label="Tax scheme" value={SEED_TENANT.taxScheme === "REGULAR" ? "Regular" : "Composition 6%"} />
+      <Tile label="Regional language" value={SEED_TENANT.regionalLanguage.toUpperCase()} />
+      <Tile label="Financial year" value="1 Apr – 31 Mar" />
     </div>
   );
 }
 
-function Row({
-  label,
-  note,
-  children,
-}: {
-  label: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
+function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 px-6 py-4">
-      <dt className="w-56 shrink-0">
-        <span className="text-sm font-medium">{label}</span>
-        {note ? (
-          <span className="mt-0.5 block text-xs text-muted-foreground">
-            {note}
-          </span>
-        ) : null}
-      </dt>
-      <dd className="min-w-0 flex-1">{children}</dd>
+    <div className={cn(FLOAT, "p-5")}>
+      <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+        {label}
+      </p>
+      <p className="mt-1.5 text-lg font-medium">{value}</p>
     </div>
   );
 }
 
 /* --------------------------------------------------------------- people */
 
-function PeopleSection() {
-  const activeCount = SEED_USERS.filter((u) => u.active).length;
-  const disabledCount = SEED_USERS.length - activeCount;
-
+function People() {
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           <span className="font-semibold text-foreground tabular-nums">
-            {activeCount}
+            {SEED_USERS.filter((u) => u.active).length}
           </span>{" "}
-          active ·{" "}
-          <span className="tabular-nums">{disabledCount}</span> disabled
+          people can sign in
         </p>
         <Button size="sm">
           <Users className="size-4" />
@@ -255,124 +215,128 @@ function PeopleSection() {
         </Button>
       </div>
 
-      <ul className="divide-y">
+      {/* Every person is an object, not a ruled row. */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {SEED_USERS.map((user) => (
-          <li
+          <div
             key={user.id}
-            className="flex items-center gap-4 px-6 py-3.5 transition-colors hover:bg-muted/40"
+            className={cn(
+              FLOAT,
+              "p-5",
+              !user.active && "opacity-70 hover:opacity-100",
+            )}
           >
-            <span
-              className={cn(
-                "grid size-10 shrink-0 place-items-center rounded-full text-xs font-semibold",
-                user.active
-                  ? "bg-primary/12 text-primary"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              {user.name
-                .split(" ")
-                .slice(0, 2)
-                .map((p) => p[0])
-                .join("")}
-            </span>
+            <div className="flex items-start gap-3.5">
+              <span
+                className={cn(
+                  "grid size-12 shrink-0 place-items-center rounded-2xl text-sm font-semibold",
+                  user.active
+                    ? "bg-gradient-to-br from-primary/25 to-primary/5 text-primary"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {user.name
+                  .split(" ")
+                  .slice(0, 2)
+                  .map((p) => p[0])
+                  .join("")}
+              </span>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-x-2">
-                <span
-                  className={cn(
-                    "truncate font-medium",
-                    !user.active && "text-muted-foreground",
-                  )}
-                >
-                  {user.name}
-                </span>
-                {!user.active ? (
-                  <Badge
-                    variant="outline"
-                    className="border-destructive/25 bg-destructive/10 text-xs text-destructive"
-                  >
-                    Disabled
-                  </Badge>
-                ) : null}
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{user.name}</p>
+                <p className="truncate text-xs text-muted-foreground tabular-nums">
+                  {/* §7.3: phone is the login identity in this market. */}
+                  {user.phone}
+                </p>
               </div>
-              <p className="truncate text-xs text-muted-foreground tabular-nums">
-                {/* §7.3: the phone is the login identity in this market. */}
-                {user.phone}
-                {user.email ? ` · ${user.email}` : " · no email on record"}
-              </p>
             </div>
 
-            <span className="hidden w-32 shrink-0 text-sm text-muted-foreground sm:block">
-              {ROLE_LABELS[user.role as Role]}
-            </span>
-
-            <span className="hidden w-28 shrink-0 text-xs text-muted-foreground md:block">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                {ROLE_LABELS[user.role as Role]}
+              </span>
               {user.languageOverride ? (
-                <>
-                  Override{" "}
-                  <span className="font-medium text-foreground uppercase">
-                    {user.languageOverride}
-                  </span>
-                </>
-              ) : (
-                "Tenant default"
-              )}
-            </span>
-
-            <Button variant="outline" size="sm">
-              {user.active ? "Edit" : "Restore"}
-            </Button>
-          </li>
+                // FR-1304: a per-user override of the tenant default.
+                <span className="rounded-lg bg-muted px-2.5 py-1 text-xs text-muted-foreground uppercase">
+                  {user.languageOverride}
+                </span>
+              ) : null}
+              {!user.active ? (
+                <span className="rounded-lg bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive">
+                  Disabled
+                </span>
+              ) : null}
+              <Button variant="outline" size="sm" className="ml-auto">
+                {user.active ? "Edit" : "Restore"}
+              </Button>
+            </div>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------- branches */
 
-function BranchesSection() {
+function Branches() {
   return (
-    <div className="divide-y">
+    <div className="grid gap-4 lg:grid-cols-2">
       {SEED_TENANT.branches.map((branch) => (
-        <div key={branch.gstin} className="px-6 py-4">
-          <div className="flex flex-wrap items-baseline gap-x-3">
-            <span className="font-medium">{branch.name}</span>
-            <span className="text-xs text-muted-foreground tnum-id">
-              {branch.gstin}
-            </span>
+        <MagicCard
+          key={branch.gstin}
+          gradientColor="#f3e9e0"
+          gradientFrom="#d17c45"
+          gradientTo="#e6a93c"
+          gradientOpacity={0.4}
+          className="rounded-2xl shadow-[0_1px_2px_rgba(74,64,56,0.06),0_12px_32px_-18px_rgba(74,64,56,0.3)]"
+        >
+          <div className="p-6">
+            <div className="flex items-center gap-3">
+              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 text-primary">
+                <Building2 className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-medium">{branch.name}</p>
+                <p className="truncate text-xs text-muted-foreground tnum-id">
+                  {branch.gstin}
+                </p>
+              </div>
+            </div>
+            {/* FR-811: numbering is per branch, doc type and financial year. */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Chip label="State" value={branch.stateCode} />
+              <Chip label="Invoices" value={branch.invoiceSeriesPrefix} />
+              <Chip label="Jobs" value={branch.jobSeriesPrefix} />
+            </div>
           </div>
-          {/* FR-811: numbering is per branch, doc type and financial year. */}
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            State {branch.stateCode} · invoices numbered{" "}
-            <span className="font-medium text-foreground">
-              {branch.invoiceSeriesPrefix}
-            </span>{" "}
-            · jobs numbered{" "}
-            <span className="font-medium text-foreground">
-              {branch.jobSeriesPrefix}
-            </span>
-          </p>
-        </div>
+        </MagicCard>
       ))}
 
-      <div className="px-6 py-4">
-        <p className="text-sm font-medium">Working slots</p>
-        <p className="mb-3 text-xs text-muted-foreground">
-          {/* FR-203: the reason slots exist at all. */}
-          Customers are told a window, never a single time we cannot honour.
-        </p>
-        <div className="flex flex-wrap gap-2">
+      <div className={cn(FLOAT, "p-6 lg:col-span-2")}>
+        <div className="flex items-center gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 text-primary">
+            <Clock className="size-5" />
+          </span>
+          <div>
+            <p className="font-medium">Working slots</p>
+            {/* FR-203: the reason slots exist at all. */}
+            <p className="text-xs text-muted-foreground">
+              Customers are told a window, never a single time we cannot honour.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {SEED_TENANT.slots.map((slot) => (
-            <span
+            <div
               key={slot.label}
-              className="rounded-lg border bg-muted px-3 py-1.5 text-sm"
+              className="rounded-xl bg-gradient-to-b from-muted to-muted/40 p-4"
             >
-              {slot.label}{" "}
-              <span className="text-muted-foreground tabular-nums">
+              <p className="text-sm font-medium">{slot.label}</p>
+              <p className="mt-0.5 text-lg font-semibold tracking-tight tabular-nums">
                 {slot.from}–{slot.to}
-              </span>
-            </span>
+              </p>
+            </div>
           ))}
         </div>
       </div>
@@ -380,23 +344,32 @@ function BranchesSection() {
   );
 }
 
+function Chip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="rounded-lg bg-muted px-2.5 py-1.5 text-xs">
+      <span className="text-muted-foreground">{label} </span>
+      <span className="font-semibold">{value}</span>
+    </span>
+  );
+}
+
 /* --------------------------------------------------------------- policy */
 
-function PolicySection() {
+function Policy() {
   return (
-    <div className="divide-y">
-      <PolicyRow
+    <div className="grid gap-4 lg:grid-cols-3">
+      <PolicyCard
         label="Technicians can see job values"
         on={SEED_TENANT.toggles.technicianSeesPrices}
         consequence="When off, a technician sees the work and the parts but not what the customer is charged. Off is the common choice where technicians are paid per job."
       />
-      <PolicyRow
-        label="Allow billing without a customer sign-off"
+      <PolicyCard
+        label="Billing without a sign-off"
         on={SEED_TENANT.toggles.allowBillingWithoutSignoff}
         dangerWhenOn
         consequence="Off by default. Turning it on lets an invoice be raised for a job the customer never confirmed, and every such invoice is recorded in the audit trail with the person who raised it."
       />
-      <PolicyRow
+      <PolicyCard
         label="Coordinators can raise invoices"
         on={SEED_TENANT.toggles.coordinatorCanBill}
         consequence="When off, only the Accountant or Owner can finalise an invoice. The coordinator can still prepare one."
@@ -406,12 +379,11 @@ function PolicySection() {
 }
 
 /**
- * A policy row states its consequence, not its name.
- *
- * A switch with a label is a preference. A switch with what it does beside it is
- * a decision — and the first two change what this business can legally bill.
+ * A policy is its own card, and it states its consequence rather than its name.
+ * A switch with a label is a preference; a switch with what it does beside it is
+ * a decision — and two of these change what this business can legally bill.
  */
-function PolicyRow({
+function PolicyCard({
   label,
   on,
   consequence,
@@ -423,26 +395,25 @@ function PolicyRow({
   dangerWhenOn?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-start gap-x-6 gap-y-2 px-6 py-4">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">{label}</p>
-        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          {consequence}
-        </p>
+    <div className={cn(FLOAT, "flex flex-col p-6")}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-medium">{label}</p>
+        <span
+          className={cn(
+            "shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold",
+            on && dangerWhenOn
+              ? "bg-destructive/12 text-destructive"
+              : on
+                ? "bg-success/12 text-success"
+                : "bg-muted text-muted-foreground",
+          )}
+        >
+          {on ? "On" : "Off"}
+        </span>
       </div>
-      <Badge
-        variant="outline"
-        className={cn(
-          "shrink-0 text-xs",
-          on && dangerWhenOn
-            ? "border-destructive/25 bg-destructive/10 text-destructive"
-            : on
-              ? "border-success/25 bg-success/12 text-success"
-              : "bg-muted text-muted-foreground",
-        )}
-      >
-        {on ? "On" : "Off"}
-      </Badge>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+        {consequence}
+      </p>
     </div>
   );
 }
