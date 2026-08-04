@@ -86,7 +86,9 @@ export function AppSidebar({
               oBizee
             </span>
             {/* Distinguishes the product without breaking the family lockup. */}
-            <span className="text-xs leading-tight font-medium text-primary">
+            {/* brand-brown, not text-primary: #d17c45 at 12px measures 3.14:1 on
+                white, below AA. The brown is 5.9:1 and still reads as brand. */}
+            <span className="text-xs leading-tight font-medium text-brand-brown">
               Service ERP
             </span>
           </span>

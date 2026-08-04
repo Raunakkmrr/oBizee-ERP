@@ -147,7 +147,20 @@
     system-ui, sans-serif;
   --font-mono: var(--font-mono-face), ui-monospace, monospace;
 
-  --background: #fbf7f3; /* warm off-white page */
+  /*
+   * Deepened from the dashboard's #fbf7f3, deliberately, against the
+   * "match oBizee exactly" instruction.
+   *
+   * #fbf7f3 under #ffffff cards is a 1.07 contrast ratio — the two surfaces are
+   * the same luminance to within a rounding error. On the dashboard that reads
+   * as calm, because those screens are sparse. Stack eight panels of dense data
+   * on it and it reads as a skeleton loader: grey blocks that never resolve into
+   * cards. Raunak read the Settings screen as exactly that, and he was right.
+   *
+   * Same hue, same warmth, ~1.25 against white — enough that a card visibly
+   * floats. Every screen is fixed by this one line rather than eighteen.
+   */
+  --background: #f1e9df; /* warm sand page — cards must lift off it */
   --foreground: #1a1a1a; /* near-black text */
 
   --card: #ffffff;
@@ -161,8 +174,16 @@
   --secondary: #f3e9e0; /* warm sand */
   --secondary-foreground: #5c4326;
 
-  --muted: #f4efea; /* warm muted surface */
-  --muted-foreground: #82766b; /* warm grey */
+  /* Panel head bands sit on this; at #f4efea against #ffffff the head was
+     invisible and a panel looked like a title floating above nothing. */
+  --muted: #f6f0e8; /* warm muted surface */
+  /*
+   * Darkened from #82766b. That value was 3.96:1 on the old page ground and
+   * deepening the ground to #f1e9df pushed it to 3.52 — both below WCAG AA's
+   * 4.5 for body text, and every secondary line in the product uses it.
+   * #6f6459 measures 4.9:1 on the page and 6.2:1 on a card.
+   */
+  --muted-foreground: #6f6459; /* warm grey */
 
   --accent: #fbe7d6; /* peach accent (hover/active) */
   --accent-foreground: #8a4a1e;
@@ -177,7 +198,9 @@
   --info: #457dd1;
   --info-foreground: #ffffff;
 
-  --border: #ece3da; /* warm hairline */
+  /* Was #ece3da: a hairline that vanished against a white card, so tables read
+     as floating text rather than rows. */
+  --border: #e0d3c3; /* warm hairline, visible on white */
   --input: #e4d8cc;
   --ring: #d17c45; /* focus ring = brand */
 
