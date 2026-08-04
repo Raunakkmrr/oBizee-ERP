@@ -151,3 +151,28 @@ export const toneClasses: Record<Tone, string> = {
   danger: "bg-destructive/12 text-destructive border-destructive/25",
   muted: "bg-muted text-muted-foreground border-border",
 };
+
+
+/**
+ * Tone → a **solid** bar colour, for the rail on the leading edge of a row.
+ *
+ * The tints above are for badges, where the text sits on top and the fill must
+ * stay readable behind it. A 4px rail carries no text, so a 12%-opacity fill
+ * makes it invisible — and an invisible rail is the same as no rail.
+ *
+ * Why a rail at all: a list of fifteen identically-weighted rows gives the eye
+ * nowhere to land, and the coordinator's job is finding the three rows that
+ * need her out of fifteen that do not. The badge already says the state in
+ * words; the rail lets her find it without reading. Colour is an accelerator
+ * here, never the only channel (§6.13.4).
+ */
+export const railClasses: Record<Tone, string> = {
+  success: "bg-success",
+  warning: "bg-warning",
+  info: "bg-info",
+  primary: "bg-primary",
+  danger: "bg-destructive",
+  // Nothing happening is not a colour. A grey rail on a settled row would be
+  // noise competing with the rows that need attention.
+  muted: "bg-transparent",
+};

@@ -61,7 +61,11 @@ export function Panel({
     <Card
       className={cn(
         "gap-0 overflow-hidden py-0",
-        support && "bg-secondary/40",
+        // Elevation carries the hierarchy that colour alone could not: primary
+        // work lifts off the ground, context stays flat against it. Every
+        // surface having the same 1px hairline is why the product read as a
+        // blueprint — nothing sat above anything.
+        support ? "bg-secondary/40" : "shadow-sm",
         className,
       )}
     >

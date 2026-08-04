@@ -5,7 +5,7 @@ import { Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { cn } from "@/lib/utils";
-import { toneClasses } from "@/lib/design/tokens";
+import { jobStateTone, railClasses, toneClasses } from "@/lib/design/tokens";
 import type { JobRow as JobRowData } from "@/lib/data/board";
 
 /**
@@ -156,12 +156,23 @@ export function JobRow({
       </div>
 
       {/* ---------------------------- ≥640px: the 44px row (§6.4.4) -------- */}
-      <div className="hidden h-11 items-center gap-3 border-b px-3 text-sm hover:bg-muted/50 sm:flex">
-      {/* Slot — the coordinator plans in slots; absolute times force mental
-          arithmetic on every row (§6.4.2). */}
-      <span className="w-12 shrink-0 text-xs text-muted-foreground tabular-nums">
-        {job.slot}
-      </span>
+      <div className="relative hidden h-11 items-center gap-3 border-b pr-3 pl-4 text-sm transition-colors hover:bg-muted/50 sm:flex">
+        {/* The rail. Lets the eye find the three rows that need her without
+            reading fifteen. */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "absolute inset-y-0 left-0 w-1",
+            railClasses[jobStateTone[job.status]?.tone ?? "muted"],
+          )}
+        />
+
+        {/* Slot — the coordinator plans in slots; absolute times force mental
+            arithmetic on every row (§6.4.2). A filled chip rather than bare
+            text, so the time column has an edge to scan down. */}
+        <span className="w-14 shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-center text-[11px] font-medium text-muted-foreground tabular-nums">
+          {job.slot}
+        </span>
 
       {/*
         The row opens the job. §6.5 wants this as a 640px drawer over a dimmed
@@ -192,10 +203,14 @@ export function JobRow({
             customers get different treatment."). Priority moved to line 2 with
             the other qualifiers.
           */}
-          <span className="truncate font-medium">{job.customer}</span>
+          {/* The name carries the weight; everything else steps down. One type
+              size for all five fields is why the row read as a spreadsheet. */}
+          <span className="truncate text-[15px] leading-5 font-semibold">
+            {job.customer}
+          </span>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs leading-4 text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
           {job.priority !== "normal" ? (
             <>
               {/* Word + shape + colour, never colour alone (§6.13.4). */}
@@ -239,11 +254,23 @@ export function JobRow({
 
       <StatusBadge status={job.status} className="shrink-0" />
 
-        <div className="w-36 shrink-0 text-right">
+        <div className="flex w-36 shrink-0 items-center justify-end gap-2">
           {firstName ? (
-            <span className="truncate text-xs text-muted-foreground">
-              {firstName}
-            </span>
+            <>
+              <span className="truncate text-xs text-muted-foreground">
+                {firstName}
+              </span>
+              {/* A face, not just a name. Fifteen rows of plain text have no
+                  rhythm; the avatar gives each row an anchor and makes "who
+                  has three of these" visible by repetition. */}
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground">
+                {job.technician?.name
+                  .split(" ")
+                  .slice(0, 2)
+                  .map((part) => part[0])
+                  .join("")}
+              </span>
+            </>
           ) : (
             assignButton
           )}

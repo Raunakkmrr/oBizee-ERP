@@ -33,7 +33,20 @@ import { useDispatch } from "@/lib/data/use-store";
  * nothing is retyped.
  */
 
-const SLOTS = ["Morning 9–1", "Afternoon 1–5", "Evening 5–8", "Exact time"];
+/**
+ * The chip label the coordinator picks, and the token the board renders.
+ *
+ * They are not the same string. The board's slot column is a narrow chip that
+ * shows `9-1`; storing the picker's own "Morning 9–1" put a two-line label in a
+ * one-line column and the first row grew taller than every other. The label is
+ * for choosing, the token is for the row.
+ */
+const SLOTS = [
+  { label: "Morning 9–1", token: "9-1" },
+  { label: "Afternoon 1–5", token: "1-5" },
+  { label: "Evening 5–8", token: "5-8" },
+  { label: "Exact time", token: null },
+] as const;
 const PRIORITIES = [
   { key: "normal", label: "Normal" },
   { key: "urgent", label: "Urgent" },
@@ -90,7 +103,7 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
   const [site, setSite] = useState(prefill.site ?? "Connaught Place");
   const [landmark, setLandmark] = useState("");
   const [service, setService] = useState(prefill.service ?? "AC servicing");
-  const [slot, setSlot] = useState(SLOTS[0]);
+  const [slot, setSlot] = useState<string>(SLOTS[0].label);
   const [exactTime, setExactTime] = useState("11:30");
   const [priority, setPriority] = useState<string>("normal");
   const [technician, setTechnician] = useState("");
@@ -203,10 +216,10 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
                 <div className="flex flex-wrap gap-1.5">
                   {SLOTS.map((option) => (
                     <Chip
-                      key={option}
-                      label={option}
-                      selected={slot === option}
-                      onClick={() => setSlot(option)}
+                      key={option.label}
+                      label={option.label}
+                      selected={slot === option.label}
+                      onClick={() => setSlot(option.label)}
                     />
                   ))}
                 </div>
@@ -304,7 +317,10 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
                 customer,
                 locality: site,
                 serviceType: service,
-                slot: slot === "Exact time" ? exactTime : slot,
+                // The board's token, not the picker's label.
+                slot:
+                  SLOTS.find((option) => option.label === slot)?.token ??
+                  exactTime,
                 priority: priority as "normal" | "urgent" | "breakdown",
                 technicianId: primary?.id ?? null,
                 technicianName: primary?.name ?? null,

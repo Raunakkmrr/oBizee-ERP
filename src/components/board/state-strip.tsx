@@ -75,7 +75,7 @@ export function StateStrip({
   onToggle: (filter: BoardFilter | null) => void;
 }) {
   return (
-    <div className="flex items-stretch gap-2 overflow-x-auto border-b bg-card px-3 py-2.5 lg:px-4">
+    <div className="flex items-stretch gap-2.5 overflow-x-auto border-b bg-card px-3 py-3 lg:px-4">
       {BOARD_FILTERS.map((filter) => {
         const count = counters[filter];
         const isActive = active === filter;
@@ -86,29 +86,31 @@ export function StateStrip({
             aria-pressed={isActive}
             onClick={() => onToggle(isActive ? null : filter)}
             className={cn(
-              "flex min-w-[136px] shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
+              "flex min-w-[152px] shrink-0 items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-all",
               "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
               isActive
-                ? "border-primary bg-primary/10 ring-1 ring-primary/20"
-                : "border-border bg-background hover:bg-muted",
+                ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/25"
+                : "border-border bg-background hover:border-border hover:bg-muted hover:shadow-sm",
             )}
           >
             <span
               className={cn(
-                "grid size-8 shrink-0 place-items-center rounded-lg",
+                "grid size-10 shrink-0 place-items-center rounded-xl",
                 CHIP_TONE[COUNTER_META[filter].tone],
               )}
             >
               {(() => {
                 const Icon = COUNTER_META[filter].icon;
-                return <Icon className="size-4" />;
+                return <Icon className="size-5" />;
               })()}
             </span>
             <span className="min-w-0">
-              <span className="block text-xl leading-none font-semibold tabular-nums">
+              {/* The figure is the point of the tile; at text-xl it was the
+                  same weight as a row's customer name. */}
+              <span className="block text-2xl leading-none font-semibold tracking-tight tabular-nums">
                 {count}
               </span>
-              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+              <span className="mt-1 block truncate text-xs text-muted-foreground">
                 {FILTER_LABEL[filter]}
               </span>
             </span>
