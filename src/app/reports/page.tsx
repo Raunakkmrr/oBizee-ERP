@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChartColumn, Download } from "lucide-react";
+import Link from "next/link";
+import { ChartColumn, Download, Scale } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
@@ -103,6 +104,20 @@ export default function ReportsPage() {
           breadcrumb={[{ label: "Money" }]}
           title="Reports &amp; GST"
           description="What changed this week, and who needs attention."
+          actions={
+            // §6.14 treats the GST workspace as its own screen with its own
+            // decision — "can I file this period" is not "what changed this
+            // week" — so it gets its own URL, which also makes it shareable
+            // with the CA rather than a tab state nobody can link to.
+            <Button
+              variant="outline"
+              render={<Link href="/reports/gst" />}
+              nativeButton={false}
+            >
+              <Scale className="size-4" />
+              GST workspace
+            </Button>
+          }
         />
 
         <QueryBoundary query={query} label="reports" loadingRows={5}>
