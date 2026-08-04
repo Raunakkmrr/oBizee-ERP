@@ -23,6 +23,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { Illustration } from "@/components/shared/illustration";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
@@ -83,6 +84,7 @@ function Reorder({ data }: { data: PartsData }) {
   if (rows.length === 0) {
     return (
       <Empty className="border">
+        <Illustration name="stock" width={180} className="mx-auto mb-1" />
         <EmptyHeader>
           <EmptyTitle>Nothing needs reordering.</EmptyTitle>
           <EmptyDescription>
@@ -290,6 +292,7 @@ function Exceptions({ data }: { data: PartsData }) {
   if (data.exceptions.length === 0) {
     return (
       <Empty className="border">
+        <Illustration name="money" width={170} className="mx-auto mb-1" />
         <EmptyHeader>
           <EmptyTitle>Nothing unaccounted for.</EmptyTitle>
           <EmptyDescription>

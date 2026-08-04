@@ -17,6 +17,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { Illustration } from "@/components/shared/illustration";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
@@ -228,6 +229,7 @@ function SitePanel({ site }: { site: Site }) {
 
         {site.assets.length === 0 ? (
           <Empty className="border">
+            <Illustration name="assets" width={170} className="mx-auto mb-1" />
             <EmptyHeader>
               <EmptyTitle>No assets recorded at this site.</EmptyTitle>
               <EmptyDescription>

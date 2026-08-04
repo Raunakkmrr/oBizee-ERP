@@ -17,6 +17,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Panel } from "@/components/shared/panel";
+import { Illustration } from "@/components/shared/illustration";
 import { cn } from "@/lib/utils";
 import { loading, type Query } from "@/lib/data/result";
 import {
@@ -208,6 +209,7 @@ export default function TodayBoardPage() {
 
                 {rows.length === 0 ? (
                   <Empty className="border-0">
+                    <Illustration name="jobs" width={180} className="mx-auto mb-1" />
                     <EmptyHeader>
                       <EmptyTitle>
                         {filter
