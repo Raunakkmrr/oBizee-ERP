@@ -82,13 +82,13 @@ export function AppSidebar({
             oB
           </span>
           <span className="grid group-data-[collapsible=icon]:hidden">
-            <span className="text-[17px] leading-tight font-semibold tracking-tight">
+            <span className="text-[17px] leading-tight font-semibold tracking-tight text-sidebar-accent-foreground">
               oBizee
             </span>
             {/* Distinguishes the product without breaking the family lockup. */}
             {/* brand-brown, not text-primary: #d17c45 at 12px measures 3.14:1 on
                 white, below AA. The brown is 5.9:1 and still reads as brand. */}
-            <span className="text-xs leading-tight font-medium text-brand-brown">
+            <span className="text-xs leading-tight font-medium text-primary">
               Service ERP
             </span>
           </span>
@@ -150,7 +150,7 @@ export function AppSidebar({
           differently for a coordinator and an accountant.
         */}
         <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 group-data-[collapsible=icon]:justify-center">
-          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
             {userName
               .split(" ")
               .slice(0, 2)
@@ -158,7 +158,7 @@ export function AppSidebar({
               .join("")}
           </span>
           <span className="grid min-w-0 group-data-[collapsible=icon]:hidden">
-            <span className="truncate text-sm leading-tight font-medium">
+            <span className="truncate text-sm leading-tight font-medium text-sidebar-accent-foreground">
               {userName}
             </span>
             <span className="truncate text-xs leading-tight text-muted-foreground">

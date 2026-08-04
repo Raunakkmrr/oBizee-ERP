@@ -224,13 +224,26 @@
   --primary-bg: #fbe7d6; /* peach — same as accent, deliberately */
   --muted-bg: #f4efea;
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #5c5043;
+  /*
+   * A dark, warm rail — not white.
+   *
+   * A white sidebar beside warm-sand content read as two products bolted
+   * together: nothing in the rail related to anything to the right of it.
+   * Anchoring it dark does three things at once — the rail stops competing
+   * with the content for brightness, the brand mark finally has something to
+   * sit on, and the orange accent reads as an accent rather than as the only
+   * colour on a pale screen.
+   *
+   * The hue is the palette's own brown taken to a deep neutral, so it belongs
+   * to the same family as #d17c45 rather than being a generic charcoal.
+   */
+  --sidebar: #2b2119;
+  --sidebar-foreground: #cbbfb2;
   --sidebar-primary: #d17c45;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #fbe7d6; /* active/hover row */
-  --sidebar-accent-foreground: #8a4a1e;
-  --sidebar-border: #ece3da;
+  --sidebar-accent: #3d2f23; /* active/hover row */
+  --sidebar-accent-foreground: #f6ede3;
+  --sidebar-border: #3d2f23;
   --sidebar-ring: #d17c45;
 }
 
