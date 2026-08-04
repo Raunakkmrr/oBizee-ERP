@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, MessageCircle, Phone, PhoneCall, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, MessageCircle, Phone, PhoneCall, Plus, TrendingUp } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
@@ -25,6 +25,11 @@ import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import {
   COLLAPSED_BY_DEFAULT,
   GROUP_LABEL,
+  STAGE_LABEL,
+  STALL_DAYS,
+  daysSinceContact,
+  isStalled,
+  pipelineColumns,
   getLeads,
   groupLeads,
   type Lead,
@@ -179,11 +184,158 @@ export default function LeadsPage() {
         <QueryBoundary query={query} label="the follow-up queue" loadingRows={8}>
           {(data) => {
             if (tab === "pipeline") {
+              const columns = pipelineColumns(data.leads, today);
+              const totalStalled = columns.reduce((n, c) => n + c.stalled, 0);
+              // Count what is actually *on the board*, not what is in the
+              // queue: a terminal lead has left the queue and has no column, so
+              // reusing the queue's count would overstate the pipeline.
+              const onBoard = columns.reduce((n, c) => n + c.rows.length, 0);
+              const priced = columns.filter((c) => c.valuePaise !== null);
+              const pipelineValue =
+                priced.length === 0
+                  ? null
+                  : priced.reduce((sum, c) => sum + (c.valuePaise ?? 0), 0);
+
               return (
-                <Card className="p-6 text-sm text-muted-foreground">
-                  The stage board is the owner&apos;s Monday review, and is built
-                  in the Leads phase. The queue is the daily screen — §6.6.1.
-                </Card>
+                <div className="space-y-3">
+                  {/*
+                    §6.6.1: this tab is "for the owner's Monday review", which is
+                    a different question from the queue's. So it opens on the two
+                    facts an owner reviews for — what the pipeline is worth, and
+                    what has stopped moving — rather than on who to call.
+                  */}
+                  <Card className="gap-0 py-0">
+                    <div className="flex flex-wrap items-center gap-4 p-4">
+                      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                        <TrendingUp className="size-5" />
+                      </span>
+                      <div className="min-w-0">
+                        {pipelineValue === null ? (
+                          <span className="block text-2xl font-semibold text-muted-foreground">
+                            {EM_DASH}
+                          </span>
+                        ) : (
+                          <MoneyText
+                            amount={asPaise(pipelineValue)}
+                            className="block text-2xl font-semibold tracking-tight"
+                          />
+                        )}
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                          quoted and open across {onBoard} leads
+                          {totalStalled > 0 ? (
+                            <>
+                              {" · "}
+                              <span className="font-medium text-brand-brown">
+                                {totalStalled} silent {STALL_DAYS}+ days
+                              </span>
+                            </>
+                          ) : null}
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Columns scroll inside their own strip; the body never
+                      scrolls sideways. */}
+                  <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+                    {columns.map((column) => (
+                      <div
+                        key={column.stage}
+                        className="flex w-64 shrink-0 flex-col rounded-xl border bg-card"
+                      >
+                        <div className="border-b bg-muted/60 px-3 py-2">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="truncate text-sm font-semibold">
+                              {STAGE_LABEL[column.stage]}
+                            </span>
+                            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                              {column.rows.length}
+                            </span>
+                          </div>
+                          {/* A column with nothing priced has no total — it does
+                              not have a zero one (§6.6.4). */}
+                          <p className="text-xs text-muted-foreground">
+                            {column.valuePaise === null ? (
+                              <span>{EM_DASH} not quoted</span>
+                            ) : (
+                              <MoneyText amount={asPaise(column.valuePaise)} />
+                            )}
+                            {column.stalled > 0 ? (
+                              <span className="ml-1.5 text-brand-brown">
+                                · {column.stalled} silent
+                              </span>
+                            ) : null}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-1 flex-col gap-2 p-2">
+                          {column.rows.length === 0 ? (
+                            <p className="px-1 py-3 text-xs text-muted-foreground">
+                              Nothing at this stage.
+                            </p>
+                          ) : null}
+
+                          {column.rows.map((lead) => {
+                            const silent = isStalled(lead, today);
+                            const days = daysSinceContact(lead, today);
+                            return (
+                              <div
+                                key={lead.id}
+                                className={cn(
+                                  "rounded-lg border p-2.5 text-sm",
+                                  silent
+                                    ? "border-warning/40 bg-warning/5"
+                                    : "bg-background",
+                                )}
+                              >
+                                <p className="truncate font-medium">
+                                  {lead.name}
+                                </p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {lead.locality} · {lead.source}
+                                </p>
+                                <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-2">
+                                  <span className="text-sm font-semibold tabular-nums">
+                                    {lead.quotedUnavailable ||
+                                    lead.quotedPaise === null ? (
+                                      <span className="text-muted-foreground">
+                                        {EM_DASH}
+                                      </span>
+                                    ) : (
+                                      <MoneyText
+                                        amount={asPaise(lead.quotedPaise)}
+                                      />
+                                    )}
+                                  </span>
+                                  {/*
+                                    Age since contact, not the follow-up date —
+                                    this tab is about what has stopped moving.
+                                    A word, so the warm border is never the only
+                                    channel (§6.13.4).
+                                  */}
+                                  <span
+                                    className={cn(
+                                      "text-xs tabular-nums",
+                                      silent
+                                        ? "font-medium text-brand-brown"
+                                        : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {days === null
+                                      ? "no contact logged"
+                                      : days === 0
+                                        ? "today"
+                                        : `silent ${days}d`}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               );
             }
 

@@ -109,6 +109,106 @@ export function isTerminalOutcome(outcome: string): boolean {
   return outcome === "Won" || outcome === "Lost";
 }
 
+/* ---------------------------------------------------------------- pipeline */
+
+/**
+ * The stage board — §6.6.1's **second** tab, "for the owner's Monday review".
+ *
+ * A different reader with a different question. The queue answers *who do I
+ * call today*; this answers *where is the money sitting and what has stopped
+ * moving*. So the columns carry **value and age**, not follow-up dates, and
+ * nothing here is sorted by when the next call is due.
+ *
+ * `WON` and `LOST` are deliberately **not columns**. A board whose right-hand
+ * column grows forever stops being a board — closed deals dominate the width
+ * and the live pipeline gets squeezed into the left third. They leave the queue
+ * (`isTerminalOutcome`) and belong in reporting, where the conversion table
+ * already counts them.
+ *
+ * `PARKED` *is* a column, at the end, because a parked lead is where deals go
+ * to die quietly and an owner reviewing on Monday needs to see the pile.
+ */
+export const PIPELINE_STAGES = [
+  "NEW",
+  "CONTACTED",
+  "SURVEY_SCHEDULED",
+  "QUOTED",
+  "ASSIGNED",
+  "PARKED",
+] as const;
+
+export type PipelineStage = (typeof PIPELINE_STAGES)[number];
+
+export const STAGE_LABEL: Record<PipelineStage, string> = {
+  NEW: "New",
+  CONTACTED: "Contacted",
+  SURVEY_SCHEDULED: "Survey scheduled",
+  QUOTED: "Quoted",
+  ASSIGNED: "Assigned",
+  PARKED: "Parked",
+};
+
+/**
+ * Days with no contact before a lead counts as stalled.
+ *
+ * Seven, not thirty: a quote that has been silent for a week is the one an
+ * owner can still rescue on a Monday. Thirty days finds corpses.
+ */
+export const STALL_DAYS = 7;
+
+export type PipelineColumn = {
+  stage: PipelineStage;
+  rows: Lead[];
+  /** Null when no lead in the column carries a value — never a fabricated 0. */
+  valuePaise: number | null;
+  /** How many have had no contact for `STALL_DAYS` or more. */
+  stalled: number;
+};
+
+/**
+ * Days since a lead was last touched.
+ *
+ * `daysOverdue` is the follow-up clock, not the contact clock — a lead due in
+ * four days has `-4` and may still have been silent for a fortnight. Using it
+ * here would report the healthiest-looking leads as the freshest, which is
+ * backwards. With no activity recorded, staleness is unknown, not zero.
+ */
+export function daysSinceContact(lead: Lead, today: Date): number | null {
+  if (lead.lastActivity === null) return null;
+  const parsed = Date.parse(`${lead.lastActivity.date} ${today.getFullYear()}`);
+  if (Number.isNaN(parsed)) return null;
+  const days = Math.floor((today.getTime() - parsed) / 86_400_000);
+  return days < 0 ? 0 : days;
+}
+
+export function isStalled(lead: Lead, today: Date): boolean {
+  const days = daysSinceContact(lead, today);
+  // Unknown is not stalled. Flagging a lead whose activity lookup failed sends
+  // the owner chasing a data problem, not a deal.
+  return days !== null && days >= STALL_DAYS;
+}
+
+/** Build the board, highest value first within each column. */
+export function pipelineColumns(leads: Lead[], today: Date): PipelineColumn[] {
+  return PIPELINE_STAGES.map((stage) => {
+    const rows = leads
+      .filter((lead) => lead.stage === stage)
+      .sort((a, b) => (b.quotedPaise ?? 0) - (a.quotedPaise ?? 0));
+
+    const valued = rows.filter((lead) => lead.quotedPaise !== null);
+
+    return {
+      stage,
+      rows,
+      valuePaise:
+        valued.length === 0
+          ? null
+          : valued.reduce((sum, lead) => sum + (lead.quotedPaise ?? 0), 0),
+      stalled: rows.filter((lead) => isStalled(lead, today)).length,
+    };
+  });
+}
+
 /**
  * Group ordering. `unassigned` first by design (§6.6.1), then by urgency.
  * Within a group: days overdue descending, then quoted value descending — so
