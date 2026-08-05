@@ -2,11 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { HandCoins, MessageCircle, Phone, Plus, ReceiptIndianRupee } from "lucide-react";
+import {
+  CircleAlert,
+  CircleHelp,
+  Clock,
+  HandCoins,
+  MessageCircle,
+  Phone,
+  Plus,
+  ReceiptIndianRupee,
+} from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
-import { TabBar } from "@/components/shared/controls";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,7 +22,6 @@ import { Panel } from "@/components/shared/panel";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
-import { usePersistedChoice } from "@/lib/persisted-choice";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import {
   AGEING_BUCKETS,
@@ -23,9 +30,12 @@ import {
   bucketFor,
   countdownFor,
   deductionAtRiskPaise,
+  deductionLostPaise,
+  moneyAlarms,
   splitByPromise,
   getMoney,
   type AgeingBucket,
+  type MoneyAlarm,
   type MoneyData,
   type Payable,
   type Receivable,
@@ -33,23 +43,188 @@ import {
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
 
 /**
- * Money — PRD §6.12. Two sides, one screen.
+ * Money — PRD §6.12. Two sides, **one screen, no tab**.
  *
  * **The one decision on receivables:** *who do I chase, and who have I already
  * been promised?* **On payables:** *which bill costs me a deduction if I let it
  * slip?*
  *
- * §6.12.4: the toggle remembers the last-used side per user, "because the
- * accountant lives on one side and the owner on the other".
+ * **What was wrong.** The two sides were tabs, and the §43B(h) clock lived on
+ * the second one — so a deduction that had *already lapsed* was one click away
+ * from never being seen. On the fixture that is ₹26,000 gone for the financial
+ * year, hidden behind a tab. A deadline with a legal consequence and no undo
+ * does not belong there.
+ *
+ * Worse, the headline above it read "₹64,200 of deductions are at risk", which
+ * summed every running bill *including the lapsed one* — understating the loss
+ * and overstating what could still be saved, on the one screen where that
+ * distinction is the entire point. `Countdown` now has a separate `lapsed`
+ * shape so the two can never be added together again.
+ *
+ * So the screen leads with an alarm band carrying only what is irreversible or
+ * running out, and both sides sit below it as worklists. Receivables are
+ * deliberately *not* alarms: an invoice ninety days late is bad, but it is bad
+ * in a way the chase list already handles and that does not expire at midnight.
+ * A band that is always full is a band nobody reads.
+ *
+ * ⚠️ **§6.12.4 deviation, deliberate.** That clause asks the side toggle to
+ * remember its last position "because the accountant lives on one side and the
+ * owner on the other". There is no toggle any more, so the requirement is met a
+ * different way: neither of them has to switch, and neither can be shown a
+ * screen that hides the other's half of the money.
  */
 
-const SIDE_KEY = "obez.money.side";
-/** Module-level so the array identity is stable across renders. */
-const SIDES = ["receivables", "payables"] as const;
+/* ------------------------------------------------------------------ alarms */
+
+function AlarmRow({ alarm }: { alarm: MoneyAlarm }) {
+  const tone =
+    alarm.kind === "deduction_lost"
+      ? "destructive"
+      : alarm.kind === "deduction_due"
+        ? "warning"
+        : "muted";
+
+  const Icon =
+    alarm.kind === "deduction_lost"
+      ? CircleAlert
+      : alarm.kind === "deduction_due"
+        ? Clock
+        : CircleHelp;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-muted-bg p-3">
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "size-4 shrink-0",
+          tone === "destructive" && "text-destructive",
+          tone === "warning" && "text-warning",
+          tone === "muted" && "text-muted-foreground",
+        )}
+      />
+
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">
+          {alarm.kind === "deduction_lost" ? (
+            <>
+              Deduction lost — day {alarm.day} of {alarm.limit}
+            </>
+          ) : alarm.kind === "deduction_due" ? (
+            <>
+              {alarm.daysLeft} day{alarm.daysLeft === 1 ? "" : "s"} left to keep
+              this deduction
+            </>
+          ) : (
+            <>Udyam status unknown — the risk cannot be calculated</>
+          )}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {alarm.bill.vendor} · {alarm.bill.billDate}
+        </p>
+      </div>
+
+      <MoneyText
+        amount={asPaise(alarm.bill.amountPaise)}
+        className="shrink-0 font-medium"
+      />
+
+      <div className="flex shrink-0 gap-1.5">
+        {alarm.kind === "unverified_vendor" ? (
+          <Button size="sm" variant="outline">
+            Verify Udyam status
+          </Button>
+        ) : alarm.kind === "deduction_due" ? (
+          <>
+            {/* The one action that still saves the money. */}
+            <Button size="sm">Mark paid</Button>
+            {!alarm.bill.hasWrittenAgreement ? (
+              // Attaching an agreement moves the limit from 15 days to 45 —
+              // offered exactly where the 15 is being counted against them.
+              <Button size="sm" variant="outline">
+                Attach agreement
+              </Button>
+            ) : null}
+          </>
+        ) : (
+          // Nothing here saves the deduction; paying is still owed.
+          <Button size="sm" variant="outline">
+            Mark paid
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AlarmBand({ data }: { data: MoneyData }) {
+  const alarms = moneyAlarms(data.payables);
+  if (alarms.length === 0) return null;
+
+  const lost = deductionLostPaise(data.payables);
+  const atRisk = deductionAtRiskPaise(data.payables);
+
+  return (
+    <section
+      aria-label="Money alarms"
+      className="rounded-xl bg-card p-4 shadow-[var(--shadow-card)]"
+    >
+      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+        <h2 className="text-sm font-semibold tracking-tight">
+          Needs you now
+        </h2>
+        {/*
+          Two figures, never one. Already-lost money and still-savable money are
+          different facts, and the sum of them is a number that helps nobody.
+        */}
+        {lost > 0 ? (
+          <p className="text-sm">
+            <MoneyText
+              amount={asPaise(lost)}
+              className="font-semibold text-destructive"
+            />{" "}
+            <span className="text-muted-foreground">
+              already lost this year
+            </span>
+          </p>
+        ) : null}
+        {atRisk > 0 ? (
+          <p className="text-sm">
+            <MoneyText amount={asPaise(atRisk)} className="font-semibold" />{" "}
+            <span className="text-muted-foreground">
+              still savable by paying
+            </span>
+          </p>
+        ) : null}
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        {alarms.map((alarm) => (
+          <AlarmRow key={alarm.bill.id} alarm={alarm} />
+        ))}
+      </div>
+
+      {data.udyamVerifiedAsOf ? (
+        // §6.12.3: a stored status with a date is honest; a silent one is not.
+        <p className="mt-2.5 text-xs text-muted-foreground">
+          Udyam status saved as of {data.udyamVerifiedAsOf}.
+        </p>
+      ) : null}
+    </section>
+  );
+}
 
 /* ------------------------------------------------------------ receivables */
 
-function AgeingStrip({
+/**
+ * The ageing profile, as one line.
+ *
+ * It used to be six cards the width of the screen, above a chase list that was
+ * already sorted by the thing that matters. Ageing answers "how bad is my
+ * book", which is a monthly question; the chase list answers "who do I call
+ * now", which is the reason the screen is open. So it keeps its filtering job
+ * and gives up its real estate.
+ */
+function AgeingLine({
   rows,
   active,
   onPick,
@@ -60,9 +235,16 @@ function AgeingStrip({
 }) {
   const totals = ageingTotals(rows);
   return (
-    // At 390px this becomes a horizontally scrollable chip row (§6.12.5) —
-    // never a wrapped grid that pushes the first invoice below the fold.
-    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+    /*
+      Scrolls at 390px, wraps above it.
+
+      §6.12.5 asks for a scrolling chip row rather than "a wrapped grid that
+      pushes the first invoice below the fold" — written when these were
+      six full-width cards. As chips a second line costs about thirty pixels,
+      and scrolling on a wide screen hid the 90+ band entirely, which is the
+      one bucket nobody should have to discover by dragging.
+    */
+    <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-x-visible">
       {AGEING_BUCKETS.map((bucket) => {
         const cell = totals[bucket];
         const selected = active === bucket;
@@ -77,38 +259,32 @@ function AgeingStrip({
             disabled={empty}
             onClick={() => onPick(selected ? null : bucket)}
             className={cn(
-              "min-w-[124px] shrink-0 rounded-xl p-2.5 text-left transition-all duration-200",
+              "shrink-0 rounded-lg px-2.5 py-1.5 text-xs transition-colors",
               "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
-              // An empty band recedes into the page rather than being drawn as
-              // a dashed outline — it is not a control, so it should not look
-              // like one that happens to be switched off.
               empty
-                ? "bg-muted-bg text-muted-foreground"
+                ? "text-muted-foreground/60"
                 : selected
-                  ? "bg-primary-bg shadow-[var(--shadow-raised)]"
-                  : "bg-card shadow-[var(--shadow-card)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-raised)]",
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-foreground hover:bg-accent",
             )}
           >
-            <p className="text-xs text-muted-foreground">{bucket} days</p>
+            <span className="text-muted-foreground">{bucket}d </span>
             {/*
               An empty band renders an em-dash, never `₹0.00`. The figure is
               scanned, not read: a rupee amount in a row of rupee amounts reads
               as money owed, and the eye does not stop to notice it is zero.
-              The count below carries the fact in words.
             */}
             {empty ? (
-              <span className="block text-base font-semibold text-muted-foreground">
-                {EM_DASH}
-              </span>
+              <span className="font-medium">{EM_DASH}</span>
             ) : (
               <MoneyText
                 amount={asPaise(cell.paise)}
-                className="block text-base font-semibold"
+                className={cn(
+                  "font-medium",
+                  selected && "text-primary-foreground",
+                )}
               />
             )}
-            <p className="text-xs text-muted-foreground tabular-nums">
-              {cell.count} invoice{cell.count === 1 ? "" : "s"}
-            </p>
           </button>
         );
       })}
@@ -116,15 +292,9 @@ function AgeingStrip({
   );
 }
 
-function ReceivableRow({
-  row,
-  primary,
-}: {
-  row: Receivable;
-  primary: boolean;
-}) {
+function ReceivableRow({ row, primary }: { row: Receivable; primary: boolean }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors odd:bg-white/[0.018] hover:bg-accent">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors odd:bg-muted-bg hover:bg-accent">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium">{row.customer}</span>
@@ -188,34 +358,23 @@ function Receivables({ data }: { data: MoneyData }) {
   );
 
   return (
-    <div className="space-y-3">
-      {/*
-        The headline, given the weight it deserves. A sentence in body text is
-        the same size as a row label; this is the number the screen exists for.
-      */}
-      <Card className="gap-0 py-0">
-        <div className="flex flex-wrap items-center gap-4 p-4">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-warning/10 text-warning">
-            <HandCoins className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <MoneyText
-              amount={asPaise(totalOverdue)}
-              className="block text-2xl font-semibold tracking-tight"
-            />
-            <p className="text-xs text-muted-foreground tabular-nums">
-              overdue across {data.receivables.length} invoices ·{" "}
-              {chase.length} to chase, {promised.length} promised
-            </p>
-          </div>
-        </div>
-      </Card>
+    <div className="min-w-0 space-y-3">
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <HandCoins className="size-4 text-warning" />
+          They owe us
+        </h2>
+        <MoneyText
+          amount={asPaise(totalOverdue)}
+          className="text-lg font-semibold tracking-tight"
+        />
+        <p className="text-xs text-muted-foreground tabular-nums">
+          across {data.receivables.length} invoices · {chase.length} to chase,{" "}
+          {promised.length} promised
+        </p>
+      </div>
 
-      <AgeingStrip
-        rows={data.receivables}
-        active={filter}
-        onPick={setFilter}
-      />
+      <AgeingLine rows={data.receivables} active={filter} onPick={setFilter} />
 
       {chase.length > 0 ? (
         <Panel
@@ -259,10 +418,12 @@ function Receivables({ data }: { data: MoneyData }) {
 
 /* --------------------------------------------------------------- payables */
 
-function PayableRow({ bill, primary }: { bill: Payable; primary: boolean }) {
+function PayableRow({ bill }: { bill: Payable }) {
   const countdown = countdownFor(bill);
+  const running = countdown.kind === "counting" || countdown.kind === "lapsed";
+
   return (
-    <div className="px-4 py-3 text-sm odd:bg-white/[0.018]">
+    <div className="px-4 py-3 text-sm odd:bg-muted-bg">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
@@ -291,23 +452,14 @@ function PayableRow({ bill, primary }: { bill: Payable; primary: boolean }) {
               Verify Udyam status
             </Button>
           ) : (
-            <>
-              <Button variant={primary ? "default" : "outline"} size="sm">
-                Mark paid
-              </Button>
-              {countdown.kind === "counting" && !bill.hasWrittenAgreement ? (
-                // Attaching an agreement moves the limit from 15 to 45 — the
-                // action is offered exactly where the 15 is shown.
-                <Button variant="outline" size="sm">
-                  Attach agreement
-                </Button>
-              ) : null}
-            </>
+            <Button variant="outline" size="sm">
+              Mark paid
+            </Button>
           )}
         </div>
       </div>
 
-      {countdown.kind === "counting" ? (
+      {running ? (
         <div className="mt-2 space-y-1">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-xs tabular-nums">
@@ -330,7 +482,7 @@ function PayableRow({ bill, primary }: { bill: Payable; primary: boolean }) {
                 className={cn(
                   "h-1.5 flex-1 rounded-[1px]",
                   i < countdown.day
-                    ? countdown.day > countdown.limit
+                    ? countdown.kind === "lapsed"
                       ? "bg-destructive"
                       : "bg-brand-brown"
                     : "bg-muted",
@@ -338,7 +490,7 @@ function PayableRow({ bill, primary }: { bill: Payable; primary: boolean }) {
               />
             ))}
           </div>
-          {countdown.day > countdown.limit ? (
+          {countdown.kind === "lapsed" ? (
             <p className="text-xs text-destructive">
               Past the limit — this expense is no longer deductible this year.
             </p>
@@ -356,52 +508,33 @@ function PayableRow({ bill, primary }: { bill: Payable; primary: boolean }) {
 }
 
 function Payables({ data }: { data: MoneyData }) {
-  const atRisk = deductionAtRiskPaise(data.payables);
-  const unverified = data.payables.filter(
-    (b) => countdownFor(b).kind === "unknown",
-  );
-  const rest = data.payables.filter((b) => countdownFor(b).kind !== "unknown");
-  // Closest to its limit first — that is the row the primary action belongs on.
-  const ordered = [...rest].sort((a, b) => {
-    const ca = countdownFor(a);
-    const cb = countdownFor(b);
-    const left = (c: ReturnType<typeof countdownFor>) =>
-      c.kind === "counting" ? c.limit - c.day : Number.POSITIVE_INFINITY;
-    return left(ca) - left(cb);
+  const total = data.payables.reduce((sum, b) => sum + b.amountPaise, 0);
+  // Closest to its limit first; the ones the timeline never touches sink.
+  const ordered = [...data.payables].sort((a, b) => {
+    const left = (bill: Payable) => {
+      const countdown = countdownFor(bill);
+      if (countdown.kind === "lapsed") return -1;
+      if (countdown.kind === "counting") return countdown.limit - countdown.day;
+      return Number.POSITIVE_INFINITY;
+    };
+    return left(a) - left(b);
   });
 
   return (
-    <div className="space-y-3">
-      {/* The sentence that is the entire reason this tab exists. */}
-      <p className="text-sm">
-        <MoneyText amount={asPaise(atRisk)} className="font-semibold" />{" "}
-        <span className="text-muted-foreground">
-          of deductions are at risk this month
-        </span>
-      </p>
-
-      {data.udyamVerifiedAsOf ? (
-        // §6.12.3's partial state: a stored status with a date is honest.
-        <p className="text-xs text-muted-foreground">
-          Udyam status saved as of {data.udyamVerifiedAsOf}.
+    <div className="min-w-0 space-y-3">
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <ReceiptIndianRupee className="size-4 text-primary-text" />
+          We owe them
+        </h2>
+        <MoneyText
+          amount={asPaise(total)}
+          className="text-lg font-semibold tracking-tight"
+        />
+        <p className="text-xs text-muted-foreground tabular-nums">
+          across {data.payables.length} bills
         </p>
-      ) : null}
-
-      {unverified.length > 0 ? (
-        <Panel
-          // Above the fold on purpose — an unverified vendor is an
-          // unquantified risk, not a zero one.
-          title="Can't calculate — Udyam status unknown"
-          icon={HandCoins}
-          count={unverified.length}
-          caption="These amounts are excluded from the at-risk figure above"
-          flush
-        >
-          {unverified.map((bill) => (
-            <PayableRow key={bill.id} bill={bill} primary={false} />
-          ))}
-        </Panel>
-      ) : null}
+      </div>
 
       <Panel
         title="Vendor bills"
@@ -410,20 +543,18 @@ function Payables({ data }: { data: MoneyData }) {
         caption="Closest to its limit first"
         flush
       >
-        {ordered.map((bill, index) => (
-          <PayableRow key={bill.id} bill={bill} primary={index === 0} />
+        {ordered.map((bill) => (
+          <PayableRow key={bill.id} bill={bill} />
         ))}
       </Panel>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ page */
+/* ------------------------------------------------------------------ screen */
 
 export default function MoneyPage() {
   const [query, setQuery] = useState<Query<MoneyData>>(loading());
-  // §6.12.4: the toggle remembers the last-used side per user.
-  const [side, pick] = usePersistedChoice(SIDE_KEY, SIDES, "receivables");
 
   useEffect(() => {
     let cancelled = false;
@@ -444,47 +575,30 @@ export default function MoneyPage() {
       today={today}
       freshness={{ kind: "fresh", at: today }}
     >
-      <div className="p-4 md:p-6">
+      <div className="p-3 lg:p-4">
         <PageHeader
-          className="mb-4"
           breadcrumb={[{ label: "Money" }]}
+          className="mb-4"
           title="Money"
           description="Who owes us, and which bill costs a deduction if it slips."
           actions={
-            // Secondary. §6.12.4 names this screen's primary explicitly:
-            // [Send WhatsApp reminder] on the top row of the chase queue (and
-            // [Mark paid] on the payables side). Filling this button too would
-            // put two primaries on screen — §6.13.2 calls that a defect.
-            <Button
-              variant="outline"
-              render={<Link href="/money/new" />}
-              nativeButton={false}
-            >
+            <Button render={<Link href="/money/new" />} nativeButton={false}>
               <Plus className="size-4" />
               New invoice
             </Button>
           }
         />
 
-        {/* §6.12.5: both sides visible at 390px, never a dropdown of views. */}
-        <TabBar
-          className="mb-3"
-          value={side}
-          onChange={pick}
-          items={[
-            { value: "receivables", label: "They owe us" },
-            { value: "payables", label: "We owe them" },
-          ]}
-        />
-
-        <QueryBoundary query={query} label="money" loadingRows={6}>
-          {(data) =>
-            side === "receivables" ? (
-              <Receivables data={data} />
-            ) : (
-              <Payables data={data} />
-            )
-          }
+        <QueryBoundary query={query} label="the money screen" loadingRows={8}>
+          {(data) => (
+            <div className="space-y-5">
+              <AlarmBand data={data} />
+              <div className="grid gap-5 xl:grid-cols-2">
+                <Receivables data={data} />
+                <Payables data={data} />
+              </div>
+            </div>
+          )}
         </QueryBoundary>
       </div>
     </AppShell>

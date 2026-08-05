@@ -4,7 +4,10 @@ import {
   bucketFor,
   collectionPriority,
   countdownFor,
+  daysLeft,
   deductionAtRiskPaise,
+  deductionLostPaise,
+  moneyAlarms,
   splitByPromise,
   type Payable,
   type Receivable,
@@ -160,5 +163,90 @@ describe("deduction at risk", () => {
       payable({ amountPaise: 9_800_00, msmeClass: "UNVERIFIED" }),
     ]);
     expect(total).toBe(0);
+  });
+});
+
+describe("lapsed is not a big 'counting' (§43B(h))", () => {
+  it("switches to lapsed the day after the limit", () => {
+    expect(
+      countdownFor(payable({ hasWrittenAgreement: false, daysElapsed: 15 }))
+        .kind,
+    ).toBe("counting");
+    expect(
+      countdownFor(payable({ hasWrittenAgreement: false, daysElapsed: 16 }))
+        .kind,
+    ).toBe("lapsed");
+  });
+
+  it("keeps already-lost money out of the at-risk figure", () => {
+    // The regression this exists for: the headline read "₹64,200 at risk"
+    // while ₹26,000 of it was already gone. One number is a warning you can
+    // act on, the other is a loss you can only learn from.
+    const lost = payable({
+      id: "lost",
+      hasWrittenAgreement: false,
+      daysElapsed: 18,
+      amountPaise: 26_000_00,
+    });
+    const atRisk = payable({
+      id: "at-risk",
+      hasWrittenAgreement: true,
+      daysElapsed: 38,
+      amountPaise: 38_200_00,
+    });
+    expect(deductionAtRiskPaise([lost, atRisk])).toBe(38_200_00);
+    expect(deductionLostPaise([lost, atRisk])).toBe(26_000_00);
+  });
+
+  it("never counts an unverified vendor as either lost or at risk", () => {
+    const unknown = payable({ msmeClass: "UNVERIFIED", amountPaise: 9_800_00 });
+    expect(deductionAtRiskPaise([unknown])).toBe(0);
+    expect(deductionLostPaise([unknown])).toBe(0);
+  });
+
+  it("reports days left only while the clock is still running", () => {
+    expect(
+      daysLeft(countdownFor(payable({ hasWrittenAgreement: true, daysElapsed: 38 }))),
+    ).toBe(7);
+    expect(
+      daysLeft(countdownFor(payable({ hasWrittenAgreement: false, daysElapsed: 18 }))),
+    ).toBeNull();
+  });
+});
+
+describe("money alarms — what is irreversible or running out", () => {
+  it("puts a lost deduction above one that is merely due", () => {
+    const lost = payable({ id: "lost", hasWrittenAgreement: false, daysElapsed: 18 });
+    const due = payable({ id: "due", hasWrittenAgreement: true, daysElapsed: 40 });
+    expect(moneyAlarms([due, lost]).map((a) => a.bill.id)).toEqual([
+      "lost",
+      "due",
+    ]);
+  });
+
+  it("orders due alarms by how little time is left", () => {
+    const soon = payable({ id: "soon", hasWrittenAgreement: true, daysElapsed: 44 });
+    const later = payable({ id: "later", hasWrittenAgreement: true, daysElapsed: 38 });
+    expect(
+      moneyAlarms([later, soon])
+        .filter((a) => a.kind === "deduction_due")
+        .map((a) => a.bill.id),
+    ).toEqual(["soon", "later"]);
+  });
+
+  it("stays quiet about a bill with plenty of time left", () => {
+    const relaxed = payable({ hasWrittenAgreement: true, daysElapsed: 5 });
+    expect(moneyAlarms([relaxed])).toEqual([]);
+  });
+
+  it("never raises an alarm for a vendor the timeline does not cover", () => {
+    expect(moneyAlarms([payable({ msmeClass: "NOT_REGISTERED" })])).toEqual([]);
+    expect(moneyAlarms([payable({ udyamActivity: "TRADING" })])).toEqual([]);
+  });
+
+  it("raises an unverified vendor as its own kind, never as a number", () => {
+    const alarms = moneyAlarms([payable({ msmeClass: "UNVERIFIED" })]);
+    expect(alarms).toHaveLength(1);
+    expect(alarms[0].kind).toBe("unverified_vendor");
   });
 });

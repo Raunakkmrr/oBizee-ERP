@@ -147,6 +147,18 @@ export type Payable = z.infer<typeof payableSchema>;
  */
 export type Countdown =
   | { kind: "counting"; day: number; limit: 15 | 45; basis: string }
+  /**
+   * Past the limit. **A separate shape, not a `counting` with a big number.**
+   *
+   * The deduction for this expense is gone for the financial year and no
+   * payment now brings it back — which makes it categorically different from a
+   * bill on day 38 of 45, where paying today still saves the money. Folding
+   * both into `counting` let `deductionAtRiskPaise` add already-lost money to
+   * the "at risk" headline: it understated the loss and overstated what could
+   * still be saved, on the one screen where that distinction is the whole
+   * point. The type now makes the mistake impossible to repeat.
+   */
+  | { kind: "lapsed"; day: number; limit: 15 | 45; basis: string }
   | { kind: "not_applicable"; reason: string }
   | { kind: "unknown"; reason: string };
 
@@ -176,26 +188,105 @@ export function countdownFor(bill: Payable): Countdown {
   // there is not. The basis is stated in words on the row, because the number
   // alone is not actionable — attaching an agreement changes it.
   const limit = bill.hasWrittenAgreement ? 45 : 15;
+  const basis = bill.hasWrittenAgreement
+    ? "45-day limit — written agreement on file"
+    : "15-day limit — no written agreement on record";
   return {
-    kind: "counting",
+    kind: bill.daysElapsed > limit ? "lapsed" : "counting",
     day: bill.daysElapsed,
     limit,
-    basis: bill.hasWrittenAgreement
-      ? "45-day limit — written agreement on file"
-      : "15-day limit — no written agreement on record",
+    basis,
   };
 }
 
+/** Days remaining, or `null` where a countdown is not running. */
+export function daysLeft(countdown: Countdown): number | null {
+  return countdown.kind === "counting" ? countdown.limit - countdown.day : null;
+}
+
 /**
- * The sentence at the top of the payables tab: how much deduction is at risk.
- * Only counting bills contribute — an unknown vendor's amount is *not* silently
- * folded in, because that would make an unquantified risk look quantified.
+ * How much deduction can **still be saved** by paying.
+ *
+ * Only `counting` bills contribute. A lapsed bill is money already gone, and an
+ * unknown vendor's amount is not silently folded in either — that would make an
+ * unquantified risk look quantified.
  */
 export function deductionAtRiskPaise(bills: Payable[]): number {
   return bills.reduce((sum, bill) => {
     const countdown = countdownFor(bill);
     return countdown.kind === "counting" ? sum + bill.amountPaise : sum;
   }, 0);
+}
+
+/**
+ * How much deduction is **already lost** for the year.
+ *
+ * Reported separately and never added to the at-risk figure: one number is a
+ * warning you can act on, the other is a loss you can only learn from, and
+ * summing them tells the owner neither.
+ */
+export function deductionLostPaise(bills: Payable[]): number {
+  return bills.reduce((sum, bill) => {
+    const countdown = countdownFor(bill);
+    return countdown.kind === "lapsed" ? sum + bill.amountPaise : sum;
+  }, 0);
+}
+
+/* ----------------------------------------------------------------- alarms */
+
+/**
+ * What is irreversible or running out — the band at the top of the screen.
+ *
+ * The §43B(h) clock used to live on the *second tab* of this screen, so a
+ * deduction that had already lapsed was one click away from never being seen.
+ * A deadline with a legal consequence does not belong behind a tab.
+ *
+ * Receivables are deliberately not alarms. An invoice ninety days late is bad,
+ * but it is bad in a way that a chase list already handles and that does not
+ * expire at midnight; putting it here would make the band routine, and a band
+ * that is always full is a band nobody reads.
+ */
+export type MoneyAlarm =
+  | { kind: "deduction_lost"; bill: Payable; day: number; limit: number }
+  | { kind: "deduction_due"; bill: Payable; daysLeft: number }
+  | { kind: "unverified_vendor"; bill: Payable };
+
+/** Bills inside this many days of their limit are surfaced as an alarm. */
+const DEADLINE_WINDOW_DAYS = 10;
+
+export function moneyAlarms(bills: Payable[]): MoneyAlarm[] {
+  const alarms: MoneyAlarm[] = [];
+
+  for (const bill of bills) {
+    const countdown = countdownFor(bill);
+    if (countdown.kind === "lapsed") {
+      alarms.push({
+        kind: "deduction_lost",
+        bill,
+        day: countdown.day,
+        limit: countdown.limit,
+      });
+    } else if (countdown.kind === "counting") {
+      const left = countdown.limit - countdown.day;
+      if (left <= DEADLINE_WINDOW_DAYS) {
+        alarms.push({ kind: "deduction_due", bill, daysLeft: left });
+      }
+    } else if (countdown.kind === "unknown") {
+      alarms.push({ kind: "unverified_vendor", bill });
+    }
+  }
+
+  // Lost first — it is the most expensive sentence on the screen — then by how
+  // little time is left, then by amount.
+  const rank = { deduction_lost: 0, deduction_due: 1, unverified_vendor: 2 };
+  return alarms.sort(
+    (a, b) =>
+      rank[a.kind] - rank[b.kind] ||
+      (a.kind === "deduction_due" && b.kind === "deduction_due"
+        ? a.daysLeft - b.daysLeft
+        : 0) ||
+      b.bill.amountPaise - a.bill.amountPaise,
+  );
 }
 
 /* ---------------------------------------------------------------- queries */
