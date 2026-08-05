@@ -51,6 +51,13 @@ export const jobDetailSchema = z.object({
   customer: z.string(),
   serviceType: z.string(),
   visit: z.object({ n: z.number(), of: z.number() }).nullable(),
+  /**
+   * Who is on it. Carried from the board row rather than the fixture, so this
+   * screen and the board can never name different people — and because the
+   * detail page previously did not say who the technician was *at all*, which
+   * is the second thing anyone asks about a job.
+   */
+  technician: z.object({ id: z.string(), name: z.string() }).nullable(),
   valuePaise: z.number().int().nullable(),
 
   site: z.object({
@@ -134,6 +141,176 @@ export function primaryActionFor(status: string): PrimaryAction {
   }
 }
 
+/* ------------------------------------------------------------------ stage */
+
+/**
+ * What the screen is *for*, at this moment in the job's life.
+ *
+ * **The defect this fixes.** The detail screen was static across the whole
+ * lifecycle: `Where` and `Asset` took the top row whether the technician was
+ * still travelling or had finished two hours ago. But an address is what
+ * matters *before* a visit and dead weight *after* it, and parts and sign-off
+ * are exactly the reverse. Worst of it: on a finished job the only question is
+ * "can I bill this?", and `Bill this job` was a tertiary outline button, fourth
+ * in a row of five, while the filled primary was `Send sign-off link`.
+ *
+ * So the stage decides the question, the evidence for answering it, and which
+ * sections are worth the top of the screen. The primary *action* still comes
+ * from `primaryActionFor` — §6.5.3 fixes that table, and duplicating it here
+ * would let the two drift.
+ */
+export type StageKey =
+  | "unassigned"
+  | "before_visit"
+  | "at_site"
+  | "blocked"
+  | "to_bill"
+  | "billed";
+
+/** One line of evidence for the stage's question. */
+export type Check = {
+  label: string;
+  /** `pending` is not `failed` — a customer who has not signed yet has not refused. */
+  state: "done" | "pending" | "blocked";
+  detail: string | null;
+};
+
+export type Stage = {
+  key: StageKey;
+  /** Asked as a question, because the screen exists to answer exactly one. */
+  question: string;
+  checks: Check[];
+  /** Sections worth the top of the screen at this stage; the rest collapse. */
+  lead: Array<"where" | "asset" | "timeline" | "parts" | "signoff">;
+};
+
+export function stageFor(
+  job: JobDetail,
+  policy: { allowBillingWithoutSignoff: boolean },
+): Stage {
+  if (job.invoiceNumber) {
+    return {
+      key: "billed",
+      question: "Billed",
+      checks: [
+        { label: "Invoiced", state: "done", detail: job.invoiceNumber },
+      ],
+      lead: ["timeline", "parts"],
+    };
+  }
+
+  if (job.status === "PARTS_AWAITED") {
+    return {
+      key: "blocked",
+      question: "What is it waiting for?",
+      checks: [
+        {
+          label: "Held for parts",
+          state: "blocked",
+          detail: job.statusSince ? `${job.statusSince} so far` : null,
+        },
+      ],
+      lead: ["timeline", "parts", "where"],
+    };
+  }
+
+  if (job.status === "WORK_DONE" || job.status === "SIGNED_OFF") {
+    const signed = job.signOff !== null;
+    return {
+      key: "to_bill",
+      question: "Can you bill this?",
+      checks: [
+        {
+          label: "Work finished",
+          state: "done",
+          detail: job.statusSince ? `${job.statusSince} ago` : null,
+        },
+        {
+          label: job.parts.length > 0 ? "Parts logged" : "No parts used",
+          state: "done",
+          detail:
+            job.parts.length > 0 ? `${job.parts.length} recorded` : null,
+        },
+        {
+          label: signed ? "Customer signed" : "Customer has not signed",
+          state: signed ? "done" : "pending",
+          detail: signed
+            ? `${job.signOff?.signerName} · ${job.signOff?.at}`
+            : // FR-1303: whether this actually stops her is a tenant policy,
+              // so the copy states the consequence rather than guessing.
+              policy.allowBillingWithoutSignoff
+              ? "Your settings allow billing anyway"
+              : "Required before invoicing, by your settings",
+        },
+      ],
+      lead: ["timeline", "parts", "signoff"],
+    };
+  }
+
+  if (
+    job.status === "ON_SITE" ||
+    job.status === "IN_PROGRESS" ||
+    job.status === "EN_ROUTE"
+  ) {
+    return {
+      key: "at_site",
+      question: "What is happening at site?",
+      checks: [
+        {
+          label: job.status === "EN_ROUTE" ? "On the way" : "At site",
+          state: "pending",
+          detail: [job.technician?.name, job.statusSince && `since ${job.statusSince}`]
+            .filter(Boolean)
+            .join(" · ") || null,
+        },
+      ],
+      lead: ["timeline", "where", "asset"],
+    };
+  }
+
+  if (job.technician === null) {
+    return {
+      key: "unassigned",
+      question: "Who is going?",
+      checks: [
+        { label: "Nobody assigned", state: "blocked", detail: null },
+      ],
+      lead: ["where", "asset"],
+    };
+  }
+
+  return {
+    key: "before_visit",
+    question: "Is he going to make it?",
+    checks: [
+      {
+        label: "Assigned",
+        state: "done",
+        detail: job.technician.name,
+      },
+    ],
+    // Before the visit the address *is* the job — this is the only stage where
+    // it leads.
+    lead: ["where", "asset"],
+  };
+}
+
+/**
+ * Whether the bill button should be offered as the way forward.
+ *
+ * Deliberately not "is the job done" — a tenant that permits billing without a
+ * sign-off (FR-1303) can invoice a finished job today, and one that does not
+ * cannot, and the screen must not offer an action that its own settings forbid.
+ */
+export function canBillNow(
+  job: JobDetail,
+  policy: { allowBillingWithoutSignoff: boolean },
+): boolean {
+  if (job.invoiceNumber) return false;
+  if (job.signOff) return true;
+  return job.status === "WORK_DONE" && policy.allowBillingWithoutSignoff;
+}
+
 /* ----------------------------------------------------------------- fixture */
 
 /**
@@ -156,6 +333,7 @@ const EMPTY_DEPTH: Omit<
 > = {
   statusSince: null,
   visit: null,
+  technician: null,
   site: {
     addressLine: "Address not recorded yet",
     landmark: null,
@@ -182,6 +360,7 @@ const FIXTURES: Record<string, JobDetail> = {
     customer: "Shakti Industries",
     serviceType: "AC repair",
     visit: null,
+    technician: { id: "u3", name: "Ramesh Yadav" },
     valuePaise: null,
     site: {
       addressLine: "Plot 14, MIDC Phase II",
@@ -219,12 +398,76 @@ const FIXTURES: Record<string, JobDetail> = {
     signOff: null,
     invoiceNumber: null,
   },
+  /*
+    The job the end-to-end flow lands on — lead to contract to work order to
+    invoice — and until now the only one of the fourteen with no depth, so the
+    screen at the end of the happy path was five empty panels and an apology.
+
+    Deliberately the *awkward* shape rather than the tidy one: work finished but
+    the customer has not signed, parts consumed off the van, a repeat failure on
+    the asset, and one timeline event captured while the technician had no
+    signal. That is the state a coordinator actually stares at when deciding
+    whether she can bill.
+  */
+  "J-2608-0421": {
+    id: "j10",
+    jobNumber: "J-2608-0421",
+    status: "WORK_DONE",
+    statusSince: "2 hours",
+    priority: "normal",
+    customer: "Deshmukh Hospital",
+    serviceType: "Generator AMC",
+    visit: { n: 7, of: 12 },
+    technician: { id: "u3", name: "Ramesh Yadav" },
+    valuePaise: 1085600,
+    site: {
+      addressLine: "Block C, Basement 2, Deshmukh Hospital",
+      landmark: "Service ramp behind the OPD block",
+      locality: "Saket",
+      pincode: "110017",
+      mapQuery: "Deshmukh Hospital Saket 110017",
+      accessNotes: "Biomedical clearance needed before entering the plant room",
+      contacts: [
+        { name: "Dr. Meera Rao", role: "Administrator", phone: "98110 34567" },
+        { name: "Sandeep", role: "Facility in-charge", phone: "98110 77120" },
+      ],
+    },
+    asset: {
+      description: "Kirloskar 125 kVA DG set",
+      serial: "KOEL-125-4471",
+      warrantyTo: null,
+      lastServices: [
+        { date: "04 Jul", technician: "Ramesh", summary: "Oil and filter change" },
+        { date: "06 Jun", technician: "Ramesh", summary: "Battery replaced" },
+        { date: "09 May", technician: "Deepak", summary: "Coolant top-up, load test" },
+      ],
+      repeatFailure: "Battery replaced twice in 90 days",
+    },
+    timeline: [
+      { id: "t1", label: "Job created from contract AMC-2627-0028", actor: "System", at: "5 Aug, 6:00 am", offline: false, place: null },
+      { id: "t2", label: "Scheduled for 5 Aug, 9\u20131", actor: "Priya", at: "5 Aug, 8:12 am", offline: false, place: null },
+      { id: "t3", label: "Assigned to Ramesh", actor: "Priya", at: "5 Aug, 8:13 am", offline: false, place: null },
+      { id: "t4", label: "Start travel", actor: "Ramesh", at: "5 Aug, 9:05 am", offline: false, place: "Okhla" },
+      { id: "t5", label: "Reached site", actor: "Ramesh", at: "5 Aug, 9:41 am", offline: false, place: "Saket" },
+      { id: "t6", label: "Work started", actor: "Ramesh", at: "5 Aug, 9:47 am", offline: false, place: null },
+      { id: "t7", label: "Load test at 75% \u2014 held for 30 minutes", actor: "Ramesh", at: "5 Aug, 10:20 am", offline: true, place: null },
+      { id: "t8", label: "Work done", actor: "Ramesh", at: "5 Aug, 11:02 am", offline: false, place: null },
+    ],
+    parts: [
+      { name: "Diesel filter (Kirloskar)", qty: 1, unit: "no" },
+      { name: "Engine oil 15W-40", qty: 12, unit: "litre" },
+      { name: "Coolant concentrate", qty: 2, unit: "litre" },
+    ],
+    signOff: null,
+    invoiceNumber: null,
+  },
   "J-2608-0417": {
     id: "j9",
     jobNumber: "J-2608-0417",
     status: "SIGNED_OFF",
     statusSince: "40 minutes",
     priority: "normal",
+    technician: { id: "u3", name: "Ramesh Yadav" },
     customer: "Mrs. Deshpande",
     serviceType: "AC servicing",
     visit: null,
@@ -301,6 +544,7 @@ export const getJobDetail = defineQuery<string, JobDetail>({
       // Live facts always win over the fixture.
       status: row.status,
       priority: row.priority,
+      technician: row.technician,
       customer: row.customer,
       serviceType: row.serviceType,
       valuePaise: row.valuePaise,
@@ -308,15 +552,28 @@ export const getJobDetail = defineQuery<string, JobDetail>({
 
     return {
       raw: job,
-      partialFailures: job.asset
-        ? [
-            {
-              region: "Service history",
-              stillWorks: "Asset details and warranty",
-              code: "ASSET_HISTORY_DOWN",
-            },
-          ]
-        : [],
+      /*
+        Driven by the data, not by the mere presence of an asset.
+
+        This used to fire for *every* job that had an asset, so the banner
+        announced "Service history unavailable" directly above a rendered list
+        of the last three services. A degradation notice that contradicts the
+        content beside it is worse than no notice: it teaches the reader that
+        the warnings on this product are noise, and then they skip a real one.
+
+        The condition now *is* the claim — an asset on record whose history did
+        not come back — so the banner and the panel cannot disagree.
+      */
+      partialFailures:
+        job.asset && job.asset.lastServices.length === 0
+          ? [
+              {
+                region: "Service history",
+                stillWorks: "Asset details and warranty",
+                code: "ASSET_HISTORY_DOWN",
+              },
+            ]
+          : [],
     };
   },
 });

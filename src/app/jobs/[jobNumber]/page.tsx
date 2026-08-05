@@ -5,50 +5,64 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  CircleCheck,
+  Clock,
   Flag,
   MapPin,
-  MessageCircle,
-  Phone,
-  History,
   Package,
-  CircleCheck,
+  Phone,
   ReceiptIndianRupee,
-  TriangleAlert,
-  WifiOff,
 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { Button } from "@/components/ui/button";
-import { Panel } from "@/components/shared/panel";
+import {
+  AssetBody,
+  CollapsedSection,
+  DecisionBand,
+  PartsBody,
+  Section,
+  SignOffBody,
+  TimelineBody,
+  WhereBody,
+} from "@/components/job/sections";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
 import { getState } from "@/lib/data/store";
-import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
 import { loading, type Query } from "@/lib/data/result";
 import {
+  canBillNow,
   getJobDetail,
   primaryActionFor,
+  stageFor,
   type JobDetail,
 } from "@/lib/data/job-detail";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { can } from "@/lib/roles";
 
 /**
  * Job detail — PRD §6.5. **The one decision:** *what does this job need from me
  * right now?*
  *
- * The above-the-fold order is §6.5.1's, and each position is argued there:
- * status **with elapsed duration** first (it answers the question she is about
- * to be asked on the phone), then customer/service/contract position (whether
- * the visit is contractually owed changes whether she may bump it), then value
- * (role-gated), then the action bar, then WHERE, then ASSET (because "is this
- * still under warranty?" changes what she is allowed to charge).
+ * **The redesign, and what was wrong.** The screen used to be static across the
+ * job's entire life: `Where` and `Asset` held the top row whether the
+ * technician was still travelling or had finished two hours ago. But an address
+ * is what matters *before* a visit and dead weight *after* it, and parts and
+ * sign-off are exactly the reverse. Worst of it, on a finished job the only
+ * question is "can I bill this?" — and the screen answered it nowhere:
+ * `Bill this job` was a tertiary outline button, fourth in a row of five,
+ * while the filled primary was `Send sign-off link`.
+ *
+ * So `stageFor` decides the question, the evidence, and which sections earn the
+ * top of the screen; everything else collapses with its summary in the header.
+ * §6.5.1's ordering is preserved *within* a stage — status with its elapsed
+ * duration, then customer and contract position, then value — and `Where`
+ * still leads before the visit, which is the stage §6.5.1 was written about.
  *
  * **Exactly one primary action, from `primaryActionFor`** — same colour, same
- * position, top-right of the action bar, so muscle memory works (§6.5.3).
- * Everything else on the bar is secondary and **nothing is in a kebab**.
+ * position, so muscle memory works (§6.5.3). Nothing is in a kebab.
  *
  * ⚠️ **Scope note.** §6.5 also specifies this as a **640px right drawer** over a
  * dimmed board, with the URL updating so the job is linkable and shareable on
@@ -83,6 +97,18 @@ export default function JobDetailPage({
 
   const today = new Date();
   const showValue = can(CURRENT_USER.role, "price:view_selling");
+  const policy = {
+    allowBillingWithoutSignoff: SEED_TENANT.toggles.allowBillingWithoutSignoff,
+  };
+
+  function bill(job: JobDetail) {
+    const match = getState().board.jobs.find(
+      (candidate) => candidate.jobNumber === job.jobNumber,
+    );
+    if (!match) return;
+    dispatch({ type: "CREATE_INVOICE_FROM_JOB", jobId: match.id });
+    router.push("/money/new");
+  }
 
   return (
     <AppShell
@@ -98,341 +124,222 @@ export default function JobDetailPage({
         notice or an error aligns with the content it refers to instead of
         running full-bleed past it.
       */}
-      {/*
-        Fills the available width. A centred `max-w-4xl` left ~430px of empty
-        gutter on each side of a wide monitor, which reads as a broken layout on
-        a data-dense screen — the content should use the space the sidebar
-        leaves it.
-      */}
       <div className="p-4 md:p-6">
         <QueryBoundary query={query} label="this job" loadingRows={6}>
           {(job) => {
+            const stage = stageFor(job, policy);
             const primary = primaryActionFor(job.status);
-            const billable =
-              job.status === "WORK_DONE" || job.status === "SIGNED_OFF";
+            const billable = canBillNow(job, policy);
+            const leads = new Set(stage.lead);
+
+            /** Open where the stage says so, collapsed with a summary otherwise. */
+            const section = (
+              key: "where" | "asset" | "timeline" | "parts" | "signoff",
+              title: string,
+              icon: typeof MapPin,
+              summary: string,
+              body: React.ReactNode,
+            ) =>
+              leads.has(key) ? (
+                <Section key={key} title={title} icon={icon}>
+                  {body}
+                </Section>
+              ) : (
+                <CollapsedSection
+                  key={key}
+                  title={title}
+                  icon={icon}
+                  summary={summary}
+                >
+                  {body}
+                </CollapsedSection>
+              );
+
+            const sections = {
+              where: section(
+                "where",
+                "Where",
+                MapPin,
+                [
+                  job.site.locality || null,
+                  job.site.contacts.length > 0
+                    ? `${job.site.contacts.length} contacts`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "not recorded",
+                <WhereBody job={job} />,
+              ),
+              asset: section(
+                "asset",
+                "Asset",
+                Package,
+                job.asset
+                  ? [job.asset.description, job.asset.repeatFailure && "repeat failure"]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : "none registered",
+                <AssetBody job={job} />,
+              ),
+              timeline: section(
+                "timeline",
+                "What happened",
+                Clock,
+                job.timeline.length > 0
+                  ? `${job.timeline.length} events · last ${job.timeline.at(-1)?.at}`
+                  : "nothing recorded yet",
+                <TimelineBody job={job} />,
+              ),
+              parts: section(
+                "parts",
+                "Parts used",
+                Package,
+                job.parts.length > 0
+                  ? `${job.parts.length} recorded`
+                  : "none recorded",
+                <PartsBody job={job} />,
+              ),
+              signoff: section(
+                "signoff",
+                "Sign-off",
+                CircleCheck,
+                job.signOff
+                  ? `signed by ${job.signOff.signerName}`
+                  : "not signed yet",
+                <SignOffBody job={job} />,
+              ),
+            } as const;
+
+            const order = [
+              ...stage.lead,
+              ...(["where", "asset", "timeline", "parts", "signoff"] as const).filter(
+                (key) => !leads.has(key),
+              ),
+            ];
+
             return (
               <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mb-3 -ml-2"
-                render={<Link href="/today" />}
-                nativeButton={false}
-              >
-                <ArrowLeft className="size-4" />
-                Back to today
-              </Button>
-
-              {/* ---- 1. Job number + status WITH elapsed duration (§6.5.1) --- */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="select-all text-sm text-muted-foreground tnum-id">
-                  {job.jobNumber}
-                </span>
-                <StatusBadge status={job.status} />
-                {job.statusSince ? (
-                  // "A bare 'On site' does not" answer the question she is about
-                  // to be asked on the phone. The duration is the point.
-                  <span className="text-sm text-muted-foreground tabular-nums">
-                    since {job.statusSince}
-                  </span>
-                ) : null}
-                {job.priority !== "normal" ? (
-                  <span className="flex items-center gap-1 text-sm font-medium text-destructive">
-                    <Flag className="size-3.5" aria-hidden="true" />
-                    {job.priority === "breakdown" ? "Breakdown" : "Urgent"}
-                  </span>
-                ) : null}
-              </div>
-
-              {/* ---- 2. Customer, service, contract visit position ---------- */}
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-                {job.customer}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {job.serviceType}
-                {job.visit ? (
-                  <span className="tabular-nums">
-                    {" "}
-                    · Visit {job.visit.n} of {job.visit.of}
-                  </span>
-                ) : null}
-              </p>
-
-              {/* ---- 3. Value, role-gated (§6.5.1, FR-1302) ----------------- */}
-              {showValue && job.valuePaise !== null ? (
-                <p className="mt-1 text-xl font-semibold">
-                  <MoneyText
-                    amount={asPaise(job.valuePaise)}
-                    hidden={hideAmounts}
-                  />
-                </p>
-              ) : null}
-
-              {/* ---- 4. Action bar — all labelled, none in a kebab ---------- */}
-              <div className="mt-4 flex flex-wrap items-center gap-2 border-y py-3">
-                <Button variant="outline" size="sm">
-                  <Phone className="size-4" />
-                  Call site
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mb-3 -ml-2"
+                  render={<Link href="/today" />}
+                  nativeButton={false}
+                >
+                  <ArrowLeft className="size-4" />
+                  Back to today
                 </Button>
-                <Button variant="outline" size="sm">
-                  Reassign
-                </Button>
-                <Button variant="outline" size="sm">
-                  Reschedule
-                </Button>
-                {/*
-                  Bill this job — FR-701, and the link that was missing entirely.
-                  `/money/new` was previously reachable only by typing the URL,
-                  so "create invoice" was never actually reached from a job.
 
-                  Offered only once the work is done: billing a job nobody has
-                  finished is exactly what §4.2's sign-off toggle exists to
-                  govern, and it is off by default.
-                */}
-                {billable ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const match = getState().board.jobs.find(
-                        (candidate) => candidate.jobNumber === job.jobNumber,
-                      );
-                      if (!match) return;
-                      dispatch({
-                        type: "CREATE_INVOICE_FROM_JOB",
-                        jobId: match.id,
-                      });
-                      router.push("/money/new");
-                    }}
-                  >
-                    <ReceiptIndianRupee className="size-4" />
-                    Bill this job
-                  </Button>
-                ) : null}
-                {/* Exactly one primary, always top-right (§6.5.3). */}
-                {primary ? (
-                  <Button size="sm" className="ml-auto">
-                    {primary.label}
-                  </Button>
-                ) : null}
-              </div>
-
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                {/* ---- 5. WHERE ------------------------------------------- */}
-                <Panel title="Where" icon={MapPin}>
-                  <div className="space-y-3 text-sm">
-                    <p>{job.site.addressLine}</p>
-                    {job.site.landmark ? (
-                      // On its own line — a landmark is how an Indian address is
-                      // actually resolved (§6.5.1).
-                      <p className="font-medium">
-                        Landmark: {job.site.landmark}
-                      </p>
-                    ) : null}
-                    <p className="text-muted-foreground tabular-nums">
-                      {job.site.locality} {job.site.pincode}
-                    </p>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      render={
-                        <a
-                          href={`https://maps.google.com/?q=${encodeURIComponent(job.site.mapQuery)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        />
-                      }
-                      nativeButton={false}
-                    >
-                      <MapPin className="size-4" />
-                      Open in Maps
-                    </Button>
-
-                    {job.site.accessNotes ? (
-                      <p className="rounded-md bg-muted p-2 text-muted-foreground">
-                        Access: {job.site.accessNotes}
-                      </p>
-                    ) : null}
-
-                    <Separator />
-
-                    <ul className="space-y-2">
-                      {job.site.contacts.map((contact) => (
-                        <li
-                          key={contact.phone}
-                          className="flex items-center justify-between gap-2"
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate">
-                              {contact.name}{" "}
-                              {/* Every number carries its role label (§6.5.1). */}
-                              <span className="text-muted-foreground">
-                                ({contact.role})
-                              </span>
-                            </span>
-                            <span className="text-muted-foreground tabular-nums">
-                              {contact.phone}
-                            </span>
-                          </span>
-                          <span className="flex shrink-0 gap-1">
-                            <Button variant="outline" size="icon-sm" aria-label={`Call ${contact.name}`}>
-                              <Phone className="size-3.5" />
-                            </Button>
-                            <Button variant="outline" size="icon-sm" aria-label={`WhatsApp ${contact.name}`}>
-                              <MessageCircle className="size-3.5" />
-                            </Button>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </Panel>
-
-                {/* ---- 6. ASSET ------------------------------------------- */}
-                <Panel title="Asset" icon={Package} tone="support">
-                  <div className="space-y-3 text-sm">
-                    {job.asset ? (
-                      <>
-                        <p className="font-medium">{job.asset.description}</p>
-                        <p className="text-muted-foreground tnum-id">
-                          {job.asset.serial ? `SL# ${job.asset.serial}` : null}
-                          {job.asset.warrantyTo
-                            ? ` · Warranty to ${job.asset.warrantyTo}`
-                            : null}
-                        </p>
-
-                        {job.asset.repeatFailure ? (
-                          <p className="flex items-center gap-2 rounded-lg bg-destructive-bg p-2 font-medium text-destructive">
-                            <TriangleAlert className="size-4 shrink-0" />
-                            Repeat failure: {job.asset.repeatFailure}
-                          </p>
-                        ) : null}
-
-                        <Separator />
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Last 3 services
-                        </p>
-                        <ul className="space-y-1 text-muted-foreground">
-                          {job.asset.lastServices.map((s) => (
-                            <li key={s.date} className="truncate">
-                              <span className="tabular-nums">{s.date}</span> ·{" "}
-                              {s.technician} · {s.summary}
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    ) : (
-                      <div className="space-y-3">
-                        <p className="text-muted-foreground">
-                          No assets registered at this site.
-                        </p>
-                        <Button variant="outline" size="sm">
-                          Add asset
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </Panel>
-              </div>
-
-              {/* ---- Below the fold: TIMELINE --------------------------- */}
-              <Panel title="Timeline" icon={History} tone="support" className="mt-4">
-                <div>
-                  {job.timeline.length === 0 ? (
-                    // A panel with nothing in it reads as a rendering failure.
-                    // A job created in this session genuinely has no history
-                    // yet, and saying so is the honest state.
-                    <p className="text-sm text-muted-foreground">
-                      Nothing recorded yet — events appear here as the
-                      technician works the job.
-                    </p>
+                {/* ---- Identity: number, status WITH duration (§6.5.1) ---- */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="select-all text-sm text-muted-foreground tnum-id">
+                    {job.jobNumber}
+                  </span>
+                  <StatusBadge status={job.status} />
+                  {job.statusSince ? (
+                    // "A bare 'On site' does not" answer the question she is
+                    // about to be asked on the phone. The duration is the point.
+                    <span className="text-sm text-muted-foreground tabular-nums">
+                      since {job.statusSince}
+                    </span>
                   ) : null}
-                  <ul className="space-y-3 text-sm">
-                    {job.timeline.map((event) => (
-                      <li key={event.id} className="flex gap-3">
-                        <span
-                          aria-hidden="true"
-                          className="mt-1.5 size-2 shrink-0 rounded-full bg-primary"
-                        />
-                        <span className="min-w-0">
-                          <span className="block">{event.label}</span>
-                          <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                            <span className="tabular-nums">{event.at}</span>
-                            <span>· {event.actor}</span>
-                            {event.place ? <span>· {event.place}</span> : null}
-                            {event.offline ? (
-                              // §4.2 rule 3 records whether an event originated
-                              // offline; §9.2 makes `occurred_at` authoritative.
-                              // A technician who finished at 4pm in a basement
-                              // did the job at 4pm.
-                              <span className="flex items-center gap-1 text-brand-brown">
-                                <WifiOff className="size-3" aria-hidden="true" />
-                                recorded offline
-                              </span>
-                            ) : null}
-                          </span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  {job.priority !== "normal" ? (
+                    <span className="flex items-center gap-1 text-sm font-medium text-destructive">
+                      <Flag className="size-3.5" aria-hidden="true" />
+                      {job.priority === "breakdown" ? "Breakdown" : "Urgent"}
+                    </span>
+                  ) : null}
                 </div>
-              </Panel>
 
-              {/* ---- Below the fold: PARTS + SIGN-OFF ------------------- */}
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <Panel title="Parts consumed" icon={Package} tone="support">
-                  <div className="text-sm">
-                    {job.parts.length === 0 ? (
-                      <p className="text-muted-foreground">
-                        No parts recorded on this job.
-                      </p>
-                    ) : (
-                      <ul className="space-y-1">
-                        {job.parts.map((part) => (
-                          <li key={part.name} className="flex justify-between gap-2">
-                            <span className="min-w-0 truncate">{part.name}</span>
-                            <span className="shrink-0 tabular-nums">
-                              {part.qty} {part.unit}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </Panel>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+                  {job.customer}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  {job.serviceType}
+                  {job.visit ? (
+                    <span className="tabular-nums">
+                      {" "}
+                      · Visit {job.visit.n} of {job.visit.of}
+                    </span>
+                  ) : null}
+                  {/* Who is on it — the second thing anyone asks, and the old
+                      screen never said it anywhere. */}
+                  {job.technician ? ` · ${job.technician.name}` : null}
+                </p>
 
-                <Panel title="Sign-off" icon={CircleCheck} tone="support">
-                  <div className="space-y-2 text-sm">
-                    {job.signOff ? (
-                      <>
-                        <p>
-                          Signed off at{" "}
-                          <span className="tabular-nums">{job.signOff.at}</span>{" "}
-                          by {job.signOff.signerName}
-                        </p>
-                        <p className="text-muted-foreground tabular-nums">
-                          Rated {job.signOff.rating} of 5
-                        </p>
-                        {!job.signOff.signatureUploaded ? (
-                          // §6.5.2: this happens many times a day and "must read
-                          // as normal, not as an error" — so it is muted text,
-                          // not an alert.
-                          <p className="rounded-md bg-muted p-2 text-muted-foreground">
-                            Signature image still uploading from the
-                            technician&apos;s phone.
-                          </p>
-                        ) : null}
-                      </>
-                    ) : (
-                      <p className="text-muted-foreground">
-                        Not signed off yet — the technician hasn&apos;t completed
-                        the work.
-                      </p>
-                    )}
-                  </div>
-                </Panel>
-              </div>
+                {showValue && job.valuePaise !== null ? (
+                  <p className="mt-1 text-xl font-semibold">
+                    <MoneyText
+                      amount={asPaise(job.valuePaise)}
+                      hidden={hideAmounts}
+                    />
+                  </p>
+                ) : null}
+
+                {/* ---- The decision, and the actions that resolve it ------ */}
+                <div className="mt-4">
+                  <DecisionBand stage={stage}>
+                    {/*
+                      Exactly one primary (§6.5.3) — and on a signed-off job the
+                      primary *is* the billing action. Rendering both the
+                      table's "Create invoice" and a separate "Bill this job"
+                      put two buttons for one outcome side by side, which is the
+                      ambiguity §6.13.2 exists to prevent. So the primary
+                      carries the dispatch when it is the invoice action, and
+                      the outline button appears only when billing is possible
+                      *without* being the primary — a WORK_DONE job under a
+                      tenant that permits billing before sign-off.
+                    */}
+                    {primary ? (
+                      <Button
+                        size="sm"
+                        onClick={
+                          primary.href === "#invoice"
+                            ? () => bill(job)
+                            : undefined
+                        }
+                      >
+                        {primary.label}
+                      </Button>
+                    ) : null}
+                    {billable && primary?.href !== "#invoice" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => bill(job)}
+                      >
+                        <ReceiptIndianRupee className="size-4" />
+                        Bill this job
+                      </Button>
+                    ) : null}
+                    <Button variant="outline" size="sm">
+                      <Phone className="size-4" />
+                      Call site
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      Reassign
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      Reschedule
+                    </Button>
+                  </DecisionBand>
+                </div>
+
+                {/*
+                  Leading sections first and side by side; the collapsed ones
+                  fall underneath as single rows, so the fold is spent on what
+                  this stage actually needs.
+                */}
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  {order
+                    .filter((key) => leads.has(key))
+                    .map((key) => sections[key])}
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {order
+                    .filter((key) => !leads.has(key))
+                    .map((key) => sections[key])}
+                </div>
               </div>
             );
           }}
