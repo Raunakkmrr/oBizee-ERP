@@ -11,10 +11,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
-import { Button } from "@/components/ui/button";
-import { MagicCard } from "@/components/ui/magic-card";
 import { NumberTicker } from "@/components/ui/number-ticker";
-import { LocalDataPanel } from "@/components/shared/local-data-panel";
+import { ShineBorder } from "@/components/ui/shine-border";
 import { cn } from "@/lib/utils";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 import {
@@ -24,34 +22,33 @@ import {
 } from "@/lib/data/fixtures/tenant";
 
 /**
- * Settings & people — attempt 2.
+ * Settings — attempt 3. **Dark-first.**
  *
- * **Dropped permanently from attempt 1** (the rule is drop, never refine): the
- * section rail and focused pane, and — the thing named hardest — **every
- * separator**. No `divide-y`, no `border-b` between rows, no ruled tables.
+ * Kept, because he said so: the dark rail, and the pill tab bar. Dropped
+ * permanently: the light beige surfaces, cards with dark borders, the big
+ * "Settings / business name" header, and the whole light colour system.
  *
- * Raunak: *"I hate the separators so much… It's making it look like a 2D
- * design."* He is describing something real. A ruled row is a 2012 data grid:
- * the line does the work of saying "these are different things", which means
- * the things themselves are doing none of it. Research into current dashboard
- * work says the same in the positive — separate with **card modules, spacing
- * and elevation**, never with lines.
+ * **Why this is a theme change and not another card tweak.** Every dense
+ * product that reads as premium in this space — Linear, Vercel, Supabase,
+ * Raycast — is dark by default with a single signature accent and everything
+ * else in restrained greyscale. That is the actual reference, and it explains
+ * the pattern in the feedback: the rail was liked precisely because it was the
+ * only surface already doing this, and each light rebuild failed because the
+ * theme, not the layout, was wrong.
  *
- * So the unit here is not a row. **Every person, branch, slot and policy is its
- * own object with its own surface**, lifted off the ground by shadow and held
- * apart by space. Nothing is ruled, because nothing needs to be: two floating
- * objects are self-evidently two objects.
+ * The system, taken from current dark-UI practice rather than invented:
  *
- * Depth is doing the work that lines used to:
+ * - **Depth is surface lightness, not shadow.** Shadows are nearly invisible on
+ *   dark, so elevation steps in lightness: page ~L10, card ~L15, raised ~L19.
+ * - **Borders are light at very low opacity** — `white/6` — never dark rules.
+ *   A dark border on a dark card is the thing that read as cheap.
+ * - **One accent.** `#d17c45` carries every interactive state and nothing else
+ *   competes; the restraint is what makes it read as the brand.
+ * - **Glow replaces shadow.** Coloured `box-shadow` in the accent, because a
+ *   black shadow on near-black does nothing.
  *
- * - the page carries a soft radial wash, so surfaces sit *on* something
- * - cards use layered shadow that deepens on hover — elevation as a live
- *   property, not a static border
- * - **`@magicui/magic-card`** puts a spotlight that tracks the cursor on the two
- *   surfaces that matter most, so the screen responds to being looked at
- * - **`@magicui/number-ticker`** counts the turnover up, in Indian grouping
- *
- * The dark rail stays. It was the one thing that worked.
+ * Near-black, not pure black, and warmed toward the brand hue so the accent
+ * belongs to the surface rather than sitting on top of a generic charcoal.
  */
 const SECTIONS = [
   { key: "business", label: "Business", icon: Landmark },
@@ -63,9 +60,29 @@ const SECTIONS = [
 
 type SectionKey = (typeof SECTIONS)[number]["key"];
 
-/** Soft, layered elevation. The shadow is the separator now. */
-const FLOAT =
-  "rounded-2xl bg-card shadow-[0_1px_2px_rgba(74,64,56,0.06),0_8px_24px_-12px_rgba(74,64,56,0.18)] transition-all duration-300 hover:shadow-[0_2px_4px_rgba(74,64,56,0.08),0_16px_40px_-16px_rgba(74,64,56,0.28)] hover:-translate-y-0.5";
+/**
+ * §9.7's seven Indic scripts, named rather than coded. "HI" is a column value,
+ * not something an owner reads on his own settings screen; the endonym is
+ * beside the English name because that is what he would recognise first.
+ */
+const LANGUAGE_NAMES: Record<string, string> = {
+  hi: "Hindi · हिन्दी",
+  mr: "Marathi · मराठी",
+  gu: "Gujarati · ગુજરાતી",
+  ta: "Tamil · தமிழ்",
+  te: "Telugu · తెలుగు",
+  kn: "Kannada · ಕನ್ನಡ",
+  bn: "Bengali · বাংলা",
+  en: "English",
+};
+
+/**
+ * The one surface treatment, both themes. `--shadow-card` is a soft drop on
+ * light and a hairline-plus-bloom on dark, so nothing here branches on theme
+ * and nothing is drawn as a border.
+ */
+const SURFACE =
+  "rounded-2xl bg-card shadow-[var(--shadow-card)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--shadow-raised)]";
 
 export default function SettingsPage() {
   const [section, setSection] = useState<SectionKey>("business");
@@ -78,23 +95,18 @@ export default function SettingsPage() {
       today={today}
       freshness={{ kind: "fresh", at: today }}
     >
-      {/* A wash, so cards sit on something rather than on a flat fill. */}
+      {/* The page itself is the base layer — L10, warmed toward the accent. */}
       <div className="relative min-h-full">
+        {/* A single accent bloom. On dark this is what shadow cannot do. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_600px_at_20%_-10%,rgba(209,124,69,0.10),transparent_60%),radial-gradient(900px_500px_at_100%_0%,rgba(124,99,58,0.08),transparent_55%)]"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_420px_at_18%_-8%,var(--primary-bg),transparent_62%)]"
         />
 
         <div className="relative p-5 md:p-8">
-          <h1 className="text-[28px] leading-tight font-semibold tracking-tight">
-            Settings
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {SEED_TENANT.businessName}
-          </p>
-
-          {/* Pill switcher — floating, not a tab bar with a rule under it. */}
-          <div className="mt-5 inline-flex flex-wrap gap-1.5 rounded-2xl bg-card/70 p-1.5 shadow-[0_1px_2px_rgba(74,64,56,0.06),0_8px_24px_-16px_rgba(74,64,56,0.2)] backdrop-blur">
+          {/* No page header. It was named the worst thing here, so the tab bar
+              is the only chrome — it already says where you are. */}
+          <div className="inline-flex flex-wrap gap-1 rounded-2xl bg-card p-1.5 shadow-[var(--shadow-card)]">
             {SECTIONS.map((item) => {
               const on = item.key === section;
               const Icon: LucideIcon = item.icon;
@@ -106,10 +118,10 @@ export default function SettingsPage() {
                   onClick={() => setSection(item.key)}
                   className={cn(
                     "flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm transition-all duration-200",
-                    "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                    "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
                     on
-                      ? "bg-gradient-to-b from-primary to-primary/85 font-medium text-primary-foreground shadow-[0_2px_8px_-2px_rgba(209,124,69,0.6)]"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      ? "bg-primary font-medium text-primary-foreground shadow-[var(--shadow-raised)]"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
                   <Icon className="size-4" />
@@ -124,7 +136,7 @@ export default function SettingsPage() {
             {section === "people" ? <People /> : null}
             {section === "branches" ? <Branches /> : null}
             {section === "policy" ? <Policy /> : null}
-            {section === "data" ? <LocalDataPanel /> : null}
+            {section === "data" ? <DataSection /> : null}
           </div>
         </div>
       </div>
@@ -137,50 +149,58 @@ export default function SettingsPage() {
 function Business() {
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      {/* The identity surface — cursor-tracked spotlight, so the screen
-          responds to being looked at. */}
-      <MagicCard
-        gradientColor="#f3e9e0"
-        gradientFrom="#d17c45"
-        gradientTo="#e6a93c"
-        gradientOpacity={0.5}
-        className="rounded-2xl shadow-[0_1px_2px_rgba(74,64,56,0.06),0_16px_40px_-20px_rgba(74,64,56,0.35)] lg:col-span-2"
-      >
-        <div className="p-7">
-          <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-            Registered business
-          </p>
-          <h2 className="mt-2 text-2xl leading-tight font-semibold tracking-tight">
-            {SEED_TENANT.legalName}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Trading as {SEED_TENANT.businessName} · GSTIN{" "}
-            <span className="tnum-id">{SEED_TENANT.branches[0].gstin}</span>
-          </p>
-        </div>
-      </MagicCard>
+      {/* The identity surface is the one thing that gets a moving light. */}
+      <div className="relative overflow-hidden rounded-2xl bg-card p-8 shadow-[var(--shadow-card)] lg:col-span-2">
+        <ShineBorder
+          shineColor={["var(--primary)", "var(--chart-5)", "var(--primary)"]}
+          duration={12}
+          borderWidth={1}
+        />
+        <p className="text-[11px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">
+          Registered business
+        </p>
+        <h2 className="mt-2.5 text-[26px] leading-tight font-semibold tracking-tight text-foreground">
+          {SEED_TENANT.legalName}
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Trading as {SEED_TENANT.businessName}
+        </p>
+        <p className="mt-1 font-mono text-xs text-muted-foreground">
+          {SEED_TENANT.branches[0].gstin}
+        </p>
+      </div>
 
-      {/* The number that drives two statutory rules, given its own object. */}
-      <div className={cn(FLOAT, "p-7")}>
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+      {/* The number that drives two statutory rules — accent, and it glows. */}
+      <div className="relative overflow-hidden rounded-2xl bg-card p-8 shadow-[var(--shadow-card)]">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-16 -right-10 size-44 rounded-full bg-primary/20 blur-3xl"
+        />
+        <p className="relative text-[11px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">
           Turnover declared
         </p>
-        <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">
+        <p className="relative mt-2.5 text-4xl font-semibold tracking-tight text-primary-text tabular-nums">
           ₹
           <NumberTicker
             value={SEED_TENANT.aatoPaise / 100}
             decimalPlaces={0}
             locale="en-IN"
-            className="tabular-nums"
+            className="tabular-nums text-primary-text"
           />
         </p>
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+        <p className="relative mt-3 text-xs leading-relaxed text-muted-foreground">
           Sets SAC/HSN digit count and whether e-invoicing applies.
         </p>
       </div>
 
-      <Tile label="Tax scheme" value={SEED_TENANT.taxScheme === "REGULAR" ? "Regular" : "Composition 6%"} />
-      <Tile label="Regional language" value={SEED_TENANT.regionalLanguage.toUpperCase()} />
+      <Tile
+        label="Tax scheme"
+        value={SEED_TENANT.taxScheme === "REGULAR" ? "Regular" : "Composition 6%"}
+      />
+      <Tile
+        label="Regional language"
+        value={LANGUAGE_NAMES[SEED_TENANT.regionalLanguage] ?? "English"}
+      />
       <Tile label="Financial year" value="1 Apr – 31 Mar" />
     </div>
   );
@@ -188,11 +208,11 @@ function Business() {
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className={cn(FLOAT, "p-5")}>
-      <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+    <div className={cn(SURFACE, "p-6")}>
+      <p className="text-[11px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">
         {label}
       </p>
-      <p className="mt-1.5 text-lg font-medium">{value}</p>
+      <p className="mt-2 text-lg font-medium text-foreground">{value}</p>
     </div>
   );
 }
@@ -200,38 +220,38 @@ function Tile({ label, value }: { label: string; value: string }) {
 /* --------------------------------------------------------------- people */
 
 function People() {
+  const active = SEED_USERS.filter((u) => u.active).length;
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           <span className="font-semibold text-foreground tabular-nums">
-            {SEED_USERS.filter((u) => u.active).length}
+            {active}
           </span>{" "}
           people can sign in
         </p>
-        <Button size="sm">
+        <button
+          type="button"
+          className="flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-[var(--shadow-raised)] transition-all hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+        >
           <Users className="size-4" />
           Invite person
-        </Button>
+        </button>
       </div>
 
-      {/* Every person is an object, not a ruled row. */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {SEED_USERS.map((user) => (
           <div
             key={user.id}
-            className={cn(
-              FLOAT,
-              "p-5",
-              !user.active && "opacity-70 hover:opacity-100",
-            )}
+            className={cn(SURFACE, "p-5", !user.active && "opacity-60 hover:opacity-100")}
           >
             <div className="flex items-start gap-3.5">
               <span
                 className={cn(
-                  "grid size-12 shrink-0 place-items-center rounded-2xl text-sm font-semibold",
+                  "grid size-11 shrink-0 place-items-center rounded-xl text-sm font-semibold",
                   user.active
-                    ? "bg-gradient-to-br from-primary/25 to-primary/5 text-primary"
+                    ? "bg-primary-bg text-primary-text"
                     : "bg-muted text-muted-foreground",
                 )}
               >
@@ -241,18 +261,19 @@ function People() {
                   .map((p) => p[0])
                   .join("")}
               </span>
-
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{user.name}</p>
-                <p className="truncate text-xs text-muted-foreground tabular-nums">
-                  {/* §7.3: phone is the login identity in this market. */}
+                <p className="truncate font-medium text-foreground">
+                  {user.name}
+                </p>
+                {/* §7.3: phone is the login identity in this market. */}
+                <p className="truncate font-mono text-xs text-muted-foreground">
                   {user.phone}
                 </p>
               </div>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+              <span className="rounded-lg bg-primary-bg px-2.5 py-1 text-xs font-medium text-primary-text">
                 {ROLE_LABELS[user.role as Role]}
               </span>
               {user.languageOverride ? (
@@ -262,13 +283,16 @@ function People() {
                 </span>
               ) : null}
               {!user.active ? (
-                <span className="rounded-lg bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive">
+                <span className="rounded-lg bg-destructive-bg px-2.5 py-1 text-xs font-medium text-destructive">
                   Disabled
                 </span>
               ) : null}
-              <Button variant="outline" size="sm" className="ml-auto">
+              <button
+                type="button"
+                className="ml-auto rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+              >
                 {user.active ? "Edit" : "Restore"}
-              </Button>
+              </button>
             </div>
           </div>
         ))}
@@ -283,43 +307,34 @@ function Branches() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {SEED_TENANT.branches.map((branch) => (
-        <MagicCard
-          key={branch.gstin}
-          gradientColor="#f3e9e0"
-          gradientFrom="#d17c45"
-          gradientTo="#e6a93c"
-          gradientOpacity={0.4}
-          className="rounded-2xl shadow-[0_1px_2px_rgba(74,64,56,0.06),0_12px_32px_-18px_rgba(74,64,56,0.3)]"
-        >
-          <div className="p-6">
-            <div className="flex items-center gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 text-primary">
-                <Building2 className="size-5" />
-              </span>
-              <div className="min-w-0">
-                <p className="font-medium">{branch.name}</p>
-                <p className="truncate text-xs text-muted-foreground tnum-id">
-                  {branch.gstin}
-                </p>
-              </div>
-            </div>
-            {/* FR-811: numbering is per branch, doc type and financial year. */}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Chip label="State" value={branch.stateCode} />
-              <Chip label="Invoices" value={branch.invoiceSeriesPrefix} />
-              <Chip label="Jobs" value={branch.jobSeriesPrefix} />
+        <div key={branch.gstin} className={cn(SURFACE, "p-6")}>
+          <div className="flex items-center gap-3.5">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-bg text-primary-text">
+              <Building2 className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-medium text-foreground">{branch.name}</p>
+              <p className="truncate font-mono text-xs text-muted-foreground">
+                {branch.gstin}
+              </p>
             </div>
           </div>
-        </MagicCard>
+          {/* FR-811: numbering is per branch, doc type and financial year. */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Chip label="State" value={branch.stateCode} />
+            <Chip label="Invoices" value={branch.invoiceSeriesPrefix} />
+            <Chip label="Jobs" value={branch.jobSeriesPrefix} />
+          </div>
+        </div>
       ))}
 
-      <div className={cn(FLOAT, "p-6 lg:col-span-2")}>
-        <div className="flex items-center gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 text-primary">
+      <div className={cn(SURFACE, "p-6 lg:col-span-2")}>
+        <div className="flex items-center gap-3.5">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-bg text-primary-text">
             <Clock className="size-5" />
           </span>
           <div>
-            <p className="font-medium">Working slots</p>
+            <p className="font-medium text-foreground">Working slots</p>
             {/* FR-203: the reason slots exist at all. */}
             <p className="text-xs text-muted-foreground">
               Customers are told a window, never a single time we cannot honour.
@@ -330,10 +345,10 @@ function Branches() {
           {SEED_TENANT.slots.map((slot) => (
             <div
               key={slot.label}
-              className="rounded-xl bg-gradient-to-b from-muted to-muted/40 p-4"
+              className="rounded-xl bg-muted p-4"
             >
-              <p className="text-sm font-medium">{slot.label}</p>
-              <p className="mt-0.5 text-lg font-semibold tracking-tight tabular-nums">
+              <p className="text-sm text-muted-foreground">{slot.label}</p>
+              <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">
                 {slot.from}–{slot.to}
               </p>
             </div>
@@ -348,7 +363,7 @@ function Chip({ label, value }: { label: string; value: string }) {
   return (
     <span className="rounded-lg bg-muted px-2.5 py-1.5 text-xs">
       <span className="text-muted-foreground">{label} </span>
-      <span className="font-semibold">{value}</span>
+      <span className="font-semibold text-foreground">{value}</span>
     </span>
   );
 }
@@ -379,9 +394,9 @@ function Policy() {
 }
 
 /**
- * A policy is its own card, and it states its consequence rather than its name.
- * A switch with a label is a preference; a switch with what it does beside it is
- * a decision — and two of these change what this business can legally bill.
+ * A policy states its consequence, not its name. A switch with a label is a
+ * preference; a switch with what it does beside it is a decision — and two of
+ * these change what this business can legally bill.
  */
 function PolicyCard({
   label,
@@ -395,16 +410,16 @@ function PolicyCard({
   dangerWhenOn?: boolean;
 }) {
   return (
-    <div className={cn(FLOAT, "flex flex-col p-6")}>
+    <div className={cn(SURFACE, "p-6")}>
       <div className="flex items-start justify-between gap-3">
-        <p className="font-medium">{label}</p>
+        <p className="font-medium text-foreground">{label}</p>
         <span
           className={cn(
             "shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold",
             on && dangerWhenOn
-              ? "bg-destructive/12 text-destructive"
+              ? "bg-destructive-bg text-destructive"
               : on
-                ? "bg-success/12 text-success"
+                ? "bg-success-bg text-success"
                 : "bg-muted text-muted-foreground",
           )}
         >
@@ -414,6 +429,37 @@ function PolicyCard({
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         {consequence}
       </p>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------- data */
+
+function DataSection() {
+  return (
+    <div className={cn(SURFACE, "max-w-2xl p-6")}>
+      <div className="flex items-center gap-3.5">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary-bg text-primary-text">
+          <Lock className="size-5" />
+        </span>
+        <div>
+          <p className="font-medium text-foreground">Local data</p>
+          <p className="text-xs text-muted-foreground">
+            Stored in this browser, encrypted at rest
+          </p>
+        </div>
+      </div>
+      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+        Saved with AES-GCM under a key the browser holds and no script can read,
+        so a copied storage file is unreadable on another machine. It does not
+        protect against someone using this browser.
+      </p>
+      <button
+        type="button"
+        className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+      >
+        Reset demo data
+      </button>
     </div>
   );
 }

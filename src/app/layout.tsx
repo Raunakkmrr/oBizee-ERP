@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ThemeProvider } from "next-themes";
 import { fontClassNamesFor, type Locale } from "@/lib/fonts";
 import "./globals.css";
 
@@ -29,8 +30,30 @@ export default function RootLayout({
     <html
       lang={locale}
       className={`${fontClassNamesFor(locale)} h-full antialiased`}
+      // next-themes writes `class` and `style` on <html> from a blocking
+      // inline script, before React hydrates. The server cannot know the
+      // choice, so the mismatch is expected and is suppressed here — on this
+      // element only, never on a subtree that renders real content.
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/*
+          Light is the default, not the system preference, and that is
+          deliberate: the audience works a full day in a daylight office, and
+          a coordinator whose laptop happens to be set to dark should not be
+          handed the harder-to-read polarity for eight hours of data entry.
+          `enableSystem` still honours an explicit OS preference; the top-bar
+          toggle overrides both and persists.
+        */}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

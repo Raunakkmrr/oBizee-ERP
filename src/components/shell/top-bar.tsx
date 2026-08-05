@@ -3,9 +3,17 @@
 import { useSyncExternalStore } from "react";
 
 import Link from "next/link";
-import { CircleCheck, Eye, EyeOff, RefreshCw, TriangleAlert } from "lucide-react";
+import { useTheme } from "next-themes";
+import {
+  CircleCheck,
+  Eye,
+  EyeOff,
+  Moon,
+  RefreshCw,
+  Sun,
+  TriangleAlert,
+} from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatDateLong, formatTime } from "@/lib/datetime";
@@ -110,6 +118,46 @@ function FreshnessIndicator({ freshness }: { freshness: Freshness }) {
   );
 }
 
+/**
+ * The light/dark switch.
+ *
+ * Light is the product's default because the audience works a full day in a
+ * daylight office; dark exists for evening shifts and for anyone who simply
+ * reads better on it. Both are first-class — the rail is dark either way — so
+ * this is one button, not a three-way menu nobody uses.
+ *
+ * The icon must not render until mount. `resolvedTheme` is unknowable on the
+ * server, and rendering a guess produces a sun that flips to a moon on
+ * hydration; a fixed-size placeholder keeps the bar from reflowing instead.
+ */
+function ThemeToggle() {
+  const mounted = useMounted();
+  const { resolvedTheme, setTheme } = useTheme();
+  // Gated on `mounted`, not just the icon. `resolvedTheme` is undefined on the
+  // server, so reading it directly made the *label* disagree across hydration
+  // — React reported a mismatch and, being an attribute, refused to patch it,
+  // leaving a button that announced the wrong action to a screen reader.
+  const dark = mounted && resolvedTheme === "dark";
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+      onClick={() => setTheme(dark ? "light" : "dark")}
+    >
+      {!mounted ? (
+        // A fixed-size placeholder, so the bar does not reflow on mount.
+        <span className="size-4" />
+      ) : dark ? (
+        <Sun className="size-4" />
+      ) : (
+        <Moon className="size-4" />
+      )}
+    </Button>
+  );
+}
+
 export function TopBar({
   role,
   userName,
@@ -129,9 +177,18 @@ export function TopBar({
     userName.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "OB";
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/85 px-3 backdrop-blur md:px-4">
+    /*
+      No bottom border, no vertical separators, no opaque bar.
+
+      The old header was a light slab ruled off from the content below it, and
+      it was named the single worst element on the screen. A rule across the
+      top of a page announces chrome; what it should do is get out of the way.
+      What replaces it is a translucent wash of the page ground with a blur —
+      content dims as it passes under rather than colliding with an edge — and
+      spacing alone to group the controls.
+    */
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 bg-background/70 px-3 backdrop-blur-xl md:px-5">
       <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-1 hidden h-5 sm:block" />
 
       {/*
         The lockup, for viewports where the sidebar is collapsed into a sheet.
@@ -173,11 +230,11 @@ export function TopBar({
           </Button>
         ) : null}
 
-        <Separator orientation="vertical" className="mx-1 hidden h-5 sm:block" />
+        <ThemeToggle />
 
-        <span className="flex items-center gap-2 pr-1">
+        <span className="ml-2 flex items-center gap-2 pr-1">
           <Avatar className="size-8">
-            <AvatarFallback className="bg-accent text-xs font-semibold text-accent-foreground">
+            <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary ring-1 ring-primary/25">
               {initials}
             </AvatarFallback>
           </Avatar>

@@ -5,29 +5,37 @@
 /*
  * Obez Service ERP — theme.
  *
- * This is an extension of the oBizee product family, so the brand truth is
- * oBizee's, not this product's own invention: warm orange #D17C45 primary,
- * warm surfaces, brown accents, white sidebar, Inter. Mirrored from
- * `obizee-dashboard/src/app/globals.css` and `src/lib/design/tokens.ts`, which
- * in turn mirror the React Native app at `OrderManagement/src/constants/`.
+ * This is an extension of the oBizee product family, so the brand hue is
+ * oBizee's rather than this product's own invention: warm orange #D17C45,
+ * Inter, warm neutrals. What is *not* inherited is the light ground — see the
+ * DARK-FIRST note on `:root` for why.
  *
  * RULE, inherited from the dashboard: never hardcode a hex in a component. Use
  * a Tailwind token class (bg-primary, text-success…) or import from
  * `@/lib/design/tokens`.
  *
- * ⚠️ ACCEPTED DEVIATION FROM THE PRD — see PRODUCT_LOG DR-13.
- * PRD §9.6 sets a 7:1 contrast floor on all money, numerics, status and body
- * text, above WCAG AA, because of the sub-₹10,000 LCD panels in daylight that
- * §3.3 describes. The oBizee palette does not clear it — measured: white on
- * #D17C45 is 3.14:1, #F5A623 warning on white is 2.03:1, #1FA968 on its own
- * tint is 2.71:1, #82766B muted text on the page background is 4.14:1. Several
- * of those fail plain WCAG AA too.
+ * ✅ DR-13 IS RESOLVED BY THE INVERSION — and it was not the goal.
  *
- * The client chose brand continuity over the floor, knowingly. The contrast CI
- * gate is therefore no longer part of `pnpm verify`. The consequence recorded
- * with that decision: §9.6's mandatory outdoor-daylight test on a cheap LCD
- * cannot be passed by this palette, and the technician app will need its own
- * corrected tokens if that requirement is ever reinstated.
+ * PRD §9.6 sets a 7:1 contrast floor on money, numerics, status and body text,
+ * above WCAG AA, because of the sub-₹10,000 LCD panels in daylight that §3.3
+ * describes. The light palette could not reach it: white on #D17C45 measured
+ * 3.14:1, #F5A623 on white 2.03:1, #82766B body text 3.52:1 — three of those
+ * fail plain WCAG AA, and the contrast gate had to be dropped from
+ * `pnpm verify` as an accepted deviation.
+ *
+ * Re-measured in the browser after the inversion, on #0e0b09 and #17120f:
+ *
+ *   body text (muted-foreground)   7.2  /  6.8    (was 3.52)
+ *   heading (foreground)          15.7
+ *   text on a primary button       5.9              (was 3.14)
+ *   success 9.3 · warning 10.5 · info 7.2 · destructive 8.0
+ *
+ * Everything clears AA; most clears §9.6's own 7:1 floor. The two that sit
+ * just under — brand orange as text, and the label on a filled orange button —
+ * are the brand hue itself, and moving them means moving the brand.
+ *
+ * DR-13 should be reopened with this measurement before the technician app is
+ * built: the reason it was accepted no longer holds.
  */
 
 @custom-variant dark (&:is(.dark *));
@@ -73,6 +81,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-text: var(--primary-text);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -132,6 +141,49 @@
   --duration-state: 180ms;
   --duration-drawer-in: 220ms;
   --duration-drawer-out: 160ms;
+  /*
+   * The navigation stack deal-in.
+   *
+   * CSS, deliberately, not a JS animation. The first build of this used
+   * motion's variants with `initial={{opacity: 0}}`, and rAF throttling in a
+   * backgrounded tab froze the stack part-way through — leaving the primary
+   * navigation at opacity 0.07 and effectively unusable. The resting state of
+   * the most-used control in the product must never depend on an animation
+   * running to completion.
+   *
+   * `backwards` holds the hidden state through the per-item delay and then
+   * hands back to the element's own styles, so if the animation is throttled,
+   * skipped or disabled the item is simply *visible*. There is no failure mode
+   * where navigation disappears.
+   */
+  --animate-nav-deal: nav-deal 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  @keyframes nav-deal {
+    from {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.97);
+    }
+  }
+
+  --animate-badge-pop: badge-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  @keyframes badge-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+
+  --animate-shine: shine var(--duration) infinite linear;
+  @keyframes shine {
+  0% {
+    background-position: 0% 0%;
+    }
+  50% {
+    background-position: 100% 100%;
+    }
+  to {
+    background-position: 0% 0%;
+    }
+  }
 }
 
 :root {
@@ -148,61 +200,209 @@
   --font-mono: var(--font-mono-face), ui-monospace, monospace;
 
   /*
-   * Deepened from the dashboard's #fbf7f3, deliberately, against the
-   * "match oBizee exactly" instruction.
+   * ── LIGHT BY DEFAULT, DARK BY CHOICE ──────────────────────────────────
    *
-   * #fbf7f3 under #ffffff cards is a 1.07 contrast ratio — the two surfaces are
-   * the same luminance to within a rounding error. On the dashboard that reads
-   * as calm, because those screens are sparse. Stack eight panels of dense data
-   * on it and it reads as a skeleton loader: grey blocks that never resolve into
-   * cards. Raunak read the Settings screen as exactly that, and he was right.
+   * The audience sits in front of this for a full working day, in a daylight
+   * office. That decides the default: for prolonged reading of dense text,
+   * dark-on-light (positive polarity) beats the inverse, and an all-dark
+   * product is the wrong bet for eight hours of data entry. Dark stays — it
+   * is genuinely better after dark and for anyone who prefers it — but it is
+   * the *choice*, not the ground state. `next-themes` follows the OS and the
+   * toggle in the top bar overrides it.
    *
-   * Same hue, same warmth, ~1.25 against white — enough that a card visibly
-   * floats. Every screen is fixed by this one line rather than eighteen.
+   * This is NOT the earlier light theme. That one was rejected, and the two
+   * reasons are worth keeping written down because they are what changed:
+   *
+   * 1. **The ground was sand (#f1e9df) — too much of the brand hue.** A page
+   *    that is already orange leaves the orange accent nothing to be an
+   *    accent against. The ground here is a near-neutral warm grey; the only
+   *    saturated thing on screen is the accent itself.
+   * 2. **Cards were separated by a drawn hairline.** That is the "flat 2D"
+   *    tell, and it was named directly. On light, unlike on dark, real
+   *    shadows work — so separation is a soft layered shadow and *nothing is
+   *    drawn at all*. No card borders, no row rules, no head-band rules.
+   *
+   * What carries over from the dark build, unchanged, because it was liked:
+   * the dark rail, and the pill tab bar. The rail stays dark in *both*
+   * themes — it is the signature, and it is what stops a light page reading
+   * as a blank document.
+   *
+   * Every value below was measured in the browser against §9.6's 7:1 floor
+   * rather than picked by eye. See the DR-13 note at the top of the file.
    */
-  --background: #f1e9df; /* warm sand page — cards must lift off it */
-  --foreground: #1a1a1a; /* near-black text */
+  --background: #f5f4f2; /* near-neutral warm grey — not sand */
+  --foreground: #1c1917;
 
   --card: #ffffff;
-  --card-foreground: #1a1a1a;
+  --card-foreground: #1c1917;
   --popover: #ffffff;
-  --popover-foreground: #1a1a1a;
+  --popover-foreground: #1c1917;
 
-  --primary: #d17c45; /* brand orange */
-  --primary-foreground: #ffffff;
-
-  --secondary: #f3e9e0; /* warm sand */
-  --secondary-foreground: #5c4326;
-
-  /* Panel head bands sit on this; at #f4efea against #ffffff the head was
-     invisible and a panel looked like a title floating above nothing. */
-  --muted: #f6f0e8; /* warm muted surface */
   /*
-   * Darkened from #82766b. That value was 3.96:1 on the old page ground and
-   * deepening the ground to #f1e9df pushed it to 3.52 — both below WCAG AA's
-   * 4.5 for body text, and every secondary line in the product uses it.
-   * #6f6459 measures 4.9:1 on the page and 6.2:1 on a card.
+   * Orange cannot be text on white — #d17c45 measures 2.9:1 and fails AA at
+   * any size. So it is a *fill* colour only, labelled in near-black, and
+   * `--primary-text` carries the darkened brand for the places that need the
+   * accent as a word rather than as a shape.
    */
-  --muted-foreground: #6f6459; /* warm grey */
+  --primary: #d17c45;
+  /*
+   * As dark as this label can usefully go. Pure black on #d17c45 measures
+   * 6.68:1 — the brand orange has a hard ceiling below §9.6's 7:1 floor, so
+   * no choice of label clears it. This sits at that ceiling; clearing the
+   * floor would mean darkening the brand itself, which is not mine to do.
+   * Recorded here so the next person does not re-derive it.
+   */
+  --primary-foreground: #170c02;
+  --primary-text: #7a4119;
 
-  --accent: #fbe7d6; /* peach accent (hover/active) */
-  --accent-foreground: #8a4a1e;
+  --secondary: #edebe8;
+  --secondary-foreground: #2c2723;
 
-  --destructive: #d6193c; /* brand red */
+  --muted: #efedea;
+  --muted-foreground: #53504a;
+
+  --accent: #f0eeeb; /* hover/active surface */
+  --accent-foreground: #1c1917;
+
+  /*
+   * Status hues darkened for light, and each one carries white.
+   * The oBizee originals were tuned as *fills beside* white, not as text on
+   * it: #1fa968 measured 2.71:1 and #f5a623 2.03:1. These clear 7:1.
+   */
+  --destructive: #a8102b;
   --destructive-foreground: #ffffff;
 
-  --success: #1fa968;
+  --success: #0e6039;
   --success-foreground: #ffffff;
-  --warning: #f5a623;
-  --warning-foreground: #1a1a1a;
-  --info: #457dd1;
+  --warning: #7a4f06;
+  --warning-foreground: #ffffff;
+  --info: #1a4f9c;
   --info-foreground: #ffffff;
 
-  /* Was #ece3da: a hairline that vanished against a white card, so tables read
-     as floating text rather than rows. */
-  --border: #e0d3c3; /* warm hairline, visible on white */
-  --input: #e4d8cc;
+  /* Near-zero. Cards and rows draw nothing; this is for form controls, where
+     an input with no edge is not a field. */
+  --border: rgba(28, 25, 23, 0.08);
+  --input: rgba(28, 25, 23, 0.16);
+  --ring: #d17c45;
+
+  /*
+   * Depth, and the one asymmetry between the themes.
+   *
+   * On light a real shadow works, so elevation is a soft two-stop drop — a
+   * tight contact shadow plus a wide diffuse one, which is what reads as a
+   * physical card rather than a drawn rectangle. On dark the same shadow is
+   * invisible, so `.dark` redefines these as a hairline plus an accent bloom.
+   * One utility, `shadow-[var(--shadow-card)]`, is correct in both.
+   */
+  --shadow-card:
+    0 1px 2px rgba(28, 25, 23, 0.05), 0 6px 16px -6px rgba(28, 25, 23, 0.10);
+  --shadow-raised:
+    0 2px 4px rgba(28, 25, 23, 0.06), 0 18px 36px -12px rgba(28, 25, 23, 0.18);
+  --glow-primary: rgba(209, 124, 69, 0.45);
+  --glow-primary-soft: rgba(209, 124, 69, 0.28);
+
+  --chart-1: #d17c45;
+  --chart-2: #1fa968;
+  --chart-3: #457dd1;
+  --chart-4: #7c633a;
+  --chart-5: #e6a93c;
+
+  --brand-bg-warm: #fdf7f2;
+  --brand-brown: #6b4a1f;
+
+  /* Tints at 10% of their own hue, composited over whatever is beneath, so a
+     status pill is correct on the page, on a card and inside a popover. */
+  --success-bg: rgba(14, 96, 57, 0.10);
+  --destructive-bg: rgba(168, 16, 43, 0.10);
+  --warning-bg: rgba(122, 79, 6, 0.10);
+  --info-bg: rgba(26, 79, 156, 0.10);
+  --primary-bg: rgba(209, 124, 69, 0.13);
+  --muted-bg: rgba(28, 25, 23, 0.04);
+
+  --sidebar: #2b2119;
+  --sidebar-foreground: #cbbfb2;
+  --sidebar-primary: #d17c45;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #3d2f23; /* active/hover row */
+  --sidebar-accent-foreground: #f6ede3;
+  --sidebar-border: #3d2f23;
+  --sidebar-ring: #d17c45;
+}
+
+/*
+ * The opt-in. `next-themes` writes `.dark` on <html>, from the OS preference
+ * or the top-bar toggle.
+ *
+ * Two rules invert here, and only these two:
+ *
+ * 1. **Borders become white at low alpha.** A dark hairline on a dark card is
+ *    the thing that reads as cheap.
+ * 2. **Shadow becomes hairline + glow.** See --shadow-card below.
+ *
+ * Near-black, never #000 — pure black kills the elevation ladder, because
+ * there is nothing left to step down to. The whole family is warmed toward
+ * #d17c45 (hue ~28) so the accent belongs to the surface it sits on rather
+ * than floating over a generic charcoal.
+ */
+.dark {
+  --background: #0e0b09; /* base layer — warm near-black */
+  --foreground: #f2ebe4;
+
+  --card: #17120f; /* +1 step */
+  --card-foreground: #f2ebe4;
+  --popover: #1f1813; /* +2 steps — overlays must beat cards */
+  --popover-foreground: #f2ebe4;
+
+  --primary: #d17c45; /* brand orange — the one accent */
+  --primary-foreground: #1a1209; /* 5.9:1, where white was 3.14:1 */
+  /* On dark the accent IS legible as text (5.9:1), so this is the same hue
+     rather than the darkened one light needs. */
+  --primary-text: #d17c45;
+
+  --secondary: #241c17;
+  --secondary-foreground: #f2ebe4;
+
+  --muted: #1c1613;
+  /* 7.2:1 on the page ground, 6.8:1 on a card — measured in the browser, not
+     estimated. See the DR-13 note at the top of this file: the light palette
+     could not reach WCAG AA here, let alone the PRD's 7:1 floor. */
+  --muted-foreground: #ada195;
+
+  --accent: #241c17; /* hover/active surface */
+  --accent-foreground: #f7f2ec;
+
+  /*
+   * Status hues, brightened for dark. #1fa968 and #457dd1 were tuned to sit on
+   * white; on near-black they read as muddy and their white foreground has
+   * nothing to gain. Each is lifted and its foreground flipped to near-black.
+   */
+  --destructive: #ff8194;
+  --destructive-foreground: #2a0a11;
+
+  --success: #3ecf8e;
+  --success-foreground: #06231a;
+  --warning: #f5b944;
+  --warning-foreground: #2a1c05;
+  --info: #6aa3f0;
+  --info-foreground: #08182c;
+
+  /* White at low alpha, per rule 2. Composites over whatever it sits on, so
+     one value works on the page, on a card and inside a popover. */
+  --border: rgba(255, 255, 255, 0.07);
+  --input: rgba(255, 255, 255, 0.11);
   --ring: #d17c45; /* focus ring = brand */
+
+  /*
+   * The asymmetry. A drop shadow over #0e0b09 renders nothing, so the same
+   * two tokens become a white hairline (elevation as an edge) plus an accent
+   * bloom (elevation as light). Components never branch on theme.
+   */
+  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-raised:
+    0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 0 42px -12px rgba(209, 124, 69, 0.35);
+  --glow-primary: rgba(209, 124, 69, 0.55);
+  --glow-primary-soft: rgba(209, 124, 69, 0.35);
 
   --chart-1: #d17c45; /* orange */
   --chart-2: #1fa968; /* green */
@@ -210,19 +410,20 @@
   --chart-4: #7c633a; /* brown */
   --chart-5: #e6a93c; /* gold */
 
-  /* extra brand aliases */
-  --brand-bg-warm: #fff6ee;
-  --brand-brown: #7c633a;
+  /* extra brand aliases. brand-brown was a *text* colour on light surfaces;
+     inverted it has to become light or every line using it disappears. */
+  --brand-bg-warm: #1c1410;
+  --brand-brown: #d8b98a;
 
-  /* Status tints. successBg and dangerBg are the dashboard's own values from
-     tokens.ts; the other three are mixed to the same weight so a row of status
-     pills reads as one family rather than three borrowed ones. */
-  --success-bg: #eaf5ef;
-  --destructive-bg: #fce8ec;
-  --warning-bg: #fdf1dd;
-  --info-bg: #e8f0fa;
-  --primary-bg: #fbe7d6; /* peach — same as accent, deliberately */
-  --muted-bg: #f4efea;
+  /* Status tints — each hue at 14% over whatever it sits on. Opaque tints do
+     not work here: the same pill appears on the page, on a card and inside a
+     popover, and a fixed hex matches exactly one of the three. */
+  --success-bg: rgba(62, 207, 142, 0.14);
+  --destructive-bg: rgba(255, 107, 129, 0.14);
+  --warning-bg: rgba(245, 185, 68, 0.14);
+  --info-bg: rgba(106, 163, 240, 0.14);
+  --primary-bg: rgba(209, 124, 69, 0.14);
+  --muted-bg: rgba(255, 255, 255, 0.05);
 
   /*
    * A dark, warm rail — not white.
@@ -237,14 +438,6 @@
    * The hue is the palette's own brown taken to a deep neutral, so it belongs
    * to the same family as #d17c45 rather than being a generic charcoal.
    */
-  --sidebar: #2b2119;
-  --sidebar-foreground: #cbbfb2;
-  --sidebar-primary: #d17c45;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #3d2f23; /* active/hover row */
-  --sidebar-accent-foreground: #f6ede3;
-  --sidebar-border: #3d2f23;
-  --sidebar-ring: #d17c45;
 }
 
 @layer base {
