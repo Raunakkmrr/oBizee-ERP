@@ -14,14 +14,14 @@ import { cn } from "@/lib/utils";
  *
  * Three devices, taken from the reference ERP and re-tinted to oBizee's palette:
  *
- * - **A tinted head band** (`bg-muted/60` + `border-b`) so head and body are
+ * - **A tinted head band** (a lighter surface, no rule) so head and body are
  *   different surfaces rather than the same surface with bolder text.
  * - **A brand icon chip** — `bg-primary/10 text-primary`, the dashboard's single
  *   highest-yield colour device, used 24 times there and nowhere here until now.
  * - **An action slot in the head**, so a panel's own action sits with the panel
  *   instead of floating above the page.
  *
- * `flush` drops body padding for `divide-y` row lists, which is how every dense
+ * `flush` drops body padding for zebra row lists, which is how every dense
  * screen in the dashboard is actually built (there is no `<table>` in it at all).
  *
  * **`tone="support"` is the product's secondary surface.** `--secondary`
@@ -71,12 +71,12 @@ export function Panel({
     >
       <div
         className={cn(
-          // Solid, not /60. At 60% opacity over white the head band was a
-          // 1.03 ratio — the title read as floating text with a stray rule
-          // beneath it, which is what "the lines are coming half" describes:
-          // not short lines, invisible ones.
-          "flex flex-wrap items-center gap-3 border-b-2 border-b-border px-4 py-3",
-          support ? "bg-secondary" : "bg-secondary/60",
+          // No rule under the head. On dark the band separates itself by
+          // being a lighter surface than the body it caps; a 2px hairline on
+          // top of that is the "2D" tell, and it was the loudest line left in
+          // the product.
+          "flex flex-wrap items-center gap-3 px-4 py-3",
+          support ? "bg-secondary" : "bg-white/[0.03]",
         )}
       >
         {Icon ? (
@@ -126,7 +126,7 @@ export function ColumnHeader({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 border-b bg-muted px-4 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase",
+        "flex items-center gap-3 bg-white/[0.02] px-4 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase",
         className,
       )}
     >
@@ -151,7 +151,7 @@ export function GroupHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 border-b bg-secondary/50 px-4 py-1.5">
+    <div className="flex items-center gap-2 bg-white/[0.03] px-4 py-1.5">
       <span className="text-xs font-semibold text-secondary-foreground">
         {label}
       </span>
@@ -261,7 +261,7 @@ export function ActionBar({
   primary: React.ReactNode;
 }) {
   return (
-    <div className="sticky bottom-0 z-[var(--z-sticky)] -mx-4 mt-4 border-t bg-card/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
+    <div className="sticky bottom-0 z-[var(--z-sticky)] -mx-4 mt-4 bg-card/95 px-4 py-3 shadow-[0_-8px_24px_-12px_rgba(28,25,23,0.25)] backdrop-blur md:-mx-6 md:px-6">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         {children}
         <div className="ml-auto flex shrink-0 items-center gap-2">{primary}</div>

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
+import { Chip } from "@/components/shared/controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -52,33 +53,6 @@ const PRIORITIES = [
   { key: "urgent", label: "Urgent" },
   { key: "breakdown", label: "Breakdown" },
 ] as const;
-
-function Chip({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={cn(
-        "min-h-9 rounded-full border px-3 py-1.5 text-sm transition-colors",
-        "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-        selected
-          ? "border-primary bg-primary/10 font-medium text-primary"
-          : "border-border hover:bg-muted",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
 
 /**
  * FR-106's carry-across, as props rather than a hook: the page reads

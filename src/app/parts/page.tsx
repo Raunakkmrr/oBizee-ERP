@@ -5,6 +5,7 @@ import { PackageSearch } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
+import { ROW, TabBar } from "@/components/shared/controls";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -148,7 +149,7 @@ function Reorder({ data }: { data: PartsData }) {
                 <label
                   key={row.id}
                   className={cn(
-                    "flex cursor-pointer items-center gap-3 border-b px-4 py-2.5 text-sm transition-colors last:border-b-0",
+                    "flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm",
                     on ? "bg-primary/[0.04]" : "hover:bg-muted/50",
                   )}
                 >
@@ -252,7 +253,7 @@ function Locations({ data }: { data: PartsData }) {
     <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
       {data.locations.map((location) => (
         <Card key={location.id} className="gap-0 overflow-hidden py-0">
-          <div className="border-b px-3 py-2">
+          <div className="bg-muted px-3 py-2">
             <p className="text-sm font-medium">{location.name}</p>
             {/*
               §6.14: a van is named **with its technician**. "Van 3" is not
@@ -267,7 +268,7 @@ function Locations({ data }: { data: PartsData }) {
           {location.lines.map((line) => (
             <div
               key={line.partId}
-              className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-sm last:border-b-0"
+              className={cn("flex items-center justify-between gap-2 px-3 py-1.5 text-sm", ROW)}
             >
               <span className="min-w-0 truncate">{line.partName}</span>
               <span
@@ -308,7 +309,7 @@ function Exceptions({ data }: { data: PartsData }) {
       {data.exceptions.map((exception) => (
         <div
           key={exception.id}
-          className="border-b px-3 py-2.5 text-sm last:border-b-0"
+          className={cn("px-3 py-2.5 text-sm", ROW)}
         >
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <div className="min-w-0 flex-1">
@@ -387,25 +388,15 @@ export default function PartsPage() {
           description="What to buy, and what is unaccounted for."
         />
 
-        <div className="mb-3 flex items-center gap-1 border-b">
-          {PARTS_TABS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={tab === value}
-              onClick={() => setTab(value)}
-              className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
-                "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                tab === value
-                  ? "border-primary font-medium text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {PARTS_TAB_LABEL[value]}
-            </button>
-          ))}
-        </div>
+        <TabBar
+          className="mb-3"
+          value={tab}
+          onChange={setTab}
+          items={PARTS_TABS.map((value) => ({
+            value,
+            label: PARTS_TAB_LABEL[value],
+          }))}
+        />
 
         <QueryBoundary query={query} label="parts and stock" loadingRows={6}>
           {(data) =>

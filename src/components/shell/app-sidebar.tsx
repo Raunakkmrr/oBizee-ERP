@@ -16,7 +16,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { NavIcon } from "./nav-icon";
+import { NavStack } from "./nav-stack";
 import {
   footerNavFor,
   navGroupsFor,
@@ -100,42 +100,12 @@ export function AppSidebar({
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => {
-                  const count = badgeCount(item, badges);
-                  return (
-                    <SidebarMenuItem key={item.key}>
-                      {/*
-                        A tint alone is easy to miss at a glance across nine
-                        destinations; the reference ERP pairs it with a left edge
-                        bar and that is what makes the current location findable
-                        without reading. Colour is not the only channel — the
-                        bar is a shape (§6.13.4).
-                      */}
-                      <SidebarMenuButton
-                        render={<Link href={item.href} />}
-                        isActive={isActive(item.href)}
-                        tooltip={item.label}
-                        // `data-active` is a PRESENCE attribute here (`data-active=""`), not
-                        // `data-active="true"` — the primitive sets it via Base UI's boolean
-                        // form, so `data-[active=true]:` silently matches nothing.
-                        className="relative data-active:before:absolute data-active:before:left-0 data-active:before:top-1/2 data-active:before:h-5 data-active:before:w-1 data-active:before:-translate-y-1/2 data-active:before:rounded-r-full data-active:before:bg-primary"
-                      >
-                        <NavIcon name={item.icon} className="size-4" />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                      {count ? (
-                        // The number alone is not the message (§6.13.4): the
-                        // accessible name says what the count means, so it does
-                        // not rely on colour or position to be understood.
-                        <SidebarMenuBadge aria-label={`${count} need attention`}>
-                          <span className="tnum">{count}</span>
-                        </SidebarMenuBadge>
-                      ) : null}
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
+              <NavStack
+                layoutGroup="nav"
+                items={group.items}
+                isActive={isActive}
+                badgeFor={(item) => badgeCount(item, badges)}
+              />
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
@@ -167,20 +137,12 @@ export function AppSidebar({
           </span>
         </div>
 
-        <SidebarMenu>
-          {footer.map((item) => (
-            <SidebarMenuItem key={item.key}>
-              <SidebarMenuButton
-                render={<Link href={item.href} />}
-                isActive={isActive(item.href)}
-                tooltip={item.label}
-              >
-                <NavIcon name={item.icon} className="size-4" />
-                <span>{item.label}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
+        {/*
+          Its own layout group. The footer is a separate list; sharing the
+          main menu's pill would send the highlight flying the height of the
+          rail whenever the two lists disagreed about who was active.
+        */}
+        <NavStack layoutGroup="nav-footer" items={footer} isActive={isActive} />
       </SidebarFooter>
 
       <SidebarRail />

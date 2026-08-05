@@ -6,6 +6,7 @@ import { HandCoins, MessageCircle, Phone, Plus, ReceiptIndianRupee } from "lucid
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
+import { TabBar } from "@/components/shared/controls";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -76,13 +77,16 @@ function AgeingStrip({
             disabled={empty}
             onClick={() => onPick(selected ? null : bucket)}
             className={cn(
-              "min-w-[124px] shrink-0 rounded-lg border p-2.5 text-left transition-colors",
-              "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+              "min-w-[124px] shrink-0 rounded-xl p-2.5 text-left transition-all duration-200",
+              "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
+              // An empty band recedes into the page rather than being drawn as
+              // a dashed outline — it is not a control, so it should not look
+              // like one that happens to be switched off.
               empty
-                ? "border-dashed border-border bg-card"
+                ? "bg-muted-bg text-muted-foreground"
                 : selected
-                  ? "border-primary bg-primary/10"
-                  : "border-border bg-card hover:bg-muted/60",
+                  ? "bg-primary-bg shadow-[var(--shadow-raised)]"
+                  : "bg-card shadow-[var(--shadow-card)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-raised)]",
             )}
           >
             <p className="text-xs text-muted-foreground">{bucket} days</p>
@@ -120,7 +124,7 @@ function ReceivableRow({
   primary: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-muted/40">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors odd:bg-white/[0.018] hover:bg-accent">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium">{row.customer}</span>
@@ -258,7 +262,7 @@ function Receivables({ data }: { data: MoneyData }) {
 function PayableRow({ bill, primary }: { bill: Payable; primary: boolean }) {
   const countdown = countdownFor(bill);
   return (
-    <div className="border-b px-4 py-3 text-sm last:border-b-0">
+    <div className="px-4 py-3 text-sm odd:bg-white/[0.018]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
@@ -462,26 +466,16 @@ export default function MoneyPage() {
           }
         />
 
-        {/* Two full-width tabs at 390px (§6.12.5), never a dropdown of views. */}
-        <div className="mb-3 flex items-center gap-1 border-b">
-          {SIDES.map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={side === value}
-              onClick={() => pick(value)}
-              className={cn(
-                "-mb-px flex-1 border-b-2 px-3 py-2 text-sm transition-colors sm:flex-none",
-                "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                side === value
-                  ? "border-primary font-medium text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {value === "receivables" ? "They owe us" : "We owe them"}
-            </button>
-          ))}
-        </div>
+        {/* §6.12.5: both sides visible at 390px, never a dropdown of views. */}
+        <TabBar
+          className="mb-3"
+          value={side}
+          onChange={pick}
+          items={[
+            { value: "receivables", label: "They owe us" },
+            { value: "payables", label: "We owe them" },
+          ]}
+        />
 
         <QueryBoundary query={query} label="money" loadingRows={6}>
           {(data) =>

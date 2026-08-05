@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, MessageCircle, Phone, PhoneCall, Plus, Trend
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
+import { TabBar } from "@/components/shared/controls";
 import { MoneyText } from "@/components/shared/money-text";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { LogOutcome } from "@/components/leads/log-outcome";
@@ -160,26 +161,16 @@ export default function LeadsPage() {
           }
         />
 
-        {/* Both tabs always visible — never a dropdown of views (§6.6.1). */}
-        <div className="mb-3 flex items-center gap-1 border-b">
-          {(["queue", "pipeline"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={tab === value}
-              onClick={() => setTab(value)}
-              className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
-                "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                tab === value
-                  ? "border-primary font-medium text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {value === "queue" ? "Follow-up queue" : "Pipeline"}
-            </button>
-          ))}
-        </div>
+        {/* §6.6.1: every view visible at once, never a dropdown of views. */}
+        <TabBar
+          className="mb-3"
+          value={tab}
+          onChange={setTab}
+          items={[
+            { value: "queue", label: "Follow-up queue" },
+            { value: "pipeline", label: "Pipeline" },
+          ]}
+        />
 
         <QueryBoundary query={query} label="the follow-up queue" loadingRows={8}>
           {(data) => {
@@ -243,7 +234,7 @@ export default function LeadsPage() {
                         key={column.stage}
                         className="flex w-64 shrink-0 flex-col rounded-xl border bg-card"
                       >
-                        <div className="border-b bg-muted/60 px-3 py-2">
+                        <div className="bg-muted px-3 py-2">
                           <div className="flex items-baseline justify-between gap-2">
                             <span className="truncate text-sm font-semibold">
                               {STAGE_LABEL[column.stage]}
@@ -415,7 +406,7 @@ export default function LeadsPage() {
                                   rowRefs.current[lead.id] = el;
                                 }}
                                 tabIndex={-1}
-                                className="flex h-[52px] items-center gap-3 border-b px-4 text-sm transition-colors last:border-b-0 hover:bg-muted/40 focus:bg-muted/60 focus:outline-none"
+                                className="flex h-[52px] items-center gap-3 px-4 text-sm transition-colors odd:bg-white/[0.018] hover:bg-accent focus:bg-accent focus:outline-none"
                               >
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 leading-[18px]">

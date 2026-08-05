@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { MoneyText } from "@/components/shared/money-text";
+import { ROW } from "@/components/shared/controls";
 import { toneClasses } from "@/lib/design/tokens";
 import { cn } from "@/lib/utils";
 import { loading, type Query } from "@/lib/data/result";
@@ -90,7 +91,7 @@ function MoneyTile({
 
 function CallRowItem({ row, primary }: { row: CallRow; primary: boolean }) {
   return (
-    <li className="flex items-start gap-3 border-b py-3 last:border-b-0">
+    <li className={cn("flex items-start gap-3 px-2 py-3", ROW)}>
       <span
         className={cn(
           "mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium",

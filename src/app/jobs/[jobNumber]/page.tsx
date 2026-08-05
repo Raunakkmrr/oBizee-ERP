@@ -303,7 +303,7 @@ export default function JobDetailPage({
                         </p>
 
                         {job.asset.repeatFailure ? (
-                          <p className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/10 p-2 font-medium text-destructive">
+                          <p className="flex items-center gap-2 rounded-lg bg-destructive-bg p-2 font-medium text-destructive">
                             <TriangleAlert className="size-4 shrink-0" />
                             Repeat failure: {job.asset.repeatFailure}
                           </p>

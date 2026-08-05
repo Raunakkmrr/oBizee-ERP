@@ -15,6 +15,7 @@ import {
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
+import { ROW } from "@/components/shared/controls";
 import { MoneyText } from "@/components/shared/money-text";
 import { ColumnHeader, Panel } from "@/components/shared/panel";
 import { Button } from "@/components/ui/button";
@@ -159,7 +160,7 @@ export default function GstWorkspacePage() {
 
                   {readiness.kind === "blocked" ? (
                     // Every reason, by name and count. Never a generic message.
-                    <div className="border-t bg-destructive/5 px-4 py-3">
+                    <div className="bg-destructive-bg px-4 py-3">
                       <p className="text-xs font-medium text-destructive">
                         Export is blocked until these are resolved
                       </p>
@@ -214,7 +215,7 @@ export default function GstWorkspacePage() {
                         <div
                           key={table.code}
                           className={cn(
-                            "flex items-center gap-3 border-b px-4 py-2.5 text-sm last:border-b-0",
+                            cn("flex items-center gap-3 px-4 py-2.5 text-sm", ROW),
                             table.failed && "bg-destructive/5",
                           )}
                         >
@@ -261,10 +262,10 @@ export default function GstWorkspacePage() {
                       {/* ---------- FR-814's footing line ---------- */}
                       <div
                         className={cn(
-                          "border-t-2 px-4 py-3",
+                          "px-4 py-3 font-medium",
                           balance.balanced
-                            ? "border-t-success/40 bg-success/5"
-                            : "border-t-destructive/40 bg-destructive/5",
+                            ? "bg-success-bg"
+                            : "bg-destructive-bg",
                         )}
                       >
                         <div className="flex items-center gap-3 text-sm">
@@ -352,7 +353,7 @@ export default function GstWorkspacePage() {
                         return (
                           <div
                             key={row.kind}
-                            className="flex items-center gap-3 border-b px-4 py-2.5 text-sm last:border-b-0"
+                            className={cn("flex items-center gap-3 px-4 py-2.5 text-sm", ROW)}
                           >
                             <span
                               className={cn(

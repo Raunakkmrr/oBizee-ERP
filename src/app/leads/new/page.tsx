@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Mic } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
+import { Chip } from "@/components/shared/controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,33 +56,6 @@ const SERVICES = [
 
 const FOLLOW_UPS = ["Today", "Tomorrow", "+3 days", "+1 week"] as const;
 
-function Chip({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={cn(
-        "min-h-9 rounded-full border px-3 py-1.5 text-sm transition-colors",
-        "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-        selected
-          ? "border-primary bg-primary/10 font-medium text-primary"
-          : "border-border hover:bg-muted",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
 /** FR-102's panel. Resting state renders **nothing** — §6.7.2. */
 function DuplicatePanel({
   lookup,
@@ -92,7 +66,7 @@ function DuplicatePanel({
 }) {
   if (unavailable) {
     return (
-      <div className="rounded-lg border border-input bg-muted p-3 text-sm text-muted-foreground">
+      <div className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">
         Duplicate check unavailable — check the customer list after saving.
       </div>
     );
@@ -101,7 +75,7 @@ function DuplicatePanel({
 
   if (lookup.kind === "customer") {
     return (
-      <div className="space-y-2 rounded-lg border border-primary/25 bg-primary/10 p-3 text-sm">
+      <div className="space-y-2 rounded-xl bg-primary-bg p-3 text-sm">
         <p className="font-medium">{lookup.name}</p>
         <p className="text-muted-foreground tabular-nums">
           {lookup.pastJobs} past jobs
@@ -129,7 +103,7 @@ function DuplicatePanel({
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-warning/30 bg-warning/15 p-3 text-sm">
+    <div className="space-y-2 rounded-xl bg-warning-bg p-3 text-sm">
       <p className="font-medium">
         {lookup.name}{" "}
         <span className="font-normal text-muted-foreground tnum-id">

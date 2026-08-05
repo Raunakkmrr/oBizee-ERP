@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Info } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
+import { Chip } from "@/components/shared/controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,33 +51,6 @@ import { useDispatch } from "@/lib/data/use-store";
  * carried across, so nothing is retyped. FR-501 also demands the schedule step
  * come immediately, "because a contract without a schedule generates nothing".
  */
-
-function Chip({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={cn(
-        "min-h-9 rounded-full border px-3 py-1.5 text-sm transition-colors",
-        "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-        selected
-          ? "border-primary bg-primary/10 font-medium text-primary"
-          : "border-border hover:bg-muted",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
 
 /** FR-106's carry-across, passed down from the server page as props. */
 export type NewContractPrefill = {

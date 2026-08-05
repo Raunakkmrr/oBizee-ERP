@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { MoneyText } from "@/components/shared/money-text";
+import { ROW_TR } from "@/components/shared/controls";
 import { asPaise } from "@/lib/money";
 import {
   codeForAato,
@@ -195,7 +196,7 @@ export default function CreateInvoicePage() {
                 </div>
 
                 {/* ================= THE DERIVATION LINE ================= */}
-                <div className="rounded-lg border border-primary/25 bg-primary/10 p-3">
+                <div className="rounded-xl bg-primary-bg p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <p className="flex items-start gap-2 text-sm font-medium">
                       <Info
@@ -263,7 +264,7 @@ export default function CreateInvoicePage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b text-xs text-muted-foreground">
+                      <tr className="bg-muted text-xs text-muted-foreground">
                         <th className="py-2 text-left font-medium">#</th>
                         <th className="py-2 text-left font-medium">
                           Description
@@ -281,7 +282,7 @@ export default function CreateInvoicePage() {
                     </thead>
                     <tbody>
                       {lines.map((line, index) => (
-                        <tr key={line.description} className="border-b">
+                        <tr key={line.description} className={ROW_TR}>
                           <td className="py-2 tabular-nums">{index + 1}</td>
                           <td className="py-2">{line.description}</td>
                           <td className="py-2 tnum-id">

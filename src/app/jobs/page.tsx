@@ -89,11 +89,11 @@ export default function JobsPage() {
               aria-pressed={filter === value}
               onClick={() => setFilter(value)}
               className={cn(
-                "min-h-9 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                "min-h-9 rounded-full px-3.5 py-1.5 text-sm transition-all duration-200",
+                "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
                 filter === value
-                  ? "border-primary bg-primary/10 font-medium text-primary"
-                  : "border-border hover:bg-muted",
+                  ? "bg-primary font-medium text-primary-foreground shadow-[var(--shadow-card)]"
+                  : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
               {value === null ? "All" : FILTER_LABEL[value]}
@@ -128,7 +128,7 @@ export default function JobsPage() {
                     <Link
                       key={job.id}
                       href={`/jobs/${job.jobNumber}`}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none"
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors odd:bg-white/[0.018] hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
                     >
                       <span className="w-32 shrink-0 text-xs text-muted-foreground tnum-id">
                         {job.jobNumber}

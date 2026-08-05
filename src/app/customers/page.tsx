@@ -5,6 +5,7 @@ import { MapPin, MessageCircle, Phone, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
+import { ROW } from "@/components/shared/controls";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -91,7 +92,7 @@ function SitePanel({ site }: { site: Site }) {
           {contactOrder(site.contacts).map((contact) => (
             <div
               key={contact.id}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-muted/40"
+              className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm", ROW)}
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-2">
@@ -165,8 +166,8 @@ function SitePanel({ site }: { site: Site }) {
                 "min-h-8 rounded-full border px-2.5 py-1 text-xs transition-colors",
                 "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
                 assetFilter === null
-                  ? "border-primary bg-primary/10 font-medium text-primary"
-                  : "border-border hover:bg-muted",
+                  ? "bg-primary font-medium text-primary-foreground shadow-[var(--shadow-card)]"
+                  : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
               All assets
@@ -181,8 +182,8 @@ function SitePanel({ site }: { site: Site }) {
                   "min-h-8 rounded-full border px-2.5 py-1 text-xs transition-colors",
                   "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
                   assetFilter === asset.id
-                    ? "border-primary bg-primary/10 font-medium text-primary"
-                    : "border-border hover:bg-muted",
+                    ? "bg-primary font-medium text-primary-foreground shadow-[var(--shadow-card)]"
+                    : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >
                 {asset.make} {asset.model}
@@ -199,7 +200,7 @@ function SitePanel({ site }: { site: Site }) {
               {entries.map((entry) => (
                 <div
                   key={entry.id}
-                  className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b px-3 py-2 text-sm last:border-b-0"
+                  className={cn("flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-2 text-sm", ROW)}
                 >
                   <span className="w-24 shrink-0 text-xs text-muted-foreground tabular-nums">
                     {entry.dateWord}
@@ -364,8 +365,8 @@ export default function CustomersPage() {
                           "min-h-9 rounded-full border px-3 py-1.5 text-sm transition-colors",
                           "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
                           isActive
-                            ? "border-primary bg-primary/10 font-medium text-primary"
-                            : "border-border hover:bg-muted",
+                            ? "bg-primary font-medium text-primary-foreground shadow-[var(--shadow-card)]"
+                            : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
                         )}
                       >
                         {customer.name}
