@@ -142,10 +142,37 @@ export function jobValue(job: JobRow): Computed<Paise> | null {
   return computed(asPaise(job.valuePaise));
 }
 
+/**
+ * What each skill actually covers, in the words the service types use.
+ *
+ * Plain substring matching was wrong and the triage board is what exposed it:
+ * a refrigeration technician did not match `Chiller AMC`, `Cold room AMC` or
+ * `Deep freezer repair`, so the board told a coordinator that nobody in the
+ * firm could do three of the day's jobs. The old UI hid the defect by listing
+ * technicians without saying *why* they were offered; showing the reason made
+ * it obvious in one screen.
+ *
+ * This is a stopgap with a real shape underneath it. **A skill taxonomy
+ * belongs in tenant settings**, not in a constant here — a firm that services
+ * lifts or fire panels has none of these words. It is written down rather than
+ * quietly hardcoded so it is findable when that lands.
+ */
+const SKILL_COVERS: Record<string, readonly string[]> = {
+  refrigeration: ["chiller", "cold room", "freezer", "refrigerat"],
+  "water treatment": ["water purifier", "water treatment", "ro plant"],
+  ac: ["air conditioning", "hvac"],
+  generator: ["genset", "dg set"],
+  electrical: ["wiring", "panel"],
+};
+
 /** Does this technician's skill list cover the job's service type? */
 export function hasSkillFor(tech: Technician, job: JobRow): boolean {
   const service = job.serviceType.toLowerCase();
-  return tech.skills.some((skill) => service.includes(skill.toLowerCase()));
+  return tech.skills.some((skill) => {
+    const key = skill.toLowerCase();
+    if (service.includes(key)) return true;
+    return (SKILL_COVERS[key] ?? []).some((term) => service.includes(term));
+  });
 }
 
 /**
@@ -489,3 +516,141 @@ export const getBoard = defineQuery<void, Board>({
 
 /** Exposed so the technician-panel-down state can be exercised in review. */
 export const uncomputableValue = uncomputable;
+
+/* ------------------------------------------------------------------ triage */
+
+/**
+ * Why a job is on the coordinator's plate right now — or `null` if it is not.
+ *
+ * **This is the screen's thesis.** The board used to be one flat list of
+ * fifteen rows sorted "worst first", which put a breakdown two hours late and a
+ * signed-off job in identical treatment and left the urgency encoded in sort
+ * order alone. Sorting is not showing.
+ *
+ * A job is an exception when it needs a decision that only a human can make.
+ * Everything else — assigned, on time, in progress, finished — is the day
+ * happening correctly, and belongs in reference rather than in the way.
+ *
+ * The order of the checks is the order of severity, and it is deliberate: a
+ * late job that is *also* unassigned reads as `late`, because the lateness is
+ * the fact that changes what she says on the phone.
+ */
+export type TriageReason = "late" | "unassigned" | "blocked";
+
+export const TRIAGE_LABEL: Record<TriageReason, string> = {
+  late: "Late",
+  unassigned: "Nobody assigned",
+  blocked: "Waiting on parts",
+};
+
+export function triageReason(job: JobRow): TriageReason | null {
+  if (job.sla?.kind === "late") return "late";
+  if (job.technician === null) return "unassigned";
+  if (job.status === "PARTS_AWAITED") return "blocked";
+  return null;
+}
+
+/** Severity order for the triage band. Lower sorts first. */
+const TRIAGE_RANK: Record<TriageReason, number> = {
+  late: 0,
+  unassigned: 1,
+  blocked: 2,
+};
+
+const PRIORITY_RANK: Record<JobRow["priority"], number> = {
+  breakdown: 0,
+  urgent: 1,
+  normal: 2,
+};
+
+/**
+ * The exceptions, worst first: reason, then priority, then the day's order.
+ *
+ * `breakdown` outranks `urgent` inside a reason rather than across reasons — a
+ * late normal job still beats an unassigned breakdown, because the late one has
+ * a customer already waiting.
+ */
+export function triageJobs(
+  jobs: readonly JobRow[],
+): Array<{ job: JobRow; reason: TriageReason }> {
+  return jobs
+    .flatMap((job) => {
+      const reason = triageReason(job);
+      return reason ? [{ job, reason }] : [];
+    })
+    .sort(
+      (a, b) =>
+        TRIAGE_RANK[a.reason] - TRIAGE_RANK[b.reason] ||
+        PRIORITY_RANK[a.job.priority] - PRIORITY_RANK[b.job.priority],
+    );
+}
+
+/**
+ * The rest of the day, grouped by slot in the order the day runs.
+ *
+ * Slots are free text (`9-1`, `1-5`, `5-8`, or an exact `11:30`), so the order
+ * comes from the first hour in the string rather than from a lookup table that
+ * an exact time would fall straight through. An exact-time job sorts among the
+ * windows by its own hour, which is where a dispatcher expects to find it.
+ */
+export function restOfDay(
+  jobs: readonly JobRow[],
+): Array<{ slot: string; jobs: JobRow[] }> {
+  const groups = new Map<string, JobRow[]>();
+  for (const job of jobs) {
+    if (triageReason(job)) continue;
+    const bucket = groups.get(job.slot);
+    if (bucket) bucket.push(job);
+    else groups.set(job.slot, [job]);
+  }
+  return [...groups.entries()]
+    .map(([slot, slotJobs]) => ({ slot, jobs: slotJobs }))
+    .sort((a, b) => slotStartHour(a.slot) - slotStartHour(b.slot));
+}
+
+/**
+ * The starting hour of a slot, on a 24-hour clock.
+ *
+ * `9-1`, `1-5` and `5-8` are afternoon-wrapping shorthand: a service business
+ * does not start at one in the morning. Anything at or below 8 is read as
+ * afternoon or evening, which is what makes `1-5` sort after `9-1` instead of
+ * before it.
+ */
+export function slotStartHour(slot: string): number {
+  const first = /^(\d{1,2})/.exec(slot.trim());
+  if (!first) return 99;
+  const hour = Number(first[1]);
+  return hour <= 8 ? hour + 12 : hour;
+}
+
+/**
+ * Technicians who could take this job, best first, with the reason shown.
+ *
+ * The old flow made assignment a cross-panel journey: press `[Assign]` on a
+ * row, and a *different* panel changed mode. Below 1280px that panel is under
+ * the fold, so the product's core loop broke on the most common laptop. The
+ * candidates now sit inside the row that needs them.
+ *
+ * On leave is a hard exclusion (never offered), and lacking the skill is shown
+ * rather than hidden — a coordinator sometimes knowingly sends the wrong-skilled
+ * technician because he is the only body available, and hiding him would make
+ * the product look broken rather than opinionated.
+ */
+export function assignCandidates(
+  job: JobRow,
+  technicians: readonly Technician[],
+): Array<{ tech: Technician; inLocality: boolean; skilled: boolean }> {
+  return technicians
+    .filter((tech) => tech.status.kind !== "leave")
+    .map((tech) => ({
+      tech,
+      inLocality: tech.localities.includes(job.locality),
+      skilled: hasSkillFor(tech, job),
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.skilled) - Number(a.skilled) ||
+        Number(b.inLocality) - Number(a.inLocality) ||
+        a.tech.jobsToday - b.tech.jobsToday,
+    );
+}
