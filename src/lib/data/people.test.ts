@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   assignable,
   fitFor,
+  guardDeactivate,
+  guardRoleChange,
   matchesQuery,
   nextPersonId,
   rankForJob,
@@ -181,5 +183,92 @@ describe("a bench of fifty", () => {
     expect(unknown.length).toBeGreaterThan(0);
     // Above the actively-unqualified, below the qualified.
     expect(unknown.every((f) => f.score === 0)).toBe(true);
+  });
+});
+
+describe("guards — block what cannot be undone, warn what merely surprises", () => {
+  const owner = person({ id: "o1", name: "Manish", role: "owner", skills: [] });
+  const owner2 = person({ id: "o2", name: "Second", role: "owner", skills: [] });
+  const coord = person({ id: "c1", name: "Priya", role: "coordinator", skills: [] });
+
+  describe("changing a role", () => {
+    it("blocks demoting the only active owner, by any route", () => {
+      // Owner is the only role holding settings:write and people:manage, so a
+      // tenant with none has nobody who can put one back.
+      const guard = guardRoleChange([owner, coord], "o1", "coordinator", "c1");
+      expect(guard.kind).toBe("block");
+    });
+
+    it("blocks it even when the other owner is deactivated", () => {
+      const guard = guardRoleChange(
+        [owner, { ...owner2, active: false }],
+        "o1",
+        "technician",
+        "o1",
+      );
+      expect(guard.kind).toBe("block");
+    });
+
+    it("warns rather than blocks when demoting yourself with a spare owner", () => {
+      // Recoverable: the other owner can undo it.
+      const guard = guardRoleChange([owner, owner2], "o1", "technician", "o1");
+      expect(guard.kind).toBe("warn");
+      if (guard.kind === "warn") {
+        expect(guard.message).toMatch(/your own role/i);
+      }
+    });
+
+    it("allows demoting a different owner when one remains", () => {
+      expect(guardRoleChange([owner, owner2], "o2", "technician", "o1").kind).toBe(
+        "allow",
+      );
+    });
+
+    it("allows any change that does not touch the last owner", () => {
+      expect(guardRoleChange([owner, coord], "c1", "accountant", "o1").kind).toBe(
+        "allow",
+      );
+      expect(guardRoleChange([owner, coord], "c1", "owner", "o1").kind).toBe(
+        "allow",
+      );
+    });
+
+    it("allows a no-op", () => {
+      expect(guardRoleChange([owner], "o1", "owner", "o1").kind).toBe("allow");
+    });
+  });
+
+  describe("deactivating", () => {
+    it("blocks the only active owner", () => {
+      expect(guardDeactivate([owner, coord], "o1", 0).kind).toBe("block");
+    });
+
+    it("warns when a technician still holds today's work", () => {
+      // The jobs do not vanish — they stay assigned to somebody the board now
+      // draws as on leave, which nobody notices until the customer rings.
+      const guard = guardDeactivate([owner, person({ id: "t1" })], "t1", 3);
+      expect(guard.kind).toBe("warn");
+      if (guard.kind === "warn") {
+        expect(guard.message).toMatch(/3 jobs today/);
+      }
+    });
+
+    it("says job, singular, for one", () => {
+      const guard = guardDeactivate([owner, person({ id: "t1" })], "t1", 1);
+      if (guard.kind === "warn") expect(guard.message).toMatch(/1 job today/);
+    });
+
+    it("allows deactivating a technician with an empty day", () => {
+      expect(guardDeactivate([owner, person({ id: "t1" })], "t1", 0).kind).toBe(
+        "allow",
+      );
+    });
+
+    it("is a no-op for somebody already inactive", () => {
+      expect(
+        guardDeactivate([owner, person({ id: "t1", active: false })], "t1", 5)
+          .kind,
+      ).toBe("allow");
+    });
   });
 });

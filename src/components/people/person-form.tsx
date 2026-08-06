@@ -3,16 +3,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, UserMinus, UserPlus } from "lucide-react";
+import { ArrowLeft, ShieldAlert, TriangleAlert, UserMinus, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Chip } from "@/components/shared/controls";
 import { Section } from "@/components/job/sections";
+import { cn } from "@/lib/utils";
 import { e164 } from "@/lib/contact";
-import { useDispatch } from "@/lib/data/use-store";
-import { SKILLS, type Person } from "@/lib/data/people";
+import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
+import {
+  SKILLS,
+  guardDeactivate,
+  guardRoleChange,
+  type Guard,
+  type Person,
+} from "@/lib/data/people";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
 
@@ -47,9 +54,36 @@ const KNOWN_LOCALITIES = [
   "Connaught Place",
 ];
 
+/** A blocked change explains itself; a warning has to be acknowledged. */
+function GuardNotice({ guard }: { guard: Guard }) {
+  if (guard.kind === "allow") return null;
+  const blocked = guard.kind === "block";
+  const Icon = blocked ? ShieldAlert : TriangleAlert;
+  return (
+    <div
+      role={blocked ? "alert" : "status"}
+      className={cn(
+        "flex items-start gap-2.5 rounded-xl p-3 text-sm",
+        blocked ? "bg-destructive-bg" : "bg-warning-bg",
+      )}
+    >
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "mt-0.5 size-4 shrink-0",
+          blocked ? "text-destructive" : "text-warning",
+        )}
+      />
+      <p>{guard.kind === "block" ? guard.reason : guard.message}</p>
+    </div>
+  );
+}
+
 export function PersonForm({ existing }: { existing?: Person }) {
   const dispatch = useDispatch();
   const router = useRouter();
+  const me = useCurrentUser();
+  const state = useStoreState();
 
   const [name, setName] = useState(existing?.name ?? "");
   const [phone, setPhone] = useState(existing?.phone ?? "");
@@ -60,8 +94,33 @@ export function PersonForm({ existing }: { existing?: Person }) {
     existing?.localities ?? [],
   );
 
+  const [acknowledged, setAcknowledged] = useState(false);
+
   const today = new Date();
   const phoneOk = e164(phone) !== null;
+
+  /*
+    Both guards are evaluated live, so the consequence appears while the reader
+    is choosing rather than after they commit.
+  */
+  const roleGuard: Guard = existing
+    ? guardRoleChange(state.people, existing.id, role, me.id)
+    : { kind: "allow" };
+
+  const openJobsToday = existing
+    ? state.board.jobs.filter(
+        (job) => job.technician?.id === existing.id,
+      ).length
+    : 0;
+
+  const deactivateGuard: Guard = existing
+    ? guardDeactivate(state.people, existing.id, openJobsToday)
+    : { kind: "allow" };
+
+  const roleBlocked = roleGuard.kind === "block";
+  // A warning must be seen before it can be passed. Reset on every change of
+  // role, or an acknowledgement of one consequence would carry to another.
+  const needsAck = roleGuard.kind === "warn" && !acknowledged;
   const missing = [
     name.trim() === "" ? "a name" : null,
     // Not "a phone" — the reason it is rejected is the useful half.
@@ -185,10 +244,27 @@ export function PersonForm({ existing }: { existing?: Person }) {
                       key={option}
                       label={ROLE_LABELS[option]}
                       selected={role === option}
-                      onClick={() => setRole(option)}
+                      onClick={() => {
+                        setRole(option);
+                        setAcknowledged(false);
+                      }}
                     />
                   ))}
                 </div>
+                <div className="mt-2 empty:hidden">
+                  <GuardNotice guard={roleGuard} />
+                </div>
+                {roleGuard.kind === "warn" ? (
+                  <label className="mt-2 flex items-start gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={acknowledged}
+                      onChange={(event) => setAcknowledged(event.target.checked)}
+                      className="mt-0.5 size-3.5 shrink-0 accent-[var(--color-primary)]"
+                    />
+                    I understand I will lose access to Settings.
+                  </label>
+                ) : null}
               </div>
             </div>
           </Section>
@@ -242,7 +318,10 @@ export function PersonForm({ existing }: { existing?: Person }) {
         </div>
 
         <div className="mt-4 flex max-w-4xl flex-wrap items-center gap-2">
-          <Button disabled={missing.length > 0} onClick={save}>
+          <Button
+            disabled={missing.length > 0 || roleBlocked || needsAck}
+            onClick={save}
+          >
             {existing ? "Save changes" : "Add person"}
           </Button>
           <Button
@@ -265,6 +344,7 @@ export function PersonForm({ existing }: { existing?: Person }) {
             <Button
               variant="outline"
               className="ml-auto"
+              disabled={existing.active && deactivateGuard.kind === "block"}
               onClick={() => {
                 dispatch({
                   type: "SET_PERSON_ACTIVE",
@@ -279,6 +359,17 @@ export function PersonForm({ existing }: { existing?: Person }) {
             </Button>
           ) : null}
         </div>
+
+        {/*
+          Shown beside the button rather than behind a confirm dialog: the
+          consequence is a fact about today's board, and the reader should be
+          able to go and fix it instead of being asked to accept it blind.
+        */}
+        {existing?.active ? (
+          <div className="mt-3 max-w-4xl empty:hidden">
+            <GuardNotice guard={deactivateGuard} />
+          </div>
+        ) : null}
 
         {existing ? (
           <p className="mt-2 max-w-4xl text-xs text-muted-foreground">

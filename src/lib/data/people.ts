@@ -173,6 +173,107 @@ export function nextPersonId(people: readonly Person[]): string {
 
 export type { Role };
 
+/* ------------------------------------------------------------------ guards */
+
+/**
+ * Whether a change to the directory is safe, and what to say about it.
+ *
+ * Three outcomes, not two. `block` is for a change with **no way back through
+ * the product** — the reader would have to clear browser storage or call
+ * support. `warn` is for a change that is recoverable but has a consequence
+ * they cannot see from the form they are looking at. Collapsing the two into a
+ * single "are you sure" trains people to click through both.
+ */
+export type Guard =
+  | { kind: "allow" }
+  | { kind: "warn"; message: string }
+  | { kind: "block"; reason: string };
+
+function activeOwnersExcluding(
+  people: readonly Person[],
+  excludeId: string,
+): Person[] {
+  return people.filter(
+    (person) =>
+      person.role === "owner" && person.active && person.id !== excludeId,
+  );
+}
+
+/**
+ * Changing somebody's role.
+ *
+ * The blocking case is the **last active owner** losing the role — by any
+ * route, not only by editing themselves. `owner` is the only role holding
+ * `settings:write` and `people:manage`, so a tenant with none has nobody who
+ * can put one back: Settings is gone from every remaining navigation and the
+ * routes refuse everyone. That is unrecoverable inside the product.
+ *
+ * Demoting yourself while another owner exists is merely a surprise, so it
+ * warns: you lose Settings the moment you save, and someone else has to undo it.
+ */
+export function guardRoleChange(
+  people: readonly Person[],
+  id: string,
+  nextRole: Role,
+  actingAs: string,
+): Guard {
+  const person = people.find((candidate) => candidate.id === id);
+  if (!person || person.role === nextRole) return { kind: "allow" };
+
+  if (person.role === "owner" && nextRole !== "owner") {
+    if (activeOwnersExcluding(people, id).length === 0) {
+      return {
+        kind: "block",
+        reason:
+          "This is the only active owner. Making them anything else would leave nobody who can manage people or settings, and there would be no way back.",
+      };
+    }
+    if (id === actingAs) {
+      return {
+        kind: "warn",
+        message:
+          "You are changing your own role. You will lose Settings and People as soon as you save, and another owner will have to change it back.",
+      };
+    }
+  }
+  return { kind: "allow" };
+}
+
+/**
+ * Taking somebody off the strength.
+ *
+ * Two separate concerns, deliberately not merged: the last owner is a block for
+ * the same reason as above, and a technician holding today's work is a warning
+ * — the jobs do not vanish, they stay assigned to somebody the board will now
+ * draw as on leave, which is exactly the silent state a dispatcher would not
+ * catch until the customer rang.
+ */
+export function guardDeactivate(
+  people: readonly Person[],
+  id: string,
+  openJobsToday: number,
+): Guard {
+  const person = people.find((candidate) => candidate.id === id);
+  if (!person || !person.active) return { kind: "allow" };
+
+  if (person.role === "owner" && activeOwnersExcluding(people, id).length === 0) {
+    return {
+      kind: "block",
+      reason:
+        "This is the only active owner. Deactivating them would leave nobody who can manage people or settings.",
+    };
+  }
+
+  if (openJobsToday > 0) {
+    return {
+      kind: "warn",
+      message: `${person.name} still holds ${openJobsToday} job${openJobsToday === 1 ? "" : "s"} today. They stay assigned and will show as on leave on the board — reassign them first, or they will be missed.`,
+    };
+  }
+
+  return { kind: "allow" };
+}
+
 /* ------------------------------------------------------------------- seed */
 
 /**
