@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { personSchema } from "./people";
 import { reduce, seedState, type Action, type StoreState } from "./store";
 import { techniciansFromPeople } from "./board";
 
@@ -416,6 +418,7 @@ describe("the directory is the only record of a person", () => {
           active: true,
           skills: ["Plumbing"],
           localities: ["Rohini"],
+          grade: "standard",
         },
       },
       now,
@@ -440,6 +443,7 @@ describe("the directory is the only record of a person", () => {
           active: true,
           skills: ["Plumbing"],
           localities: [],
+          grade: "standard",
         },
       },
       now,
@@ -490,5 +494,31 @@ describe("the directory is the only record of a person", () => {
     const state = seedState();
     const board = techniciansFromPeople(state.people, state.board.jobs, new Map());
     expect(board.map((t) => t.name)).not.toContain("Priya Sharma");
+  });
+});
+
+describe("a stored slice whose shape has changed", () => {
+  it("rejects people restored without a field the type now requires", () => {
+    // The regression: `grade` was added to Person, the `people` slice still
+    // existed, so the blob restored and every grade came back undefined. Slice
+    // names alone do not catch a changed shape.
+    const stale = seedState().people.map(({ grade: _grade, ...rest }) => rest);
+    expect(z.array(personSchema).safeParse(stale).success).toBe(false);
+  });
+
+  it("accepts the current seed", () => {
+    expect(z.array(personSchema).safeParse(seedState().people).success).toBe(
+      true,
+    );
+  });
+
+  it("carries a grade on every technician in the seed", () => {
+    // Grade drives who the picker will not send alone; an ungraded bench makes
+    // that rule inert.
+    for (const person of seedState().people.filter(
+      (p) => p.role === "technician",
+    )) {
+      expect(person.grade, person.name).not.toBeNull();
+    }
   });
 });

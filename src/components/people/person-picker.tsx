@@ -40,7 +40,12 @@ export function PersonPicker({
   onCancel,
 }: {
   people: readonly Person[];
-  job: { serviceType: string; locality: string };
+  job: {
+    serviceType: string;
+    locality: string;
+    /** Drives the apprentice rule — a breakdown is not an apprentice's job alone. */
+    priority?: "normal" | "urgent" | "breakdown";
+  };
   loadFor: (personId: string) => number;
   selectedId?: string | null;
   onPick: (person: Person) => void;
@@ -81,7 +86,7 @@ export function PersonPicker({
       {matching.length === 0 ? (
         <p className="px-1 py-2 text-xs text-muted-foreground">
           {people.length === 0
-            ? "No technicians on the strength yet — add one in Settings → People."
+            ? "No technicians on the strength yet — add one under Team."
             : `Nobody matches “${query}”.`}
         </p>
       ) : null}

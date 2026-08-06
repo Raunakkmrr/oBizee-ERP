@@ -2,25 +2,12 @@
 
 import { GripVertical } from "lucide-react";
 import { MoneyText } from "@/components/shared/money-text";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { asPaise } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { EM_DASH } from "@/lib/data/result";
-import {
-  PIPELINE_STAGES,
-  STAGE_LABEL,
-  daysSinceContact,
-  isStalled,
-  type Lead,
-  type PipelineColumn,
-  type PipelineStage,
-} from "@/lib/data/leads";
+import { PIPELINE_STAGES, STAGE_LABEL, daysSinceContact, isStalled, type Lead, type PipelineColumn, type PipelineStage } from "@/lib/data/leads";
 import { useDraggableCard, useDropColumn } from "./pipeline-dnd";
 
 /**

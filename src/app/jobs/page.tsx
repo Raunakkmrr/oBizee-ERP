@@ -12,16 +12,7 @@ import { ColumnHeader, Panel } from "@/components/shared/panel";
 import { cn } from "@/lib/utils";
 import { EM_DASH, loading, renderComputed, type Query } from "@/lib/data/result";
 import { formatMoney } from "@/lib/money";
-import {
-  BOARD_FILTERS,
-  FILTER_LABEL,
-  getBoard,
-  jobValue,
-  matchesFilter,
-  type Board,
-  type BoardFilter,
-} from "@/lib/data/board";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { BOARD_FILTERS, FILTER_LABEL, getBoard, jobValue, matchesFilter, type Board, type BoardFilter } from "@/lib/data/board";
 import { useStoreState } from "@/lib/data/use-store";
 
 /**

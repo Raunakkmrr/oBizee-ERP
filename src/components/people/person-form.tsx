@@ -13,14 +13,7 @@ import { Section } from "@/components/job/sections";
 import { cn } from "@/lib/utils";
 import { e164 } from "@/lib/contact";
 import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
-import {
-  SKILLS,
-  guardDeactivate,
-  guardRoleChange,
-  type Guard,
-  type Person,
-} from "@/lib/data/people";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { GRADES, GRADE_LABEL, SKILLS, guardDeactivate, guardRoleChange, type Grade, type Guard, type Person } from "@/lib/data/people";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
 
 /**
@@ -39,6 +32,13 @@ import { ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
  * - **Localities** are how a day gets clustered, so they are a hint and never
  *   a restriction.
  */
+
+/**
+ * Roles with a ladder. Owner, accountant and the CA have no seniority tiers a
+ * service firm would recognise, so the field is not offered for them rather
+ * than being offered and ignored.
+ */
+const GRADED_ROLES = new Set(["technician", "support", "telecaller", "sales"]);
 
 /** The localities the fixture already works in, offered as chips to save typing. */
 const KNOWN_LOCALITIES = [
@@ -93,6 +93,7 @@ export function PersonForm({ existing }: { existing?: Person }) {
   const [localities, setLocalities] = useState<string[]>(
     existing?.localities ?? [],
   );
+  const [grade, setGrade] = useState<Grade | null>(existing?.grade ?? null);
 
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -151,6 +152,8 @@ export function PersonForm({ existing }: { existing?: Person }) {
       // skills — storing them would put an accountant in the assign picker.
       skills: role === "technician" ? skills : [],
       localities: role === "technician" ? localities : [],
+      // Kept for any role that has a ladder; cleared for the ones that do not.
+      grade: GRADED_ROLES.has(role) ? grade : null,
     };
 
     if (existing) {
@@ -158,7 +161,7 @@ export function PersonForm({ existing }: { existing?: Person }) {
     } else {
       dispatch({ type: "ADD_PERSON", person: fields });
     }
-    router.push("/settings?tab=people");
+    router.push("/team");
   }
 
   return (
@@ -171,15 +174,15 @@ export function PersonForm({ existing }: { existing?: Person }) {
           variant="ghost"
           size="sm"
           className="mb-3 -ml-2"
-          render={<Link href="/settings?tab=people" />}
+          render={<Link href="/team" />}
           nativeButton={false}
         >
           <ArrowLeft className="size-4" />
-          Back to people
+          Back to team
         </Button>
 
         <PageHeader
-          breadcrumb={[{ label: "Settings" }, { label: "People" }]}
+          breadcrumb={[{ label: "Team" }]}
           className="mb-4"
           title={existing ? existing.name : "Add a person"}
           description={
@@ -254,6 +257,31 @@ export function PersonForm({ existing }: { existing?: Person }) {
                 <div className="mt-2 empty:hidden">
                   <GuardNotice guard={roleGuard} />
                 </div>
+                {GRADED_ROLES.has(role) ? (
+                  <div className="mt-3">
+                    <p className="mb-1.5 font-medium">Grade</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {GRADES.map((option) => (
+                        <Chip
+                          key={option}
+                          label={GRADE_LABEL[option]}
+                          selected={grade === option}
+                          onClick={() =>
+                            setGrade(grade === option ? null : option)
+                          }
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      {/* The distinction the whole model turns on. */}
+                      Seniority, not permissions — an apprentice and a senior
+                      may do exactly the same things here. It decides who the
+                      board recommends, and who it will not send alone to a
+                      breakdown.
+                    </p>
+                  </div>
+                ) : null}
+
                 {roleGuard.kind === "warn" ? (
                   <label className="mt-2 flex items-start gap-2 text-xs">
                     <input
@@ -326,7 +354,7 @@ export function PersonForm({ existing }: { existing?: Person }) {
           </Button>
           <Button
             variant="outline"
-            render={<Link href="/settings?tab=people" />}
+            render={<Link href="/team" />}
             nativeButton={false}
           >
             Cancel
@@ -351,7 +379,7 @@ export function PersonForm({ existing }: { existing?: Person }) {
                   id: existing.id,
                   active: !existing.active,
                 });
-                router.push("/settings?tab=people");
+                router.push("/team");
               }}
             >
               <UserMinus className="size-4" />

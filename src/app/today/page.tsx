@@ -2,13 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-} from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { TriageCard } from "@/components/board/triage-card";
@@ -17,14 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Illustration } from "@/components/shared/illustration";
 import { cn } from "@/lib/utils";
 import { loading, type Query } from "@/lib/data/result";
-import {
-  getBoard,
-  restOfDay,
-  triageJobs,
-  type Board,
-  type JobRow,
-  type Technician,
-} from "@/lib/data/board";
+import { getBoard, restOfDay, triageJobs, type Board, type JobRow, type Technician } from "@/lib/data/board";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
 import { can } from "@/lib/roles";

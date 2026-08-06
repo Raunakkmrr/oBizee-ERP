@@ -11,13 +11,8 @@ import { Separator } from "@/components/ui/separator";
 import { MoneyText } from "@/components/shared/money-text";
 import { ROW_TR } from "@/components/shared/controls";
 import { asPaise } from "@/lib/money";
-import {
-  codeForAato,
-  computeTotals,
-  derivePlaceOfSupply,
-  type InvoiceLine,
-} from "@/lib/tax";
-import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
+import { codeForAato, computeTotals, derivePlaceOfSupply, type InvoiceLine } from "@/lib/tax";
+import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { Panel } from "@/components/shared/panel";
 import { Briefcase, Send, ShieldCheck } from "lucide-react";
 import { useStoreState } from "@/lib/data/use-store";

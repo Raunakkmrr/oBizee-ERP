@@ -16,10 +16,13 @@
  * Hiding them in the client only is a defect, because the payload is readable.
  */
 
-/** The five built-in roles (FR-1301). Per-tenant overrides come later. */
+/** The eight built-in roles (FR-1301). Per-tenant overrides come later. */
 export const ROLES = [
   "owner",
   "coordinator",
+  "support",
+  "telecaller",
+  "sales",
   "technician",
   "accountant",
   "readonly_ca",
@@ -31,6 +34,9 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   owner: "Owner",
   coordinator: "Coordinator",
+  support: "Support desk",
+  telecaller: "Telecaller",
+  sales: "Sales & estimates",
   technician: "Technician",
   accountant: "Accountant",
   readonly_ca: "Read-only CA",
@@ -47,6 +53,13 @@ export const PERMISSIONS = [
   // Leads and jobs
   "lead:read",
   "lead:write",
+  /**
+   * Preparing a priced quote. The dividing line between the three
+   * customer-facing desks a service firm actually runs: a support desk logs
+   * and reports, a telecaller qualifies and books, and only an estimator puts
+   * a number in front of a customer.
+   */
+  "quote:write",
   "job:read",
   "job:read_own", // technician: only his own, ±3/+14 days (FR-306)
   "job:write",
@@ -134,6 +147,63 @@ const MATRIX: Record<Role, readonly Permission[]> = {
    * (only `job:read_own`), and no price permission of any kind. `price:view_selling`
    * is granted at runtime only when the tenant's FR-1302 toggle is on.
    */
+  /**
+   * The desk that answers the phone.
+   *
+   * Intake and status, nothing else. A support desk that can see selling
+   * prices ends up quoting on the phone, which is exactly the leak the
+   * estimator role exists to prevent — so `price:view_selling` is withheld
+   * even though it makes some screens read as blanks for them.
+   */
+  support: [
+    "lead:read",
+    "lead:write", // logging a complaint creates the lead
+    "job:read",
+    "customer:read",
+    "contract:read",
+    "part:read",
+  ],
+
+  /**
+   * The first call on a new enquiry.
+   *
+   * Qualifies, logs the outcome, books a survey — the §6.6 follow-up queue is
+   * this person's whole screen. Deliberately **cannot quote**: a number given
+   * before anyone has seen the site is the most expensive habit a service firm
+   * can form, and FR-102's duplicate check exists because this desk is where
+   * duplicates are created.
+   */
+  telecaller: [
+    "lead:read",
+    "lead:write",
+    "customer:read",
+    "customer:write",
+    "job:read",
+    "contract:read",
+    "price:view_selling", // to repeat a quote already made, never to make one
+  ],
+
+  /**
+   * Quotes and site visits — the estimator.
+   *
+   * The only customer-facing desk holding `quote:write`, and the one that
+   * converts a lead into a contract. Cost prices stay owner-only (§3.1): an
+   * estimator who can see margin will discount to it.
+   */
+  sales: [
+    "lead:read",
+    "lead:write",
+    "quote:write",
+    "customer:read",
+    "customer:write",
+    "contract:read",
+    "contract:write",
+    "job:read",
+    "invoice:read",
+    "price:view_selling",
+    "report:read",
+  ],
+
   technician: [
     "job:read_own",
     "job:transition_field",

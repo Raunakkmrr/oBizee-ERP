@@ -11,28 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Panel } from "@/components/shared/panel";
 import { Badge } from "@/components/ui/badge";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Illustration } from "@/components/shared/illustration";
 import { cn } from "@/lib/utils";
-import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
+import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
-import {
-  CONDITION_LABEL,
-  CONTACT_ROLE_LABEL,
-  contactOrder,
-  getCustomers,
-  warrantyStateFor,
-  type CustomersData,
-  type Site,
-} from "@/lib/data/customers";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { CONDITION_LABEL, CONTACT_ROLE_LABEL, contactOrder, getCustomers, warrantyStateFor, type CustomersData, type Site } from "@/lib/data/customers";
 
 /**
  * Customers & sites — §6.14's "Site & asset history".

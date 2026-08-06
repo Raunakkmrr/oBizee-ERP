@@ -1,32 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  CircleAlert,
-  CircleCheck,
-  Clock,
-  MapPin,
-  MessageCircle,
-  Navigation,
-  Package,
-  PenLine,
-  Phone,
-  TriangleAlert,
-  WifiOff,
-  type LucideIcon,
-} from "lucide-react";
+import { Check, ChevronDown, CircleAlert, CircleCheck, Clock, MapPin, MessageCircle, Navigation, Package, PenLine, Phone, TriangleAlert, WifiOff, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
+import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
-import {
-  nextStepFor,
-  type Check as StageCheck,
-  type JobDetail,
-  type Stage,
-} from "@/lib/data/job-detail";
+import { nextStepFor, type Check as StageCheck, type JobDetail, type Stage } from "@/lib/data/job-detail";
 
 /**
  * The job detail screen's parts, so the page can order them by stage.

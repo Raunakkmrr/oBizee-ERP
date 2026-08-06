@@ -2,16 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  CircleAlert,
-  CircleCheck,
-  Download,
-  FileSpreadsheet,
-  Info,
-  ListChecks,
-  Scale,
-  TriangleAlert,
-} from "lucide-react";
+import { CircleAlert, CircleCheck, Download, FileSpreadsheet, Info, ListChecks, Scale, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
@@ -24,17 +15,8 @@ import { cn } from "@/lib/utils";
 import { downloadCsv, downloadJson, stampFor } from "@/lib/export";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
-import {
-  BLOCKS_EXPORT,
-  READINESS_ACTION,
-  READINESS_LABEL,
-  exportReadiness,
-  formatPaiseDelta,
-  getGstPeriod,
-  reconcile,
-  type GstPeriod,
-} from "@/lib/data/gst";
-import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
+import { BLOCKS_EXPORT, READINESS_ACTION, READINESS_LABEL, exportReadiness, formatPaiseDelta, getGstPeriod, reconcile, type GstPeriod } from "@/lib/data/gst";
+import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 
 /**
  * GST workspace — §6.14, FR-814.

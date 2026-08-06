@@ -13,13 +13,8 @@ import { ROW } from "@/components/shared/controls";
 import { toneClasses } from "@/lib/design/tokens";
 import { cn } from "@/lib/utils";
 import { loading, type Query } from "@/lib/data/result";
-import {
-  getOwnerHome,
-  toComputedMoney,
-  type CallRow,
-  type OwnerHome,
-} from "@/lib/data/owner-home";
-import { SEED_TENANT, SEED_USERS } from "@/lib/data/fixtures/tenant";
+import { getOwnerHome, toComputedMoney, type CallRow, type OwnerHome } from "@/lib/data/owner-home";
+import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 
 /**
  * Owner Home — PRD §6.10. Mobile-first at 390px.
@@ -151,7 +146,6 @@ function CallRowItem({ row, primary }: { row: CallRow; primary: boolean }) {
 export default function OwnerHomePage() {
   const [query, setQuery] = useState<Query<OwnerHome>>(loading());
   const [hideAmounts, setHideAmounts] = useState(false);
-  const owner = SEED_USERS[0];
 
   useEffect(() => {
     let cancelled = false;

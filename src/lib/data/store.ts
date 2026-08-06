@@ -30,18 +30,17 @@
  */
 import { computeTotals, derivePlaceOfSupply, type InvoiceLine } from "@/lib/tax";
 import { asPaise, type Paise } from "@/lib/money";
+import { z } from "zod";
 import { SEED_LEADS, type Lead, type LeadsData } from "./leads";
 import { SEED_BOARD, type Board, type JobRow } from "./board";
 import { SEED_MONEY, type MoneyData } from "./money";
-import { SEED_PEOPLE, nextPersonId, type Person } from "./people";
 import {
-  SEED_CONTRACTS,
-  type BillingFrequency,
-  type Contract,
-  type Coverage,
-  type Recurrence,
-  VISITS_PER_YEAR,
-} from "./contracts";
+  SEED_PEOPLE,
+  nextPersonId,
+  personSchema,
+  type Person,
+} from "./people";
+import { SEED_CONTRACTS, type BillingFrequency, type Contract, type Coverage, type Recurrence, VISITS_PER_YEAR } from "./contracts";
 import { SEED_TENANT } from "./fixtures/tenant";
 import { open, seal, destroyKey, unavailableMessage } from "./crypto";
 
@@ -123,7 +122,25 @@ export function seedState(): StoreState {
  */
 function hasEverySlice(value: unknown): value is StoreState {
   if (typeof value !== "object" || value === null) return false;
-  return Object.keys(seedState()).every((key) => key in value);
+  if (!Object.keys(seedState()).every((key) => key in value)) return false;
+
+  /*
+    Slice names are not enough.
+
+    The first version of this guard checked only that every top-level slice
+    existed, and caught `money` being added. It did *not* catch `grade` being
+    added to `Person` — the `people` slice was still present, so a blob written
+    before the field restored happily and every grade came back `undefined`.
+    Same class of bug, one level deeper: silently absent rather than loudly
+    stale.
+
+    `people` is validated against its own schema because it is the slice whose
+    shape has changed twice. The others are not yet schema-checked here, which
+    is a known gap rather than a decision — recorded so the next person adding
+    a field knows the guard will not catch them.
+  */
+  const people = (value as { people: unknown }).people;
+  return z.array(personSchema).safeParse(people).success;
 }
 
 /* ---------------------------------------------------------------- actions */

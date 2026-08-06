@@ -3,52 +3,23 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  CircleCheck,
-  Clock,
-  Flag,
-  MapPin,
-  Package,
-  Phone,
-  ReceiptIndianRupee,
-} from "lucide-react";
+import { ArrowLeft, CircleCheck, Clock, Flag, MapPin, Package, Phone, ReceiptIndianRupee } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { Button } from "@/components/ui/button";
-import {
-  AssetBody,
-  CollapsedSection,
-  DecisionBand,
-  PartsBody,
-  Section,
-  SignOffBody,
-  TimelineBody,
-  WhereBody,
-  type Tone,
-} from "@/components/job/sections";
+import { AssetBody, CollapsedSection, DecisionBand, PartsBody, Section, SignOffBody, TimelineBody, WhereBody, type Tone } from "@/components/job/sections";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
 import { getState } from "@/lib/data/store";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
 import { loading, type Query } from "@/lib/data/result";
-import {
-  canBillNow,
-  getJobDetail,
-  primaryActionFor,
-  stageFor,
-  type JobDetail,
-} from "@/lib/data/job-detail";
+import { canBillNow, getJobDetail, primaryActionFor, stageFor, type JobDetail } from "@/lib/data/job-detail";
 import { Unavailable } from "@/components/shared/unavailable";
 import { Chip } from "@/components/shared/controls";
 import { PersonPicker } from "@/components/people/person-picker";
 import { telHref, whatsappHref } from "@/lib/contact";
-import {
-  CURRENT_USER,
-  SEED_TENANT,
-  SEED_USERS,
-} from "@/lib/data/fixtures/tenant";
+import { CURRENT_USER, SEED_TENANT, SEED_USERS } from "@/lib/data/fixtures/tenant";
 import { can } from "@/lib/roles";
 
 /**
@@ -430,6 +401,11 @@ export default function JobDetailPage({
                         job={{
                           serviceType: job.serviceType,
                           locality: job.site.locality,
+                          // Without this the apprentice rule is inert: the
+                          // model knows not to send one alone to a breakdown,
+                          // and the picker never told it which kind of job
+                          // this was.
+                          priority: job.priority,
                         }}
                         loadFor={(id) =>
                           getState().board.jobs.filter(

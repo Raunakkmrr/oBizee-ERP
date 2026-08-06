@@ -2,16 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  CircleAlert,
-  CircleHelp,
-  Clock,
-  HandCoins,
-  MessageCircle,
-  Phone,
-  Plus,
-  ReceiptIndianRupee,
-} from "lucide-react";
+import { CircleAlert, CircleHelp, Clock, HandCoins, MessageCircle, Phone, Plus, ReceiptIndianRupee } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
@@ -23,27 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
-import {
-  AGEING_BUCKETS,
-  MSME_LABEL,
-  ageingTotals,
-  bucketFor,
-  countdownFor,
-  deductionAtRiskPaise,
-  deductionLostPaise,
-  moneyAlarms,
-  splitByPromise,
-  getMoney,
-  type AgeingBucket,
-  type MoneyAlarm,
-  type MoneyData,
-  type Payable,
-  type Receivable,
-} from "@/lib/data/money";
+import { AGEING_BUCKETS, MSME_LABEL, ageingTotals, bucketFor, countdownFor, deductionAtRiskPaise, deductionLostPaise, moneyAlarms, splitByPromise, getMoney, type AgeingBucket, type MoneyAlarm, type MoneyData, type Payable, type Receivable } from "@/lib/data/money";
 import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
 
 /**
  * Money — PRD §6.12. Two sides, **one screen, no tab**.

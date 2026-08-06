@@ -10,17 +10,10 @@ import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/shared/panel";
 import { cn } from "@/lib/utils";
-import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
+import { NEEDS_BACKEND } from "@/components/shared/unavailable";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
-import {
-  conversionRate,
-  filterCaption,
-  getReports,
-  worstDwell,
-  type ReportsData,
-} from "@/lib/data/reports";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { conversionRate, filterCaption, getReports, worstDwell, type ReportsData } from "@/lib/data/reports";
 
 /**
  * Reports / Review — §6.14.

@@ -59,8 +59,6 @@ export function AppShell({
       <AppSidebar role={me.role} badges={badges} userName={me.name} />
       <SidebarInset>
         <TopBar
-          role={me.role}
-          userName={me.name}
           today={today}
           freshness={freshness}
           hideAmounts={hideAmounts}

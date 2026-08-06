@@ -31,6 +31,45 @@ export const SKILLS = [
 
 export type Skill = (typeof SKILLS)[number];
 
+/**
+ * Seniority within a role — **not** a permission.
+ *
+ * A commercial service firm runs roughly a dozen job titles (Senior Service
+ * Tech, Installer Foreman, Controls Tech, Apprentice on the field side alone),
+ * but an apprentice and a twenty-year senior have *identical* rights in the
+ * software. Modelling seniority as a role would mean sixteen permission sets to
+ * maintain and keep in step; modelling it here means eight roles and an
+ * assignment picker that knows who can be sent alone.
+ *
+ * `null` for the desks where it does not apply, and for anyone nobody has
+ * graded yet — which is unknown, not junior.
+ */
+export const GRADES = ["apprentice", "standard", "senior", "lead"] as const;
+
+export type Grade = (typeof GRADES)[number];
+
+export const GRADE_LABEL: Record<Grade, string> = {
+  apprentice: "Apprentice",
+  standard: "Standard",
+  senior: "Senior",
+  lead: "Lead",
+};
+
+/**
+ * Work an apprentice should not be sent to on their own.
+ *
+ * A breakdown is unplanned and usually in front of an unhappy customer; it is
+ * the visit where being alone and inexperienced costs the most. Urgent work is
+ * the same problem with a clock on it. Routine servicing is exactly how an
+ * apprentice learns, so it is not restricted.
+ */
+export function needsSupervision(
+  grade: Grade | null,
+  priority: "normal" | "urgent" | "breakdown",
+): boolean {
+  return grade === "apprentice" && priority !== "normal";
+}
+
 export const personSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
@@ -53,6 +92,8 @@ export const personSchema = z.object({
   skills: z.array(z.string()),
   /** Areas they normally cover. Used to cluster a day's work, not to restrict. */
   localities: z.array(z.string()),
+  /** Seniority, where the role has any. Never affects permissions. */
+  grade: z.enum(GRADES).nullable(),
 });
 
 export type Person = z.infer<typeof personSchema>;
@@ -104,10 +145,11 @@ export type Fit = {
 
 export function fitFor(
   person: Person,
-  job: { serviceType: string; locality: string },
+  job: { serviceType: string; locality: string; priority?: "normal" | "urgent" | "breakdown" },
   jobsToday: number,
 ): Fit {
   const reasons: string[] = [];
+  const supervise = needsSupervision(person.grade, job.priority ?? "normal");
 
   const hasSkill =
     person.skills.length > 0 &&
@@ -141,13 +183,25 @@ export function fitFor(
   score -= Math.min(jobsToday, 8);
   reasons.push(jobsToday === 0 ? "free today" : `${jobsToday} jobs today`);
 
+  if (supervise) {
+    // Ranked down rather than removed: sending an apprentice with a senior is
+    // normal and is how they learn. The picker's job is to say so, not to
+    // decide for the dispatcher.
+    score -= 12;
+    reasons.push("apprentice — not to be sent alone");
+  }
+
   return { person, score, reasons };
 }
 
 /** Best fit first; people who cannot do the work sink but are not removed. */
 export function rankForJob(
   people: readonly Person[],
-  job: { serviceType: string; locality: string },
+  job: {
+    serviceType: string;
+    locality: string;
+    priority?: "normal" | "urgent" | "breakdown";
+  },
   loadFor: (personId: string) => number,
 ): Fit[] {
   return assignable(people)
@@ -294,6 +348,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: [],
+    grade: null,
     localities: [],
   },
   {
@@ -306,6 +361,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: [],
+    grade: null,
     localities: [],
   },
   {
@@ -318,6 +374,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: "mr",
     active: true,
     skills: ["AC", "Refrigeration"],
+    grade: "senior",
     localities: ["Okhla Phase II", "Saket", "Karol Bagh"],
   },
   {
@@ -329,6 +386,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: ["AC", "Water treatment"],
+    grade: "standard",
     localities: ["Vasant Kunj", "Greater Kailash", "Green Park"],
   },
   {
@@ -340,6 +398,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: [],
+    grade: null,
     localities: [],
   },
   {
@@ -351,6 +410,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: [],
+    grade: null,
     localities: [],
   },
   {
@@ -364,6 +424,7 @@ export const SEED_PEOPLE: Person[] = [
     // not keep looking for him.
     active: false,
     skills: ["AC"],
+    grade: "apprentice",
     localities: [],
   },
   {
@@ -375,6 +436,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: ["Generator", "Electrical"],
+    grade: "standard",
     localities: [],
   },
 ];

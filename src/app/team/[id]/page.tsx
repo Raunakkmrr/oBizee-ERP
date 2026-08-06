@@ -39,10 +39,10 @@ function EditPerson({
           </p>
           <Button
             className="mt-4"
-            render={<Link href="/settings?tab=people" />}
+            render={<Link href="/team" />}
             nativeButton={false}
           >
-            Back to people
+            Back to team
           </Button>
         </div>
       </AppShell>

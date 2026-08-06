@@ -4,30 +4,15 @@ import { useSyncExternalStore } from "react";
 
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import {
-  Check,
-  ChevronDown,
-  CircleCheck,
-  Eye,
-  EyeOff,
-  Moon,
-  RefreshCw,
-  Sun,
-  TriangleAlert,
-} from "lucide-react";
+import { Check, ChevronDown, CircleCheck, Eye, EyeOff, Moon, RefreshCw, Sun, TriangleAlert } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
 import type { Person } from "@/lib/data/people";
 import { formatDateLong, formatTime } from "@/lib/datetime";
-import { ROLE_LABELS, type Role } from "@/lib/roles";
+import { ROLE_LABELS } from "@/lib/roles";
 
 /**
  * The top bar — mirrors `obizee-dashboard/src/components/shell/top-bar.tsx`:
@@ -239,15 +224,11 @@ function ActingAs({ me }: { me: Person }) {
 }
 
 export function TopBar({
-  role,
-  userName,
   today,
   freshness,
   hideAmounts,
   onToggleAmounts,
 }: {
-  role: Role;
-  userName: string;
   today: Date;
   freshness: Freshness;
   hideAmounts?: boolean;

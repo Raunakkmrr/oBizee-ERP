@@ -152,7 +152,9 @@ describe("owner — §3.1", () => {
 
 describe("matrix integrity", () => {
   it("defines every role", () => {
-    expect(ROLES).toHaveLength(5);
+    // Eight: the office three, the three customer-facing desks a service firm
+    // actually runs, plus the technician and the read-only CA.
+    expect(ROLES).toHaveLength(8);
     for (const role of ROLES) {
       expect(() => can(role, "job:read")).not.toThrow();
     }
@@ -181,5 +183,47 @@ describe("matrix integrity", () => {
     // approve." — the message needs this list to exist.
     const holders: Role[] = rolesWith("invoice:finalise");
     expect(holders).toEqual(["owner", "accountant"]);
+  });
+});
+
+describe("the three customer-facing desks", () => {
+  it("lets only sales and the owner put a price in front of a customer", () => {
+    // The line the whole split is drawn on. A number given before anyone has
+    // seen the site is the most expensive habit a service firm can form.
+    expect(can("sales", "quote:write")).toBe(true);
+    expect(can("owner", "quote:write")).toBe(true);
+    expect(can("telecaller", "quote:write")).toBe(false);
+    expect(can("support", "quote:write")).toBe(false);
+    expect(can("coordinator", "quote:write")).toBe(false);
+  });
+
+  it("keeps selling prices off the support desk", () => {
+    // A desk that can see prices ends up quoting on the phone.
+    expect(can("support", "price:view_selling")).toBe(false);
+    expect(can("telecaller", "price:view_selling")).toBe(true);
+    expect(can("sales", "price:view_selling")).toBe(true);
+  });
+
+  it("keeps cost prices to the owner and the accountant (§3.1)", () => {
+    // An estimator who can see margin will discount to it. The accountant
+    // needs cost to close the books, which is a different job from selling.
+    const allowed = new Set(["owner", "accountant"]);
+    for (const role of ROLES) {
+      expect(can(role, "price:view_cost"), role).toBe(allowed.has(role));
+    }
+  });
+
+  it("gives every desk the leads it works, and none the dispatch board", () => {
+    for (const role of ["support", "telecaller", "sales"] as const) {
+      expect(can(role, "lead:read"), role).toBe(true);
+      expect(can(role, "job:dispatch"), role).toBe(false);
+    }
+  });
+
+  it("never lets a desk manage people", () => {
+    for (const role of ["support", "telecaller", "sales", "coordinator"] as const) {
+      expect(can(role, "people:manage"), role).toBe(false);
+    }
+    expect(can("owner", "people:manage")).toBe(true);
   });
 });

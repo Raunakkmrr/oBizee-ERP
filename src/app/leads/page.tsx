@@ -14,30 +14,10 @@ import { LogOutcome } from "@/components/leads/log-outcome";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ColumnHeader, GroupHeader, Panel } from "@/components/shared/panel";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { cn } from "@/lib/utils";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
-import {
-  COLLAPSED_BY_DEFAULT,
-  GROUP_LABEL,
-  STAGE_LABEL,
-  STALL_DAYS,
-  daysSinceContact,
-  isStalled,
-  pipelineColumns,
-  getLeads,
-  groupLeads,
-  type Lead,
-  type LeadGroup,
-  type LeadsData,
-} from "@/lib/data/leads";
+import { COLLAPSED_BY_DEFAULT, GROUP_LABEL, STALL_DAYS, pipelineColumns, getLeads, groupLeads, type Lead, type LeadGroup, type LeadsData } from "@/lib/data/leads";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
 

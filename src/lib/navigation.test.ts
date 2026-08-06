@@ -3,7 +3,9 @@ import {
   LANDING,
   NAV_BY_ROLE,
   NAV_ITEMS,
+  footerNavFor,
   navFor,
+  navGroupsFor,
   type NavKey,
 } from "./navigation";
 import { ROLES, can } from "./roles";
@@ -40,8 +42,9 @@ describe("the ordering claims §6.2 refuses to compromise on", () => {
     expect(owner[owner.length - 1]).toBe("settings");
   });
 
-  it("gives the owner all nine primary destinations", () => {
-    expect(owner).toHaveLength(9);
+  it("gives the owner every primary destination", () => {
+    // Ten since Team became its own, out of Settings.
+    expect(owner).toHaveLength(10);
   });
 });
 
@@ -164,6 +167,27 @@ describe("depth and reachability — §6.2's max depth of 2", () => {
     // tabs ARE his three questions, and padding them would be noise.
     for (const key of NAV_BY_ROLE.owner) {
       expect(NAV_ITEMS[key].rationale.length, key).toBeGreaterThan(60);
+    }
+  });
+});
+
+describe("every permitted destination is actually reachable", () => {
+  it("puts each role's nav keys into a group or the footer", () => {
+    // The bug this exists for: `team` was added to the owner's permitted set
+    // and to NAV_ITEMS, but not to any GROUP_DEFINITIONS entry — so it passed
+    // every type check and simply never rendered. A destination nobody can
+    // click is the same as one that does not exist.
+    // Technician is excluded: §2.2 declines a desktop technician workflow
+    // entirely, so his three tabs live in the React Native app and have no web
+    // group by design — not by omission.
+    for (const role of ROLES.filter((r) => r !== "technician")) {
+      const rendered = new Set([
+        ...navGroupsFor(role).flatMap((group) => group.items.map((i) => i.key)),
+        ...footerNavFor(role).map((item) => item.key),
+      ]);
+      for (const key of NAV_BY_ROLE[role]) {
+        expect(rendered.has(key), `${role} cannot reach ${key}`).toBe(true);
+      }
     }
   });
 });

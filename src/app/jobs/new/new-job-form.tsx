@@ -10,8 +10,7 @@ import { Chip } from "@/components/shared/controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { SEED_TENANT, SEED_USERS, CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { SEED_TENANT, SEED_USERS } from "@/lib/data/fixtures/tenant";
 import { useDispatch } from "@/lib/data/use-store";
 
 /**

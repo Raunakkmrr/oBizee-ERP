@@ -6,14 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { telHref } from "@/lib/contact";
 import { SEED_USERS } from "@/lib/data/fixtures/tenant";
-import {
-  assignCandidates,
-  recommendTechnician,
-  TRIAGE_LABEL,
-  type JobRow,
-  type Technician,
-  type TriageReason,
-} from "@/lib/data/board";
+import { assignCandidates, recommendTechnician, TRIAGE_LABEL, type JobRow, type Technician, type TriageReason } from "@/lib/data/board";
 
 /**
  * One exception, with its fix inside it.

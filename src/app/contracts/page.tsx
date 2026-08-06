@@ -13,15 +13,7 @@ import { MoneyText } from "@/components/shared/money-text";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
 import { loading, type Query } from "@/lib/data/result";
-import {
-  BILLING_LABEL,
-  COVERAGE_LABEL,
-  RECURRENCE_LABEL,
-  getContracts,
-  scheduleProgress,
-  type Contract,
-} from "@/lib/data/contracts";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { BILLING_LABEL, COVERAGE_LABEL, RECURRENCE_LABEL, getContracts, scheduleProgress, type Contract } from "@/lib/data/contracts";
 import { useStoreState } from "@/lib/data/use-store";
 
 /**

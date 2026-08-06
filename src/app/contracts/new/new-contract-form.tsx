@@ -14,23 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
 import { EM_DASH } from "@/lib/data/result";
-import { cn } from "@/lib/utils";
-import {
-  BILLING_FREQUENCIES,
-  BILLING_LABEL,
-  COVERAGES,
-  COVERAGE_LABEL,
-  INVOICES_PER_YEAR,
-  RECURRENCES,
-  RECURRENCE_LABEL,
-  VISITS_PER_YEAR,
-  needsReceiptVoucher,
-  perInvoiceAmount,
-  type BillingFrequency,
-  type Coverage,
-  type Recurrence,
-} from "@/lib/data/contracts";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { BILLING_FREQUENCIES, BILLING_LABEL, COVERAGES, COVERAGE_LABEL, INVOICES_PER_YEAR, RECURRENCES, RECURRENCE_LABEL, VISITS_PER_YEAR, needsReceiptVoucher, perInvoiceAmount, type BillingFrequency, type Coverage, type Recurrence } from "@/lib/data/contracts";
 import { useDispatch } from "@/lib/data/use-store";
 
 /**

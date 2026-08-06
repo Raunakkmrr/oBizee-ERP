@@ -2,34 +2,15 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  Building2,
-  Clock,
-  Landmark,
-  Lock,
-  ShieldCheck,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { Building2, Clock, Landmark, Lock, ShieldCheck, type LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Requires } from "@/components/shared/requires";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { ShineBorder } from "@/components/ui/shine-border";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
-import { Input } from "@/components/ui/input";
 // Aliased: this file already has a local `Chip`, which is a label/value
 // display pill rather than a control.
-import { Chip as FilterChip } from "@/components/shared/controls";
-import { useStoreState } from "@/lib/data/use-store";
-import { getState } from "@/lib/data/store";
-import { matchesQuery } from "@/lib/data/people";
-import { ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
-import {
-  CURRENT_USER,
-  SEED_TENANT,
-  SEED_USERS,
-} from "@/lib/data/fixtures/tenant";
+import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 
 /**
  * Settings — attempt 3. **Dark-first.**
@@ -62,7 +43,6 @@ import {
  */
 const SECTIONS = [
   { key: "business", label: "Business", icon: Landmark },
-  { key: "people", label: "People", icon: Users },
   { key: "branches", label: "Branches", icon: Building2 },
   { key: "policy", label: "Policy", icon: ShieldCheck },
   { key: "data", label: "Data", icon: Lock },
@@ -155,7 +135,6 @@ function Settings() {
 
           <div className="mt-6">
             {section === "business" ? <Business /> : null}
-            {section === "people" ? <People /> : null}
             {section === "branches" ? <Branches /> : null}
             {section === "policy" ? <Policy /> : null}
             {section === "data" ? <DataSection /> : null}
@@ -241,160 +220,6 @@ function Tile({ label, value }: { label: string; value: string }) {
 
 /* --------------------------------------------------------------- people */
 
-/**
- * The directory.
- *
- * **Two things were wrong here.** `Invite person` and `Edit` were raw `<button>`
- * elements with no handler — dead controls over a hardcoded fixture, so there
- * was no way to add or change a person at all. And every person was rendered as
- * a card in a grid, which is fine for seven and unusable at fifty: no search,
- * no filter, nothing to type at.
- *
- * Now it reads the store, filters as you type, and both controls go to a real
- * page (forms are pages here, never popups).
- */
-function People() {
-  const [query, setQuery] = useState("");
-  const [role, setRole] = useState<Role | null>(null);
-  // Subscribing re-renders when someone is added, edited or deactivated.
-  useStoreState();
-  const people = getState().people;
-
-  const visible = people.filter(
-    (person) =>
-      (role === null || person.role === role) && matchesQuery(person, query),
-  );
-  const active = people.filter((person) => person.active).length;
-  const technicians = people.filter(
-    (person) => person.role === "technician" && person.active,
-  ).length;
-
-  return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground tabular-nums">
-            {active}
-          </span>{" "}
-          people can sign in ·{" "}
-          <span className="font-semibold text-foreground tabular-nums">
-            {technicians}
-          </span>{" "}
-          technicians on the strength
-        </p>
-        <Link
-          href="/settings/people/new"
-          className="flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-[var(--shadow-raised)] transition-all hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
-        >
-          <Users className="size-4" />
-          Invite person
-        </Link>
-      </div>
-
-      {/* Search first, because at fifty people scanning is not an option. */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search name, phone, skill or area"
-          aria-label="Search people"
-          className="max-w-xs"
-        />
-        <div className="flex flex-wrap gap-1.5">
-          <FilterChip
-            label="Everyone"
-            selected={role === null}
-            onClick={() => setRole(null)}
-          />
-          {ROLES.map((option) => (
-            <FilterChip
-              key={option}
-              label={ROLE_LABELS[option]}
-              selected={role === option}
-              onClick={() => setRole(role === option ? null : option)}
-            />
-          ))}
-        </div>
-      </div>
-
-      {visible.length === 0 ? (
-        <div className={cn(SURFACE, "p-6 text-sm text-muted-foreground")}>
-          Nobody matches “{query}”
-          {role ? ` in ${ROLE_LABELS[role]}` : ""}.
-        </div>
-      ) : null}
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {visible.map((user) => (
-          <div
-            key={user.id}
-            className={cn(SURFACE, "p-5", !user.active && "opacity-60 hover:opacity-100")}
-          >
-            <div className="flex items-start gap-3.5">
-              <span
-                className={cn(
-                  "grid size-11 shrink-0 place-items-center rounded-xl text-sm font-semibold",
-                  user.active
-                    ? "bg-primary-bg text-primary-text"
-                    : "bg-muted text-muted-foreground",
-                )}
-              >
-                {user.name
-                  .split(" ")
-                  .slice(0, 2)
-                  .map((p) => p[0])
-                  .join("")}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-foreground">
-                  {user.name}
-                </p>
-                {/* §7.3: phone is the login identity in this market. */}
-                <p className="truncate font-mono text-xs text-muted-foreground">
-                  {user.phone}
-                </p>
-                {user.skills.length > 0 ? (
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {user.skills.join(" · ")}
-                  </p>
-                ) : user.role === "technician" ? (
-                  // Visible, because it is what makes the assign picker flag
-                  // him — and the fix is one click away.
-                  <p className="mt-0.5 truncate text-xs text-brand-brown">
-                    No skills recorded
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-lg bg-primary-bg px-2.5 py-1 text-xs font-medium text-primary-text">
-                {ROLE_LABELS[user.role as Role]}
-              </span>
-              {user.languageOverride ? (
-                // FR-1304: a per-user override of the tenant default.
-                <span className="rounded-lg bg-muted px-2.5 py-1 text-xs text-muted-foreground uppercase">
-                  {user.languageOverride}
-                </span>
-              ) : null}
-              {!user.active ? (
-                <span className="rounded-lg bg-destructive-bg px-2.5 py-1 text-xs font-medium text-destructive">
-                  Disabled
-                </span>
-              ) : null}
-              <Link
-                href={`/settings/people/${user.id}`}
-                className="ml-auto rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
-              >
-                {user.active ? "Edit" : "Restore"}
-              </Link>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------- branches */
 

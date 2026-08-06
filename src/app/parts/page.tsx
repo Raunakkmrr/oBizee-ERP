@@ -9,42 +9,16 @@ import { ROW, TabBar } from "@/components/shared/controls";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  ActionBar,
-  ColumnHeader,
-  GroupHeader,
-  Panel,
-  ValuePill,
-} from "@/components/shared/panel";
+import { ActionBar, ColumnHeader, GroupHeader, Panel, ValuePill } from "@/components/shared/panel";
 import { Badge } from "@/components/ui/badge";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Illustration } from "@/components/shared/illustration";
 import { cn } from "@/lib/utils";
-import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
+import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import { usePersistedChoice } from "@/lib/persisted-choice";
-import {
-  EXCEPTION_LABEL,
-  EXCEPTION_WHY,
-  PARTS_TABS,
-  PARTS_TAB_LABEL,
-  URGENCY_WORD,
-  byUrgency,
-  getParts,
-  suggestedOrderQty,
-  urgencyFor,
-  type PartsData,
-  type PartsTab,
-  type ReorderRow,
-} from "@/lib/data/parts";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { EXCEPTION_LABEL, EXCEPTION_WHY, PARTS_TABS, PARTS_TAB_LABEL, URGENCY_WORD, byUrgency, getParts, suggestedOrderQty, urgencyFor, type PartsData, type PartsTab, type ReorderRow } from "@/lib/data/parts";
 
 /**
  * Parts & stock — §6.14.

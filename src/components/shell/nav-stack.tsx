@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
-import {
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
+import { SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { NavIcon } from "./nav-icon";
 import { cn } from "@/lib/utils";
 import type { NavItem } from "@/lib/navigation";

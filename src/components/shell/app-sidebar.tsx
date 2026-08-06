@@ -2,27 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail,
-} from "@/components/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
 import { NavStack } from "./nav-stack";
-import {
-  footerNavFor,
-  navGroupsFor,
-  type NavBadge,
-  type NavItem,
-} from "@/lib/navigation";
+import { footerNavFor, navGroupsFor, type NavBadge, type NavItem } from "@/lib/navigation";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 
 /**

@@ -15,17 +15,7 @@
  * mono font would otherwise do here (aligned figures, unambiguous zeros) are
  * done by Inter's `tabular-nums` and `slashed-zero` features instead.
  */
-import {
-  Geist_Mono,
-  Inter,
-  Noto_Sans_Bengali,
-  Noto_Sans_Devanagari,
-  Noto_Sans_Gujarati,
-  Noto_Sans_Kannada,
-  Noto_Sans_Malayalam,
-  Noto_Sans_Tamil,
-  Noto_Sans_Telugu,
-} from "next/font/google";
+import { Geist_Mono, Inter, Noto_Sans_Bengali, Noto_Sans_Devanagari, Noto_Sans_Gujarati, Noto_Sans_Kannada, Noto_Sans_Malayalam, Noto_Sans_Tamil, Noto_Sans_Telugu } from "next/font/google";
 
 /** Latin + every numeral in the product. Always loaded. */
 export const inter = Inter({

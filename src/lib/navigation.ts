@@ -30,6 +30,7 @@ export type NavKey =
   | "money"
   | "parts"
   | "reports"
+  | "team"
   | "settings"
   // Technician-only. §6.2: "not a reduced version of the coordinator's
   // navigation" — he has exactly three questions, and a fourth item would only
@@ -53,6 +54,7 @@ export type NavIcon =
   | "Package"
   | "ChartColumn"
   | "Settings"
+  | "Users"
   | "ClipboardList"
   | "CalendarSync"
   | "RefreshCw";
@@ -169,6 +171,25 @@ export const NAV_ITEMS: Record<NavKey, NavItem> = {
     rationale:
       "Periodic, not daily. Monthly for the accountant, weekly for the owner.",
   },
+  /**
+   * The people who work here.
+   *
+   * Its own destination rather than a Settings tab, because a growing firm
+   * hires far more often than it changes its GST scheme — burying the thing
+   * done weekly under the thing done twice a year is backwards. Settings keeps
+   * the configuration; this keeps the humans.
+   */
+  team: {
+    key: "team",
+    label: "Team",
+    href: "/team",
+    icon: "Users",
+    badge: null,
+    requires: "people:manage",
+    rationale:
+      "Technicians, desks and their skills. Hiring is a weekly act in a growing service firm; tax configuration is not.",
+  },
+
   settings: {
     key: "settings",
     label: "Settings & People",
@@ -229,6 +250,7 @@ export const NAV_BY_ROLE: Record<Role, readonly NavKey[]> = {
     "money",
     "parts",
     "reports",
+    "team",
     "settings",
   ],
   coordinator: [
@@ -240,6 +262,19 @@ export const NAV_BY_ROLE: Record<Role, readonly NavKey[]> = {
     "money", // read-only for this role
     "parts", // view + issue to van
   ],
+  /**
+   * §6.2's rule that a role's navigation is not a reduced copy of another's.
+   * The support desk answers "where is my technician" all day, so Today leads;
+   * it has no money and no pipeline.
+   */
+  support: ["today", "jobs", "leads", "customers"],
+
+  /** The follow-up queue is this desk's entire day, so Leads leads. */
+  telecaller: ["leads", "customers", "jobs", "today"],
+
+  /** Quotes and conversions — the pipeline, then what it turned into. */
+  sales: ["leads", "contracts", "customers", "jobs", "reports"],
+
   accountant: [
     "money", // position 1 — for this persona it IS the spine (§3.4, defect D10)
     "reports", // carries the GST workspace
@@ -259,6 +294,11 @@ export const NAV_BY_ROLE: Record<Role, readonly NavKey[]> = {
 export const LANDING: Record<Role, { web: string; mobile: string }> = {
   owner: { web: "/today", mobile: "/home" },
   coordinator: { web: "/today", mobile: "/today" },
+  // Each desk lands on the screen that *is* its job, never on a shared
+  // dashboard it would have to navigate away from.
+  support: { web: "/today", mobile: "/today" },
+  telecaller: { web: "/leads", mobile: "/leads" },
+  sales: { web: "/leads", mobile: "/leads" },
   accountant: { web: "/money", mobile: "/money" },
   readonly_ca: { web: "/reports", mobile: "/reports" },
   // Mobile only — there is no web technician surface at all (§2.2 declines a
@@ -290,7 +330,9 @@ const GROUP_DEFINITIONS: readonly NavGroup[] = [
   { label: "Overview", items: ["today"] },
   { label: "Work", items: ["jobs", "leads", "contracts", "customers"] },
   { label: "Money", items: ["money"] },
-  { label: "Operations", items: ["parts"] },
+  // Team sits with Operations rather than under Settings: staffing the day is
+  // an operational act, and it is done far more often than configuration.
+  { label: "Operations", items: ["parts", "team"] },
   { label: "Insights", items: ["reports"] },
 ];
 

@@ -1,28 +1,8 @@
 import Link from "next/link";
-import {
-  Banknote,
-  CircleAlert,
-  PackageOpen,
-  PhoneMissed,
-  Star,
-} from "lucide-react";
+import { Banknote, CircleAlert, PackageOpen, PhoneMissed, Star } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import type { AttentionItem, HomeSnapshot } from "@/lib/data/home";
 

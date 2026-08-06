@@ -2,17 +2,7 @@
 
 import type { Person } from "./people";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import {
-  dispatch,
-  getState,
-  getStatus,
-  hydrate,
-  seedState,
-  subscribe,
-  type Action,
-  type HydrationStatus,
-  type StoreState,
-} from "./store";
+import { dispatch, getState, getStatus, hydrate, seedState, subscribe, type Action, type HydrationStatus, type StoreState } from "./store";
 
 /**
  * React binding for the local store.
