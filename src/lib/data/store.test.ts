@@ -254,8 +254,16 @@ describe("actions dispatched before hydration are not lost", () => {
 
     const replayed = reduce(stored, optimistic, NOW);
 
+    // The contract itself puts visits on the board (FR-502), so the job count
+    // is the seed plus those plus the one ad-hoc job — asserting a flat +1
+    // would make this test fail every time visit generation changes.
+    const generated = stored.board.jobs.length - seedState().board.jobs.length;
+    expect(generated).toBeGreaterThan(0);
+
     expect(replayed.contracts.length).toBe(seedState().contracts.length + 1);
-    expect(replayed.board.jobs.length).toBe(seedState().board.jobs.length + 1);
+    expect(replayed.board.jobs.length).toBe(
+      seedState().board.jobs.length + generated + 1,
+    );
     expect(replayed.board.jobs[0].customer).toBe("Grand Plaza Hotel");
   });
 });
@@ -597,5 +605,108 @@ describe("raising a contract's scheduled invoice", () => {
     const invoice = after.invoices.at(-1)!;
     expect(invoice.taxablePaise).toBe(60_000_00);
     expect(invoice.grandTotalPaise).toBeGreaterThan(invoice.taxablePaise);
+  });
+});
+
+describe("GENERATE_CONTRACT_VISITS — FR-502", () => {
+  const contractId = () => seedState().contracts[0].id;
+
+  it("puts real jobs on the board, not a parallel visit entity", () => {
+    const before = seedState();
+    const after = reduce(
+      before,
+      { type: "GENERATE_CONTRACT_VISITS", contractId: contractId() },
+      NOW,
+    );
+    const created = after.board.jobs.length - before.board.jobs.length;
+    expect(created).toBeGreaterThan(0);
+
+    const visit = after.board.jobs.find((job) => job.visitKey !== null)!;
+    // A visit is a job: assignable, badgeable, billable like any other.
+    expect(visit.status).toBe("CREATED");
+    expect(visit.visit).not.toBeNull();
+    expect(visit.jobNumber).toMatch(/^J-/);
+  });
+
+  it("does nothing the second time", () => {
+    // Running twice must not double an AMC's visits.
+    const once = reduce(
+      seedState(),
+      { type: "GENERATE_CONTRACT_VISITS", contractId: contractId() },
+      NOW,
+    );
+    const twice = reduce(
+      once,
+      { type: "GENERATE_CONTRACT_VISITS", contractId: contractId() },
+      NOW,
+    );
+    expect(twice.board.jobs.length).toBe(once.board.jobs.length);
+  });
+
+  it("counts the new visits as unassigned, so the board's counter stays true", () => {
+    const before = seedState();
+    const after = reduce(
+      before,
+      { type: "GENERATE_CONTRACT_VISITS", contractId: contractId() },
+      NOW,
+    );
+    const created = after.board.jobs.length - before.board.jobs.length;
+    expect(after.board.counters.unassigned).toBe(
+      before.board.counters.unassigned + created,
+    );
+  });
+
+  it("ignores an unknown contract rather than throwing", () => {
+    const state = seedState();
+    expect(
+      reduce(state, { type: "GENERATE_CONTRACT_VISITS", contractId: "nope" }, NOW),
+    ).toBe(state);
+  });
+});
+
+describe("WORK_RENEWAL_AS_LEAD — FR-506", () => {
+  const expiring = () => {
+    const state = seedState();
+    state.contracts[0] = { ...state.contracts[0], daysRemaining: 20 };
+    return state;
+  };
+
+  it("creates a lead in the pipeline, carrying the source FR-506 names", () => {
+    const after = reduce(
+      expiring(),
+      { type: "WORK_RENEWAL_AS_LEAD", contractId: seedState().contracts[0].id, actor: "Priya Sharma" },
+      NOW,
+    );
+    const lead = after.leads.leads[0];
+    expect(lead.source).toBe("AMC renewal");
+    expect(lead.name).toBe(seedState().contracts[0].customer);
+    expect(lead.takenBy).toBe("Priya Sharma");
+  });
+
+  it("does not carry the old contract value across as a quote", () => {
+    // A renewal is worked, not assumed renewed — a pre-filled quote would
+    // flatter the pipeline with money nobody has agreed to.
+    const after = reduce(
+      expiring(),
+      { type: "WORK_RENEWAL_AS_LEAD", contractId: seedState().contracts[0].id, actor: "Priya Sharma" },
+      NOW,
+    );
+    expect(after.leads.leads[0].quotedPaise).toBeNull();
+    expect(after.leads.leads[0].quotedUnavailable).toBe(false);
+  });
+
+  it("refuses to create a second lead for the same contract", () => {
+    // Two renewal leads means two people ringing the same customer.
+    const once = reduce(
+      expiring(),
+      { type: "WORK_RENEWAL_AS_LEAD", contractId: seedState().contracts[0].id, actor: "Priya Sharma" },
+      NOW,
+    );
+    const twice = reduce(
+      once,
+      { type: "WORK_RENEWAL_AS_LEAD", contractId: seedState().contracts[0].id, actor: "Ramesh Yadav" },
+      NOW,
+    );
+    expect(twice.leads.leads.length).toBe(once.leads.leads.length);
   });
 });

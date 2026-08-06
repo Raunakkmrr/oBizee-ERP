@@ -183,6 +183,177 @@ export function applyReschedule(
   return next;
 }
 
+/* ---------------------------------------------------------- visit schedule */
+
+/**
+ * Visits a contract owes inside a horizon — FR-502.
+ *
+ * **The gap this closes.** The contract form's own button says *"Create
+ * contract & generate visits"*, and nothing generated a visit. `visitsCommitted`
+ * was a number the contract carried and the board never saw, so an AMC sold in
+ * April produced no work until somebody remembered it — which is precisely the
+ * failure a service ERP exists to prevent.
+ *
+ * Three properties FR-502 states, implemented rather than assumed:
+ *
+ * 1. **Real jobs**, not a separate "visit" object. A visit *is* a job — it gets
+ *    assigned, travelled to, signed off and billed like any other. A parallel
+ *    entity would need a parallel board.
+ * 2. **A 90-day horizon.** Generating a year of jobs on day one fills the board
+ *    with work nobody can act on and makes "how many jobs are open" meaningless.
+ * 3. **Idempotent.** Running it twice must not double the visits, so each one
+ *    carries a deterministic key and generation skips keys already present.
+ */
+const DAYS_BETWEEN_VISITS: Record<Recurrence, number | null> = {
+  WEEKLY: 7,
+  FORTNIGHTLY: 14,
+  // Month-stepped rather than day-stepped, so a 31st anchor behaves. Null here
+  // means "handled by addMonths", not "unsupported".
+  MONTHLY: null,
+  ALTERNATE_MONTHLY: null,
+  QUARTERLY: null,
+  HALF_YEARLY: null,
+  ANNUAL: null,
+};
+
+const MONTHS_BETWEEN_VISITS: Record<Recurrence, number | null> = {
+  WEEKLY: null,
+  FORTNIGHTLY: null,
+  MONTHLY: 1,
+  ALTERNATE_MONTHLY: 2,
+  QUARTERLY: 3,
+  HALF_YEARLY: 6,
+  ANNUAL: 12,
+};
+
+export type PlannedVisit = {
+  /** Deterministic — the same contract, schedule and number always agree. */
+  key: string;
+  contractId: string;
+  scheduleId: string;
+  scope: string;
+  /** `3` of `12` — what the board's visit chip renders. */
+  number: number;
+  of: number;
+  on: Date;
+};
+
+/**
+ * Every visit a contract owes between `from` and `from + horizonDays`.
+ *
+ * Dates are derived from the contract's start and anchor day rather than
+ * stored, so a schedule can never drift from the contract it belongs to — the
+ * same rule `billingSchedule` follows, for the same reason.
+ */
+export function visitSchedule(
+  contract: Contract,
+  from: Date,
+  horizonDays = 90,
+): PlannedVisit[] {
+  const start = parseDateWord(contract.startDate);
+  if (start === null) return [];
+
+  const until = new Date(from.getTime() + horizonDays * 86_400_000);
+  const planned: PlannedVisit[] = [];
+
+  for (const schedule of contract.schedules) {
+    const months = MONTHS_BETWEEN_VISITS[schedule.recurrence];
+    const days = DAYS_BETWEEN_VISITS[schedule.recurrence];
+    const total = schedule.visitsCommitted;
+
+    for (let n = 1; n <= total; n += 1) {
+      const step = n - 1;
+      let on: Date;
+      if (months !== null) {
+        on = addMonths(start, months * step);
+        // The anchor day is the promise for a month-stepped contract — the 15th
+        // means the 15th, clamped in a shorter month rather than spilling.
+        const lastDay = new Date(on.getFullYear(), on.getMonth() + 1, 0).getDate();
+        on.setDate(Math.min(schedule.anchorDay, lastDay));
+      } else if (days !== null) {
+        on = new Date(start.getTime() + days * step * 86_400_000);
+      } else {
+        continue;
+      }
+
+      if (on < from || on > until) continue;
+      planned.push({
+        key: `${contract.id}:${schedule.id}:${n}`,
+        contractId: contract.id,
+        scheduleId: schedule.id,
+        scope: schedule.scope,
+        number: n,
+        of: total,
+        on,
+      });
+    }
+  }
+
+  return planned.sort((a, b) => a.on.getTime() - b.on.getTime());
+}
+
+/**
+ * The visits that still need creating — the idempotent half of FR-502.
+ *
+ * `existingKeys` is what the board already holds. Passing it in rather than
+ * reading a module-level set keeps this pure and makes the double-run case a
+ * one-line test instead of a story about state.
+ */
+export function visitsToGenerate(
+  contract: Contract,
+  existingKeys: ReadonlySet<string>,
+  from: Date,
+  horizonDays = 90,
+): PlannedVisit[] {
+  return visitSchedule(contract, from, horizonDays).filter(
+    (visit) => !existingKeys.has(visit.key),
+  );
+}
+
+/* -------------------------------------------------------------- renewals */
+
+export type Renewal = {
+  contract: Contract;
+  daysToExpiry: number;
+  /** True once a renewal lead exists — the action must not be offered twice. */
+  worked: boolean;
+};
+
+/**
+ * Contracts expiring inside the window — FR-506.
+ *
+ * **Why this produces a lead rather than a reminder.** A renewal has a value, a
+ * decision-maker, a close date and a chance of being lost. That is a deal, and
+ * the product already has a pipeline that handles deals — with silence
+ * detection, ownership and a stage. A renewal living in a notification instead
+ * of the pipeline is a deal nobody is accountable for. The home screen already
+ * says "worked as leads"; this is what makes that sentence true.
+ *
+ * Soonest first: the one expiring on Friday is the one to call today.
+ */
+export function renewalsDue(
+  contracts: readonly Contract[],
+  workedContractIds: ReadonlySet<string>,
+  withinDays = 45,
+): Renewal[] {
+  return contracts
+    .filter(
+      (contract) =>
+        contract.status === "ACTIVE" &&
+        contract.daysRemaining <= withinDays &&
+        contract.daysRemaining >= 0,
+    )
+    .map((contract) => ({
+      contract,
+      daysToExpiry: contract.daysRemaining,
+      worked: workedContractIds.has(contract.id),
+    }))
+    .sort((a, b) => a.daysToExpiry - b.daysToExpiry);
+}
+
+/** The lead source FR-506 names. Matched on, so it is a constant, not a string. */
+export const RENEWAL_SOURCE = "AMC renewal";
+
 /* -------------------------------------------------------- billing schedule */
 
 /**
@@ -502,7 +673,10 @@ export const SEED_CONTRACTS = {
       startDate: "1 Oct 2025",
       endDate: "30 Sep 2026",
       termDays: 364,
-      daysRemaining: 59,
+      // Inside FR-506's 45-day window on purpose: the renewals band is a
+      // decision surface, and a decision surface that is empty in every demo
+      // is one nobody reviews.
+      daysRemaining: 31,
       status: "ACTIVE" as const,
       schedules: [
         {

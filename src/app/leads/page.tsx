@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import { ColumnHeader, GroupHeader, Panel } from "@/components/shared/panel";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { asPaise } from "@/lib/money";
+import { telHref, whatsappHref } from "@/lib/contact";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import { COLLAPSED_BY_DEFAULT, GROUP_LABEL, STALL_DAYS, pipelineColumns, getLeads, groupLeads, type Lead, type LeadGroup, type LeadsData } from "@/lib/data/leads";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
@@ -402,32 +403,49 @@ export default function LeadsPage() {
                                     such equivalent here. Shipped icon-only until
                                     it was seen at full resolution in Chrome.
                                   */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    aria-label={`Call ${lead.name} on ${lead.phone}`}
-                                    render={<a href={`tel:${lead.phone.replace(/\s/g, "")}`} />}
-                                    nativeButton={false}
-                                  >
-                                    <Phone className="size-3.5" />
-                                    Call
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    aria-label={`WhatsApp ${lead.name}`}
-                                    render={
-                                      <a
-                                        href={`https://wa.me/91${lead.phone.replace(/\s/g, "")}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                      />
-                                    }
-                                    nativeButton={false}
-                                  >
-                                    <MessageCircle className="size-3.5" />
-                                    WhatsApp
-                                  </Button>
+                                  {/*
+                                    Routed through `telHref`/`whatsappHref`
+                                    rather than interpolated. Hand-built hrefs
+                                    produced `tel:` on a lead with no number and
+                                    `wa.me/91+91…` on one written internationally
+                                    — both live controls that go nowhere, which
+                                    is worse than an absent one because it fails
+                                    in front of a customer.
+                                  */}
+                                  {telHref(lead.phone) === null ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      No number yet — open the lead to add one
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        aria-label={`Call ${lead.name} on ${lead.phone}`}
+                                        render={<a href={telHref(lead.phone) ?? undefined} />}
+                                        nativeButton={false}
+                                      >
+                                        <Phone className="size-3.5" />
+                                        Call
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        aria-label={`WhatsApp ${lead.name}`}
+                                        render={
+                                          <a
+                                            href={whatsappHref(lead.phone) ?? undefined}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          />
+                                        }
+                                        nativeButton={false}
+                                      >
+                                        <MessageCircle className="size-3.5" />
+                                        WhatsApp
+                                      </Button>
+                                    </>
+                                  )}
                                   <LogOutcome
                                     lead={lead}
                                     onSaved={() => focusNext(flat, index)}

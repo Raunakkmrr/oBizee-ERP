@@ -49,6 +49,8 @@ import {
   type Coverage,
   type Recurrence,
   type ReschedulePolicy,
+  RENEWAL_SOURCE,
+  visitsToGenerate,
 } from "./contracts";
 import {
   SEED_ADVANCES,
@@ -106,7 +108,13 @@ export type StoreState = {
   /** FR-811: numbering is per branch, doc type and financial year. */
   /** FR-810 — money taken before the work, and the vouchers that account for it. */
   advances: Advance[];
-  seq: { job: number; contract: number; invoice: number; advance: number };
+  seq: {
+    job: number;
+    contract: number;
+    invoice: number;
+    advance: number;
+    lead: number;
+  };
 };
 
 export type HydrationStatus =
@@ -128,7 +136,7 @@ export function seedState(): StoreState {
     actingAs: "usr_0002",
     invoices: [],
     advances: structuredClone(SEED_ADVANCES),
-    seq: { job: 440, contract: 32, invoice: 149, advance: 6 },
+    seq: { job: 440, contract: 32, invoice: 149, advance: 6, lead: 151 },
   };
 }
 
@@ -229,6 +237,25 @@ export type Action =
   | { type: "ADJUST_ADVANCE"; voucherNumber: string; invoiceNumber: string }
   | {
       /**
+       * FR-502. The contract form has always said "generate visits"; this is
+       * what makes the button honest. Idempotent by `visitKey`, so a second
+       * run adds nothing.
+       */
+      type: "GENERATE_CONTRACT_VISITS";
+      contractId: string;
+    }
+  | {
+      /**
+       * FR-506. A renewal is a deal, not a reminder — it goes into the
+       * pipeline where silence detection and ownership already live.
+       */
+      type: "WORK_RENEWAL_AS_LEAD";
+      contractId: string;
+      /** Who took it — FR-103 makes this immutable once set. */
+      actor: string;
+    }
+  | {
+      /**
        * Raising a contract's scheduled invoice — the recurring half of billing.
        *
        * The only invoice action used to be `CREATE_INVOICE_FROM_JOB`, which
@@ -285,6 +312,71 @@ function jobNumber(seq: number, now: Date): string {
   const branch = SEED_TENANT.branches[0];
   const yy = String(now.getFullYear()).slice(2);
   return `${branch.jobSeriesPrefix}-${yy}${pad(now.getMonth() + 1, 2)}-${pad(seq, 4)}`;
+}
+
+/**
+ * Add a contract's due visits to the board — FR-502's whole mechanic.
+ *
+ * Shared by `CREATE_CONTRACT` (so the form's "generate visits" button tells the
+ * truth) and `GENERATE_CONTRACT_VISITS` (so a contract signed months ago can be
+ * caught up). Idempotent by `visitKey` in both directions.
+ */
+function withGeneratedVisits(
+  state: StoreState,
+  contract: Contract,
+  now: Date,
+): StoreState {
+  const existing = new Set(
+    state.board.jobs
+      .map((job) => job.visitKey)
+      .filter((key): key is string => key !== null),
+  );
+  const planned = visitsToGenerate(contract, existing, now);
+  if (planned.length === 0) return state;
+
+  let seq = state.seq.job;
+  const created = planned.map((visit): JobRow => {
+    seq += 1;
+    return {
+      id: `job_${seq}`,
+      jobNumber: jobNumber(seq, visit.on),
+      // A generated visit carries the contract's slot promise, not a timestamp
+      // nobody agreed to (FR-203).
+      slot: "9-1",
+      customer: contract.customer,
+      locality: contract.site,
+      serviceType: visit.scope,
+      visit: { n: visit.number, of: visit.of },
+      status: "CREATED",
+      technician: null,
+      priority: "normal",
+      // No SLA: a scheduled visit is owed on its date, not within hours of a
+      // call. Inventing one would badge the whole board late.
+      sla: null,
+      visitAttempt: 1,
+      valuePaise: null,
+      visitKey: visit.key,
+    };
+  });
+
+  return {
+    ...state,
+    board: {
+      ...state.board,
+      jobs: [...created, ...state.board.jobs],
+      counters: {
+        ...state.board.counters,
+        unassigned: state.board.counters.unassigned + created.length,
+      },
+    },
+    seq: { ...state.seq, job: seq },
+  };
+}
+
+/** `L-2608-0152` — leads follow the same month-seq shape as jobs. */
+function leadReference(seq: number, now: Date): string {
+  const yy = String(now.getFullYear()).slice(2);
+  return `L-${yy}${pad(now.getMonth() + 1, 2)}-${pad(seq, 4)}`;
 }
 
 function invoiceNumber(seq: number, now: Date): string {
@@ -387,10 +479,78 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
           },
         ],
       };
+      // FR-502: the button says "generate visits", so it generates them.
+      return withGeneratedVisits(
+        {
+          ...state,
+          contracts: [contract, ...state.contracts],
+          seq: { ...state.seq, contract: seq },
+        },
+        contract,
+        now,
+      );
+    }
+
+    case "GENERATE_CONTRACT_VISITS": {
+      const contract = state.contracts.find(
+        (candidate) => candidate.id === action.contractId,
+      );
+      if (!contract) return state;
+      return withGeneratedVisits(state, contract, now);
+    }
+
+    case "WORK_RENEWAL_AS_LEAD": {
+      const contract = state.contracts.find(
+        (candidate) => candidate.id === action.contractId,
+      );
+      if (!contract) return state;
+
+      /*
+        Idempotent for the same reason generation is: two renewal leads for one
+        contract means two people ringing the same customer.
+
+        Matched on the contract's own reference, not the customer name — a
+        customer with a lift AMC and a chiller AMC has two contracts, each
+        renewing on its own date, and name-matching would silently swallow the
+        second one.
+      */
+      const already = state.leads.leads.some(
+        (lead) =>
+          lead.source === RENEWAL_SOURCE &&
+          lead.lastActivity?.text.startsWith(contract.reference) === true,
+      );
+      if (already) return state;
+
+      const seq = state.seq.lead + 1;
+      const lead: Lead = {
+        id: `lead_${seq}`,
+        reference: leadReference(seq, now),
+        name: contract.customer,
+        locality: contract.site,
+        // Unknown until the record is opened — a fabricated number is worse
+        // than a blank one, because somebody would dial it.
+        phone: "",
+        stage: "NEW",
+        dueWord: "Due today",
+        group: "today",
+        daysOverdue: 0,
+        lastActivity: {
+          date: dateWord(now),
+          text: `${contract.reference} expires in ${contract.daysRemaining} days`,
+        },
+        // Not quoted yet. FR-506 says renewal is worked, not assumed renewed,
+        // so carrying the old contract value across would flatter the pipeline.
+        quotedPaise: null,
+        quotedUnavailable: false,
+        owner: action.actor,
+        source: RENEWAL_SOURCE,
+        takenBy: action.actor,
+      };
+
       return {
         ...state,
-        contracts: [contract, ...state.contracts],
-        seq: { ...state.seq, contract: seq },
+        leads: { ...state.leads, leads: [lead, ...state.leads.leads] },
+        seq: { ...state.seq, lead: seq },
       };
     }
 
@@ -415,6 +575,8 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
         // No value until it is quoted or billed. A fabricated 0 would render as
         // a free job on the Jobs list.
         valuePaise: null,
+        // Ad-hoc, so it is not the nth visit of any contract.
+        visitKey: null,
       };
       return {
         ...state,

@@ -8,13 +8,14 @@ import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/shared/panel";
-import { FileClock } from "lucide-react";
+import { CalendarPlus, FileClock } from "lucide-react";
 import { MoneyText } from "@/components/shared/money-text";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
 import { loading, type Query } from "@/lib/data/result";
-import { BILLING_LABEL, COVERAGE_LABEL, RECURRENCE_LABEL, getContracts, scheduleProgress, type Contract } from "@/lib/data/contracts";
-import { useStoreState } from "@/lib/data/use-store";
+import { BILLING_LABEL, COVERAGE_LABEL, RECURRENCE_LABEL, getContracts, scheduleProgress, visitSchedule, type Contract } from "@/lib/data/contracts";
+import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { RenewalsBand } from "@/components/contracts/renewals-band";
 
 /**
  * Contracts — PRD §6.14's contract detail, rendered as a list of cards.
@@ -28,6 +29,23 @@ import { useStoreState } from "@/lib/data/use-store";
  * contracts stay legible: one contract, several cadences, each measurable.
  */
 function ContractCard({ contract }: { contract: Contract }) {
+  const state = useStoreState();
+  const dispatch = useDispatch();
+
+  /*
+    FR-502. What this contract owes in the next 90 days, and how much of that
+    is already on the board. Stating both is what makes the control honest:
+    "3 visits scheduled" is a fact the reader can check against Today, and a
+    button that would create nothing says so instead of pretending to work.
+  */
+  const existingKeys = new Set(
+    state.board.jobs
+      .map((job) => job.visitKey)
+      .filter((key): key is string => key !== null),
+  );
+  const planned = visitSchedule(contract, new Date());
+  const pending = planned.filter((visit) => !existingKeys.has(visit.key));
+
   return (
     <Panel
       title={contract.customer}
@@ -48,6 +66,34 @@ function ContractCard({ contract }: { contract: Contract }) {
       }
     >
       <div className="space-y-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg bg-muted-bg p-2.5">
+          <p className="min-w-0 text-xs text-muted-foreground">
+            {planned.length === 0
+              ? "No visits fall in the next 90 days"
+              : pending.length === 0
+                ? `All ${planned.length} visit${planned.length === 1 ? "" : "s"} due in the next 90 days are on the board`
+                : pending.length === planned.length
+                  ? `${planned.length} visit${planned.length === 1 ? "" : "s"} due in the next 90 days, none on the board yet`
+                  : `${pending.length} of ${planned.length} visits due in the next 90 days are not on the board yet`}
+          </p>
+          {pending.length > 0 ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={() =>
+                dispatch({
+                  type: "GENERATE_CONTRACT_VISITS",
+                  contractId: contract.id,
+                })
+              }
+            >
+              <CalendarPlus className="size-3.5" />
+              Put {pending.length} on the board
+            </Button>
+          ) : null}
+        </div>
+
         <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
           <span className="tnum-id">{contract.reference}</span>
           <span aria-hidden="true">·</span>
@@ -185,11 +231,14 @@ export default function ContractsPage() {
 
         <QueryBoundary query={query} label="contracts" loadingRows={3}>
           {(data) => (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {data.contracts.map((contract) => (
-                <ContractCard key={contract.id} contract={contract} />
-              ))}
-            </div>
+            <>
+              <RenewalsBand contracts={data.contracts} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                {data.contracts.map((contract) => (
+                  <ContractCard key={contract.id} contract={contract} />
+                ))}
+              </div>
+            </>
           )}
         </QueryBoundary>
       </div>

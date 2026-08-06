@@ -84,6 +84,15 @@ const jobRowSchema = z.object({
   visitAttempt: z.number().int().positive(),
   /** Only sent when the role permits it (§6.4.2, FR-1302). */
   valuePaise: z.number().int().nullable(),
+  /**
+   * FR-502's idempotency key — `ctr_1:sch_1:3`.
+   *
+   * Present only on a job generated from a contract schedule. It is what makes
+   * "generate visits" safe to run twice: generation skips any key the board
+   * already holds. Null on an ad-hoc job, which has no schedule to be the third
+   * visit of.
+   */
+  visitKey: z.string().nullable().default(null),
 });
 
 const technicianSchema = z.object({
@@ -267,6 +276,7 @@ export const SEED_BOARD: Board = {
       sla: { word: "Late 2h", kind: "late" },
       visitAttempt: 1,
       valuePaise: null,
+      visitKey: null,
     },
     {
       id: "j2",
@@ -282,6 +292,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 1,
       valuePaise: null,
+      visitKey: null,
     },
     {
       id: "j3",
@@ -297,6 +308,7 @@ export const SEED_BOARD: Board = {
       sla: { word: "Due 2h", kind: "due_soon" },
       visitAttempt: 1,
       valuePaise: null,
+      visitKey: null,
     },
     {
       id: "j4",
@@ -313,6 +325,7 @@ export const SEED_BOARD: Board = {
       sla: { word: "Due 4h", kind: "due_soon" },
       visitAttempt: 1,
       valuePaise: null,
+      visitKey: null,
     },
     {
       id: "j5",
@@ -328,6 +341,7 @@ export const SEED_BOARD: Board = {
       sla: { word: "Late 6d", kind: "late" },
       visitAttempt: 2,
       valuePaise: 17_500_00,
+      visitKey: null,
     },
     {
       id: "j6",
@@ -343,6 +357,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 1,
       valuePaise: null,
+      visitKey: null,
     },
     {
       id: "j7",
@@ -358,6 +373,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 1,
       valuePaise: null,
+      visitKey: null,
     },
     {
       id: "j8",
@@ -373,6 +389,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 1,
       valuePaise: 9_200_00,
+      visitKey: null,
     },
     {
       id: "j9",
@@ -388,6 +405,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 1,
       valuePaise: 4_500_00,
+      visitKey: null,
     },
     {
       id: "j10",
@@ -403,6 +421,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 1,
       valuePaise: null,
+      visitKey: null,
     },
     {
       id: "j11",
@@ -418,6 +437,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 1,
       valuePaise: 31_000_00,
+      visitKey: null,
     },
     {
       id: "j12",
@@ -433,6 +453,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 2,
       valuePaise: 6_800_00,
+      visitKey: null,
     },
     {
       id: "j13",
@@ -448,6 +469,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 1,
       valuePaise: null,
+      visitKey: null,
     },
     {
       id: "j14",
@@ -463,6 +485,7 @@ export const SEED_BOARD: Board = {
       sla: null,
       visitAttempt: 1,
       valuePaise: 4_500_00,
+      visitKey: null,
     },
   ],
   technicians: [
