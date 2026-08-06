@@ -40,7 +40,15 @@ import {
   personSchema,
   type Person,
 } from "./people";
-import { SEED_CONTRACTS, type BillingFrequency, type Contract, type Coverage, type Recurrence, VISITS_PER_YEAR } from "./contracts";
+import {
+  BILLING_LABEL,
+  SEED_CONTRACTS,
+  VISITS_PER_YEAR,
+  type BillingFrequency,
+  type Contract,
+  type Coverage,
+  type Recurrence,
+} from "./contracts";
 import { SEED_TENANT } from "./fixtures/tenant";
 import { open, seal, destroyKey, unavailableMessage } from "./crypto";
 
@@ -56,6 +64,8 @@ export type Invoice = {
   jobId: string | null;
   jobNumber: string | null;
   contractId: string | null;
+  /** Which point in the contract's billing schedule this settles. */
+  contractPoint: number | null;
   customer: string;
   dateWord: string;
   head: "CGST_SGST" | "IGST";
@@ -193,6 +203,21 @@ export type Action =
     }
   | { type: "ASSIGN_JOB"; jobId: string; technicianId: string; technicianName: string }
   | { type: "CREATE_INVOICE_FROM_JOB"; jobId: string }
+  | {
+      /**
+       * Raising a contract's scheduled invoice — the recurring half of billing.
+       *
+       * The only invoice action used to be `CREATE_INVOICE_FROM_JOB`, which
+       * cannot serve an advance-billed AMC: the job it would bill from has not
+       * happened yet. A six-month monthly contract therefore knew it owed six
+       * invoices and had no way to raise any of them.
+       */
+      type: "CREATE_INVOICE_FROM_CONTRACT";
+      contractId: string;
+      /** Which point in the schedule, so the same month cannot be billed twice. */
+      pointNumber: number;
+      amountPaise: number;
+    }
   | {
       /** Moving a job to a different day/slot — the Reschedule button. */
       type: "RESCHEDULE_JOB";
@@ -476,6 +501,64 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
       };
     }
 
+    case "CREATE_INVOICE_FROM_CONTRACT": {
+      const contract = state.contracts.find(
+        (candidate) => candidate.id === action.contractId,
+      );
+      if (!contract) return state;
+
+      // Refuse a duplicate rather than letting the same period be billed
+      // twice: two invoices for one month is a GST correction, not a typo.
+      const already = state.invoices.some(
+        (invoice) =>
+          invoice.contractId === contract.id &&
+          invoice.contractPoint === action.pointNumber,
+      );
+      if (already) return state;
+
+      const seq = state.seq.invoice + 1;
+      const lines: InvoiceLine[] = [
+        {
+          description: `${contract.reference} — ${BILLING_LABEL[contract.billing]}`,
+          // SAC 9987: maintenance, repair and installation services.
+          code: "9987",
+          kind: "service",
+          qty: 1,
+          ratePaise: action.amountPaise,
+          ratePercent: 18,
+        },
+      ];
+
+      const branch = SEED_TENANT.branches[0];
+      const derivation = derivePlaceOfSupply(branch.stateCode, branch.stateCode);
+      const totals = computeTotals(lines, derivation.head);
+
+      const invoice: Invoice = {
+        id: `inv_${seq}`,
+        number: invoiceNumber(seq, now),
+        jobId: null,
+        jobNumber: null,
+        contractId: contract.id,
+        contractPoint: action.pointNumber,
+        customer: contract.customer,
+        dateWord: dateWord(now),
+        head: derivation.head,
+        explanation: derivation.explanation,
+        lines,
+        taxablePaise: totals.taxablePaise,
+        totalTaxPaise: totals.totalTaxPaise,
+        roundOffPaise: totals.roundOffPaise,
+        grandTotalPaise: totals.grandTotalPaise,
+        status: "DRAFT",
+      };
+
+      return {
+        ...state,
+        invoices: [...state.invoices, invoice],
+        seq: { ...state.seq, invoice: seq },
+      };
+    }
+
     case "CREATE_INVOICE_FROM_JOB": {
       const job = state.board.jobs.find((candidate) => candidate.id === action.jobId);
       if (!job) return state;
@@ -507,6 +590,7 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
         jobId: job.id,
         jobNumber: job.jobNumber,
         contractId: null,
+        contractPoint: null,
         customer: job.customer,
         dateWord: dateWord(now),
         head: derivation.head,

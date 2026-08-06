@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  billingDue,
+  billingSchedule,
+  type Contract,
   INVOICES_PER_YEAR,
   VISITS_PER_YEAR,
   needsReceiptVoucher,
@@ -122,5 +125,127 @@ describe("advances (FR-810)", () => {
   it("does not require one where billing follows delivery", () => {
     expect(needsReceiptVoucher("MONTHLY")).toBe(false);
     expect(needsReceiptVoucher("PER_VISIT")).toBe(false);
+  });
+});
+
+describe("recurring billing — the schedule a contract owes", () => {
+  const base = (over: Partial<Contract> = {}): Contract =>
+    ({
+      id: "ctr_x",
+      reference: "AMC-2627-0099",
+      customer: "Deshmukh Hospital",
+      site: "Saket",
+      annualValuePaise: 7_20_000_00,
+      coverage: "COMPREHENSIVE",
+      billing: "MONTHLY",
+      startDate: "1 Aug 2026",
+      endDate: "31 Jul 2027",
+      termDays: 365,
+      daysRemaining: 300,
+      status: "ACTIVE",
+      schedules: [
+        {
+          id: "s1",
+          scope: "Generator AMC",
+          recurrence: "MONTHLY",
+          visitsDone: 0,
+          visitsTotal: 12,
+          nextVisit: null,
+        },
+      ],
+      ...over,
+    }) as Contract;
+
+  it("bills a six-month contract six times, not twelve", () => {
+    // The scenario the whole feature exists for: one order, monthly invoices,
+    // and nobody creating an order every month.
+    const half = base({ termDays: 182 });
+    expect(billingSchedule(half, 0)).toHaveLength(6);
+  });
+
+  it("spaces monthly, quarterly and annual correctly over a year", () => {
+    expect(billingSchedule(base({ billing: "MONTHLY" }), 0)).toHaveLength(12);
+    expect(billingSchedule(base({ billing: "QUARTERLY" }), 0)).toHaveLength(4);
+    expect(billingSchedule(base({ billing: "HALF_YEARLY" }), 0)).toHaveLength(2);
+    expect(billingSchedule(base({ billing: "UPFRONT_ANNUAL" }), 0)).toHaveLength(1);
+  });
+
+  it("has no calendar schedule for per-visit billing", () => {
+    // Per-visit follows the visit, not the month — the job raises that invoice.
+    expect(billingSchedule(base({ billing: "PER_VISIT" }), 0)).toEqual([]);
+  });
+
+  it("clamps a month-end anchor instead of sliding into the next month", () => {
+    // A 31 Jan anchor bills 28 Feb, not 3 Mar — sliding would move a GST
+    // document into the wrong return period.
+    const points = billingSchedule(
+      base({ startDate: "31 Jan 2027", termDays: 90, billing: "MONTHLY" }),
+      0,
+    );
+    expect(points[1].due.getMonth()).toBe(1); // February
+    expect(points[1].due.getDate()).toBe(28);
+  });
+
+  it("marks the ones already raised", () => {
+    const points = billingSchedule(base(), 2);
+    expect(points[0].raised).toBe(true);
+    expect(points[1].raised).toBe(true);
+    expect(points[2].raised).toBe(false);
+  });
+
+  it("numbers them the way an accountant counts", () => {
+    const points = billingSchedule(base({ billing: "QUARTERLY" }), 0);
+    expect(points[1]).toMatchObject({ number: 2, of: 4 });
+  });
+});
+
+describe("what is owed right now", () => {
+  const contract = (over: Partial<Contract> = {}): Contract =>
+    ({
+      id: "c1",
+      reference: "AMC-1",
+      customer: "X",
+      site: "Y",
+      annualValuePaise: 1_20_000_00,
+      coverage: "COMPREHENSIVE",
+      billing: "MONTHLY",
+      startDate: "1 Jun 2026",
+      endDate: "31 May 2027",
+      termDays: 365,
+      daysRemaining: 300,
+      status: "ACTIVE",
+      schedules: [
+        { id: "s", scope: "AMC", recurrence: "MONTHLY", visitsDone: 0, visitsTotal: 12, nextVisit: null },
+      ],
+      ...over,
+    }) as Contract;
+
+  const TODAY = new Date("2026-08-06T10:00:00");
+
+  it("puts the most overdue first", () => {
+    const rows = billingDue([contract()], {}, TODAY);
+    expect(rows[0].daysLate).toBeGreaterThan(rows[1].daysLate);
+  });
+
+  it("skips what has already been raised", () => {
+    const all = billingDue([contract()], {}, TODAY);
+    const some = billingDue([contract()], { c1: 2 }, TODAY);
+    expect(some.length).toBe(all.length - 2);
+  });
+
+  it("shows what is coming, not only what is late", () => {
+    // A list that only ever shows overdue work teaches people that being late
+    // is the normal state.
+    const rows = billingDue([contract()], {}, TODAY);
+    expect(rows.some((row) => row.daysLate < 0)).toBe(true);
+  });
+
+  it("does not look further ahead than the horizon", () => {
+    const rows = billingDue([contract()], {}, TODAY, 45);
+    expect(rows.every((row) => row.daysLate >= -45)).toBe(true);
+  });
+
+  it("ignores a contract that is not active", () => {
+    expect(billingDue([contract({ status: "EXPIRED" })], {}, TODAY)).toEqual([]);
   });
 });

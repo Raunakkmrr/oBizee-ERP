@@ -103,6 +103,142 @@ export const INVOICES_PER_YEAR: Record<BillingFrequency, number | "per_visit"> =
     PER_VISIT: "per_visit",
   };
 
+/* -------------------------------------------------------- billing schedule */
+
+/**
+ * When a contract owes its invoices, and which of them have been raised.
+ *
+ * **The gap this closes.** The model already knew a monthly AMC produces twelve
+ * invoices — `INVOICES_PER_YEAR`, `perInvoiceAmount`, `anchorDay` were all
+ * here. Nothing ever produced one. A six-month contract billed monthly sat in
+ * the product knowing it owed six invoices, and the only way to raise one was
+ * from a *job*, which for an advance-billed contract does not exist yet. So the
+ * office either remembered every month or did not bill.
+ *
+ * Dates are computed from the contract's own start date rather than stored, so
+ * a schedule cannot drift from the contract it belongs to.
+ */
+export type BillingPoint = {
+  /** 1-based, as an accountant counts them: "invoice 2 of 12". */
+  number: number;
+  of: number;
+  /** The day the invoice is owed. */
+  due: Date;
+  amountPaise: number;
+  /** Set once an invoice exists for this point. */
+  raised: boolean;
+};
+
+const MONTHS_BETWEEN: Record<BillingFrequency, number | null> = {
+  UPFRONT_ANNUAL: 12,
+  HALF_YEARLY: 6,
+  QUARTERLY: 3,
+  MONTHLY: 1,
+  // Per-visit billing follows the visit, not the calendar, so it has no
+  // schedule of its own — the job raises the invoice.
+  PER_VISIT: null,
+};
+
+/** Parses the fixture's `1 Aug 2026`. Null when unreadable, never a guess. */
+export function parseDateWord(word: string): Date | null {
+  const parsed = Date.parse(word);
+  return Number.isNaN(parsed) ? null : new Date(parsed);
+}
+
+/**
+ * Adds whole months, clamping to the end of a short month.
+ *
+ * A contract anchored on the 31st bills on the 28th in February — not on the
+ * 3rd of March, which is what naive date arithmetic produces and what would
+ * silently move a GST document into the wrong return period.
+ */
+function addMonths(from: Date, months: number): Date {
+  const target = new Date(from);
+  const day = target.getDate();
+  target.setDate(1);
+  target.setMonth(target.getMonth() + months);
+  const lastDay = new Date(
+    target.getFullYear(),
+    target.getMonth() + 1,
+    0,
+  ).getDate();
+  target.setDate(Math.min(day, lastDay));
+  return target;
+}
+
+export function billingSchedule(
+  contract: Contract,
+  /** Invoice numbers already raised against this contract. */
+  raisedCount: number,
+): BillingPoint[] {
+  const step = MONTHS_BETWEEN[contract.billing];
+  const start = parseDateWord(contract.startDate);
+  if (step === null || start === null) return [];
+
+  // Over the contract's own term, not a fixed year — a six-month contract owes
+  // six monthly invoices, not twelve.
+  const months = Math.max(1, Math.round(contract.termDays / 30.44));
+  const count = Math.max(1, Math.floor(months / step));
+
+  const visitsPerYear = contract.schedules.reduce(
+    (sum, schedule) => sum + VISITS_PER_YEAR[schedule.recurrence],
+    0,
+  );
+  const amount = perInvoiceAmount(
+    contract.annualValuePaise,
+    contract.billing,
+    visitsPerYear || 1,
+  );
+
+  return Array.from({ length: count }, (_, index) => ({
+    number: index + 1,
+    of: count,
+    due: addMonths(start, index * step),
+    amountPaise: amount,
+    raised: index < raisedCount,
+  }));
+}
+
+export type BillingDue = {
+  contract: Contract;
+  point: BillingPoint;
+  /** Negative means not yet due. */
+  daysLate: number;
+};
+
+/**
+ * Everything a contract owes that has not been raised, soonest first.
+ *
+ * Upcoming points are included rather than filtered out: an accountant working
+ * a week ahead needs to see what is coming, and a list that only ever shows
+ * overdue work teaches people that being late is the normal state.
+ */
+export function billingDue(
+  contracts: readonly Contract[],
+  raisedByContract: Readonly<Record<string, number>>,
+  today: Date,
+  /** How far ahead to look. */
+  horizonDays = 45,
+): BillingDue[] {
+  const rows: BillingDue[] = [];
+
+  for (const contract of contracts) {
+    if (contract.status !== "ACTIVE") continue;
+    const points = billingSchedule(contract, raisedByContract[contract.id] ?? 0);
+    for (const point of points) {
+      if (point.raised) continue;
+      const daysLate = Math.floor(
+        (today.getTime() - point.due.getTime()) / 86_400_000,
+      );
+      if (daysLate < -horizonDays) continue;
+      rows.push({ contract, point, daysLate });
+    }
+  }
+
+  // Most overdue first; the ones that have not come due sit below.
+  return rows.sort((a, b) => b.daysLate - a.daysLate);
+}
+
 /**
  * FR-810: money received before the service is performed is an **advance for a
  * service**, taxable on receipt, and requires a sequentially-numbered Receipt

@@ -10,6 +10,9 @@ import { Chip } from "@/components/shared/controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Field, WhyDisabled } from "@/components/shared/field";
+import { requiredName, validate } from "@/lib/validate";
+import { z } from "zod";
 import { SEED_TENANT, SEED_USERS } from "@/lib/data/fixtures/tenant";
 import { useDispatch } from "@/lib/data/use-store";
 
@@ -65,6 +68,20 @@ export type NewJobPrefill = {
   service: string | null;
 };
 
+/**
+ * What a work order needs before it can be raised.
+ *
+ * The old guard was `disabled={customer.trim() === "" || site.trim() === ""}`
+ * — two fields, no message, and nothing at all on the service type, which is
+ * what decides who can be sent. A job raised without one is a job the
+ * assignment picker cannot rank.
+ */
+const JOB_FORM = z.object({
+  customer: requiredName("A customer"),
+  site: requiredName("A site or locality"),
+  service: requiredName("A service type"),
+});
+
 export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
   const { fromLead } = prefill;
   const dispatch = useDispatch();
@@ -81,6 +98,15 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
   const [priority, setPriority] = useState<string>("normal");
   const [technician, setTechnician] = useState("");
   const [helpers, setHelpers] = useState<string[]>([]);
+
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const touch = (field: string) =>
+    setTouched((prev) => new Set(prev).add(field));
+  const check = validate(
+    JOB_FORM,
+    { customer, site, service },
+    touched as ReadonlySet<"customer" | "site" | "service">,
+  );
 
   const technicians = SEED_USERS.filter(
     (u) => u.role === "technician" && u.active,
@@ -127,53 +153,41 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
               <CardTitle className="text-base">Where</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div>
-                <label htmlFor="customer" className="mb-1.5 block text-sm font-medium">
-                  Customer
-                </label>
-                <Input
-                  id="customer"
-                  value={customer}
-                  onChange={(e) => setCustomer(e.target.value)}
-                />
-              </div>
-              <div>
-                <label htmlFor="site" className="mb-1.5 block text-sm font-medium">
-                  Site / locality
-                </label>
-                <Input
-                  id="site"
-                  value={site}
-                  onChange={(e) => setSite(e.target.value)}
-                />
-              </div>
-              <div>
-                <label htmlFor="landmark" className="mb-1.5 block text-sm font-medium">
-                  Landmark
-                </label>
-                <Input
-                  id="landmark"
-                  value={landmark}
-                  onChange={(e) => setLandmark(e.target.value)}
-                  placeholder="Opposite the Gurudwara, blue gate"
-                />
-                {/* FR-201 / §6.5.1: its own field, because a landmark is how an
-                    Indian address is actually resolved on the ground. */}
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Its own field — this is how the technician actually finds the
-                  place
-                </p>
-              </div>
-              <div>
-                <label htmlFor="service" className="mb-1.5 block text-sm font-medium">
-                  Service type
-                </label>
-                <Input
-                  id="service"
-                  value={service}
-                  onChange={(e) => setService(e.target.value)}
-                />
-              </div>
+              <Field
+                label="Customer"
+                value={customer}
+                onChange={setCustomer}
+                onBlur={() => touch("customer")}
+                error={check.errors.customer}
+              />
+
+              <Field
+                label="Site / locality"
+                value={site}
+                onChange={setSite}
+                onBlur={() => touch("site")}
+                error={check.errors.site}
+              />
+
+              <Field
+                label="Landmark"
+                optional
+                value={landmark}
+                onChange={setLandmark}
+                placeholder="Opposite the Gurudwara, blue gate"
+                // FR-201 / §6.5.1: its own field, because a landmark is how an
+                // Indian address is actually resolved on the ground.
+                hint="Its own field — this is how the technician actually finds the place"
+              />
+
+              <Field
+                label="Service type"
+                value={service}
+                onChange={setService}
+                onBlur={() => touch("service")}
+                error={check.errors.service}
+                hint="Decides which technicians the board will offer for this job"
+              />
             </CardContent>
           </Card>
 
@@ -280,7 +294,7 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
 
         <div className="mt-4 flex max-w-4xl gap-2">
           <Button
-            disabled={customer.trim() === "" || site.trim() === ""}
+            disabled={!check.ok}
             onClick={() => {
               const primary = technicians.find((t) => t.id === technician);
               dispatch({
@@ -309,6 +323,7 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
           >
             Cancel
           </Button>
+          <WhyDisabled reasons={check.summary} />
           <span className="ml-auto self-center text-xs text-muted-foreground tnum-id">
             Will be numbered J-{String(today.getFullYear()).slice(2)}
             {String(today.getMonth() + 1).padStart(2, "0")}-nnnn ·{" "}

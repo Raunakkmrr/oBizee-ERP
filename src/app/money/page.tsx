@@ -17,7 +17,13 @@ import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import { AGEING_BUCKETS, MSME_LABEL, ageingTotals, bucketFor, countdownFor, deductionAtRiskPaise, deductionLostPaise, moneyAlarms, splitByPromise, getMoney, type AgeingBucket, type MoneyAlarm, type MoneyData, type Payable, type Receivable } from "@/lib/data/money";
 import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
+import { useRouter } from "next/navigation";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import {
+  BILLING_LABEL,
+  billingDue,
+  type BillingDue as DueRow,
+} from "@/lib/data/contracts";
 
 /**
  * Money — PRD §6.12. Two sides, **one screen, no tab**.
@@ -194,6 +200,147 @@ function AlarmBand({
         // §6.12.3: a stored status with a date is honest; a silent one is not.
         <p className="mt-2.5 text-xs text-muted-foreground">
           Udyam status saved as of {data.udyamVerifiedAsOf}.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------- billing due */
+
+/**
+ * What the contracts owe, and the one click that raises it.
+ *
+ * **The gap this closes.** A contract knew it produced twelve invoices and the
+ * product could produce none: the only invoice action needed a *job*, and an
+ * advance-billed AMC has no job yet. So a six-month contract billed monthly
+ * meant somebody remembering, every month, or not billing.
+ *
+ * Nothing raises itself. A GST invoice carrying the tenant's GSTIN should not
+ * come into existence unseen — so this is a worklist, and the invoice it makes
+ * is a draft that opens for review.
+ */
+function BillingDue({ onRaise }: { onRaise: (row: DueRow) => void }) {
+  const state = useStoreState();
+  const today = new Date();
+
+  const raised: Record<string, number> = {};
+  for (const invoice of state.invoices) {
+    if (invoice.contractId) {
+      raised[invoice.contractId] = Math.max(
+        raised[invoice.contractId] ?? 0,
+        invoice.contractPoint ?? 0,
+      );
+    }
+  }
+
+  const rows = billingDue(state.contracts, raised, today);
+  if (rows.length === 0) return null;
+
+  /*
+    One row per contract, not per invoice.
+
+    A contract ten months unbilled produced ten near-identical rows, which is
+    the crowding this screen was rebuilt to avoid. You bill the oldest first
+    anyway, so the row carries the oldest point and says how many follow.
+  */
+  const byContract = new Map<string, typeof rows>();
+  for (const row of rows) {
+    byContract.set(row.contract.id, [
+      ...(byContract.get(row.contract.id) ?? []),
+      row,
+    ]);
+  }
+  const grouped = [...byContract.values()].map((points) => ({
+    oldest: points[0],
+    backlog: points.length - 1,
+    totalPaise: points.reduce((sum, row) => sum + row.point.amountPaise, 0),
+  }));
+
+  const overdue = rows.filter((row) => row.daysLate >= 0);
+
+  return (
+    <section
+      aria-label="Billing due"
+      className="rounded-xl bg-card p-4 shadow-[var(--shadow-card)]"
+    >
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        <h2 className="text-sm font-semibold tracking-tight">Billing due</h2>
+        <p className="text-xs text-muted-foreground">
+          {overdue.length > 0
+            ? `${overdue.length} overdue · contracts bill on their own schedule, not from a job`
+            : "Nothing overdue — what is coming is listed below"}
+        </p>
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        {grouped.map(({ oldest: row, backlog, totalPaise }) => {
+          const late = row.daysLate >= 0;
+          return (
+            <div
+              key={row.contract.id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-muted-bg p-3"
+            >
+              <Clock
+                aria-hidden="true"
+                className={cn(
+                  "size-4 shrink-0",
+                  late ? "text-warning" : "text-muted-foreground",
+                )}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  {row.contract.customer}{" "}
+                  <span className="text-muted-foreground tnum-id">
+                    {row.contract.reference}
+                  </span>
+                </p>
+                <p className="truncate text-xs text-muted-foreground tabular-nums">
+                  {BILLING_LABEL[row.contract.billing]} · invoice{" "}
+                  {row.point.number} of {row.point.of} ·{" "}
+                  {late
+                    ? `${row.daysLate} day${row.daysLate === 1 ? "" : "s"} late`
+                    : `due in ${Math.abs(row.daysLate)} days`}
+                  {backlog > 0 ? (
+                    // The backlog is the number that decides whether this is a
+                    // missed month or a year of not billing.
+                    <span className="text-brand-brown">
+                      {" "}
+                      · {backlog} more unbilled
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <span className="shrink-0 text-right">
+                <MoneyText
+                  amount={asPaise(row.point.amountPaise)}
+                  className="block font-medium"
+                />
+                {backlog > 0 ? (
+                  <MoneyText
+                    amount={asPaise(totalPaise)}
+                    className="block text-xs text-muted-foreground"
+                  />
+                ) : null}
+              </span>
+              <Button
+                size="sm"
+                variant={late ? "default" : "outline"}
+                onClick={() => onRaise(row)}
+              >
+                Raise invoice
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+
+      {rows.length > grouped.length ? (
+        // Says what the grouping folded away, rather than implying one row is
+        // one invoice.
+        <p className="mt-2 text-xs text-muted-foreground tabular-nums">
+          {rows.length} invoices across {grouped.length} contracts — the oldest
+          of each is shown.
         </p>
       ) : null}
     </section>
@@ -588,6 +735,7 @@ export default function MoneyPage() {
   const [query, setQuery] = useState<Query<MoneyData>>(loading());
   const dispatch = useDispatch();
   const storeState = useStoreState();
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
@@ -603,6 +751,17 @@ export default function MoneyPage() {
 
   function markPaid(billId: string) {
     dispatch({ type: "MARK_PAYABLE_PAID", billId });
+  }
+
+  /** Raises the draft and opens it — never files anything unseen. */
+  function raise(row: DueRow) {
+    dispatch({
+      type: "CREATE_INVOICE_FROM_CONTRACT",
+      contractId: row.contract.id,
+      pointNumber: row.point.number,
+      amountPaise: row.point.amountPaise,
+    });
+    router.push("/money/new");
   }
 
   const today = new Date();
@@ -630,6 +789,7 @@ export default function MoneyPage() {
           {(data) => (
             <div className="space-y-5">
               <AlarmBand data={data} onPaid={markPaid} />
+              <BillingDue onRaise={raise} />
               <div className="grid gap-5 xl:grid-cols-2">
                 <Receivables data={data} />
                 <Payables data={data} onPaid={markPaid} />

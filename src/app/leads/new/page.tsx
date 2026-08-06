@@ -7,6 +7,9 @@ import { ArrowLeft, Mic } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import { Chip } from "@/components/shared/controls";
+import { WhyDisabled } from "@/components/shared/field";
+import { dialablePhone, requiredName, validate } from "@/lib/validate";
+import { z } from "zod";
 import { NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,6 +134,47 @@ function DuplicatePanel({
   );
 }
 
+/**
+ * FR-101/102/104's rules, each with the sentence it was missing.
+ *
+ * The referral rule is a `superRefine` rather than a second schema: "who
+ * referred them" is required *only* when the source is a referral, and
+ * splitting that into two schemas is how the two drift apart.
+ */
+const LEAD_FORM = z
+  .object({
+    phone: dialablePhone,
+    name: requiredName("A name"),
+    source: z.string().nullable(),
+    service: z.string().nullable(),
+    // FR-104: a lead with no next date gets forgotten, which is why it blocks.
+    followUp: z.string().min(1, "A follow-up date is needed"),
+    referredBy: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    if (!values.source) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["source"],
+        message: "Where the lead came from is needed",
+      });
+    }
+    if (!values.service) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["service"],
+        message: "What they want is needed",
+      });
+    }
+    if (values.source === "Referral" && values.referredBy.trim() === "") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referredBy"],
+        message: "A referral needs the name of who referred them",
+      });
+    }
+  });
+
 export default function NewLeadPage() {
   const router = useRouter();
   const [phone, setPhone] = useState("");
@@ -147,6 +191,9 @@ export default function NewLeadPage() {
   const [match, setMatch] = useState<Lookup["match"]>(null);
   const [lookupFailed, setLookupFailed] = useState(false);
   const phoneRef = useRef<HTMLInputElement>(null);
+
+  /** Fields the reader has left, so a blank form is not a wall of red. */
+  const [touched] = useState<Set<string>>(new Set());
 
   const digits = phone.replace(/\D/g, "");
   /**
@@ -178,13 +225,19 @@ export default function NewLeadPage() {
   const chosenService = service ?? (otherService.trim() || null);
 
   /** FR-101: phone + name + one source + one service. Nothing else required. */
-  const canSave =
-    digits.length === 10 &&
-    name.trim() !== "" &&
-    source !== null &&
-    chosenService !== null &&
-    followUp !== "" &&
-    (source !== "Referral" || referredBy.trim() !== "");
+  /*
+    The same six conditions the old `canSave` held — now as a schema, so each
+    one carries a sentence. The logic was already thorough; it simply refused
+    to say which of the six was unmet, and greyed the button in silence.
+  */
+  const check = validate(
+    LEAD_FORM,
+    { phone, name, source, service: chosenService, followUp, referredBy },
+    touched as ReadonlySet<
+      "phone" | "name" | "source" | "service" | "followUp" | "referredBy"
+    >,
+  );
+  const canSave = check.ok;
 
   function save() {
     if (!canSave) return;
@@ -453,6 +506,9 @@ export default function NewLeadPage() {
             >
               Cancel
             </Button>
+                      {/* Names which of the six conditions is unmet, rather than
+                greying the button and leaving the reader to guess. */}
+            <WhyDisabled reasons={check.summary} />
           </div>
         </div>
       </div>

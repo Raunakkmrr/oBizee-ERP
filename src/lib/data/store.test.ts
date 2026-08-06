@@ -524,3 +524,77 @@ describe("a stored slice whose shape has changed", () => {
     }
   });
 });
+
+describe("raising a contract's scheduled invoice", () => {
+  const now = new Date("2026-08-06T10:00:00");
+  const contractId = () => seedState().contracts[0].id;
+
+  it("creates an invoice against the contract, not a job", () => {
+    // The gap this closes: the only invoice action needed a job, and an
+    // advance-billed AMC has no job yet.
+    const after = reduce(
+      seedState(),
+      {
+        type: "CREATE_INVOICE_FROM_CONTRACT",
+        contractId: contractId(),
+        pointNumber: 1,
+        amountPaise: 60_000_00,
+      },
+      now,
+    );
+    const invoice = after.invoices.at(-1)!;
+    expect(invoice.contractId).toBe(contractId());
+    expect(invoice.jobId).toBeNull();
+    expect(invoice.contractPoint).toBe(1);
+  });
+
+  it("refuses to bill the same period twice", () => {
+    // Two invoices for one month is a GST correction, not a typo.
+    const once = reduce(
+      seedState(),
+      { type: "CREATE_INVOICE_FROM_CONTRACT", contractId: contractId(), pointNumber: 1, amountPaise: 100 },
+      now,
+    );
+    const twice = reduce(
+      once,
+      { type: "CREATE_INVOICE_FROM_CONTRACT", contractId: contractId(), pointNumber: 1, amountPaise: 100 },
+      now,
+    );
+    expect(twice.invoices).toHaveLength(once.invoices.length);
+  });
+
+  it("allows the next period", () => {
+    const first = reduce(
+      seedState(),
+      { type: "CREATE_INVOICE_FROM_CONTRACT", contractId: contractId(), pointNumber: 1, amountPaise: 100 },
+      now,
+    );
+    const second = reduce(
+      first,
+      { type: "CREATE_INVOICE_FROM_CONTRACT", contractId: contractId(), pointNumber: 2, amountPaise: 100 },
+      now,
+    );
+    expect(second.invoices).toHaveLength(first.invoices.length + 1);
+  });
+
+  it("is a no-op for a contract that does not exist", () => {
+    const before = seedState();
+    const after = reduce(
+      before,
+      { type: "CREATE_INVOICE_FROM_CONTRACT", contractId: "nope", pointNumber: 1, amountPaise: 100 },
+      now,
+    );
+    expect(after.invoices).toEqual(before.invoices);
+  });
+
+  it("computes tax on the scheduled amount", () => {
+    const after = reduce(
+      seedState(),
+      { type: "CREATE_INVOICE_FROM_CONTRACT", contractId: contractId(), pointNumber: 1, amountPaise: 60_000_00 },
+      now,
+    );
+    const invoice = after.invoices.at(-1)!;
+    expect(invoice.taxablePaise).toBe(60_000_00);
+    expect(invoice.grandTotalPaise).toBeGreaterThan(invoice.taxablePaise);
+  });
+});

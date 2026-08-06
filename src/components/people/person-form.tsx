@@ -7,11 +7,17 @@ import { ArrowLeft, ShieldAlert, TriangleAlert, UserMinus, UserPlus } from "luci
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Field, WhyDisabled } from "@/components/shared/field";
+import {
+  dialablePhone,
+  optionalEmail,
+  requiredName,
+  validate,
+} from "@/lib/validate";
+import { z } from "zod";
 import { Chip } from "@/components/shared/controls";
 import { Section } from "@/components/job/sections";
 import { cn } from "@/lib/utils";
-import { e164 } from "@/lib/contact";
 import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
 import {
   SKILLS,
@@ -39,6 +45,18 @@ import { levelLabel, ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
  * - **Localities** are how a day gets clustered, so they are a hint and never
  *   a restriction.
  */
+
+/**
+ * What the form has to be true before it can be saved.
+ *
+ * The same schema the field errors come from, so the button and the inputs can
+ * never disagree about whether the form is valid.
+ */
+const PERSON_FORM = z.object({
+  name: requiredName("A name"),
+  phone: dialablePhone,
+  email: optionalEmail,
+});
 
 /** The localities the fixture already works in, offered as chips to save typing. */
 const KNOWN_LOCALITIES = [
@@ -97,8 +115,17 @@ export function PersonForm({ existing }: { existing?: Person }) {
 
   const [acknowledged, setAcknowledged] = useState(false);
 
+  /** Fields the reader has left, so a blank form is not a wall of red. */
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const touch = (field: string) =>
+    setTouched((prev) => new Set(prev).add(field));
+
   const today = new Date();
-  const phoneOk = e164(phone) !== null;
+  const check = validate(
+    PERSON_FORM,
+    { name, phone, email },
+    touched as ReadonlySet<"name" | "phone" | "email">,
+  );
 
   /*
     Both guards are evaluated live, so the consequence appears while the reader
@@ -122,15 +149,6 @@ export function PersonForm({ existing }: { existing?: Person }) {
   // A warning must be seen before it can be passed. Reset on every change of
   // role, or an acknowledgement of one consequence would carry to another.
   const needsAck = roleGuard.kind === "warn" && !acknowledged;
-  const missing = [
-    name.trim() === "" ? "a name" : null,
-    // Not "a phone" — the reason it is rejected is the useful half.
-    phone.trim() === ""
-      ? "a phone number"
-      : !phoneOk
-        ? "a phone number we can dial"
-        : null,
-  ].filter(Boolean) as string[];
 
   function toggle(list: string[], set: (next: string[]) => void, value: string) {
     set(
@@ -196,49 +214,38 @@ export function PersonForm({ existing }: { existing?: Person }) {
         <div className="grid max-w-4xl items-start gap-3 lg:grid-cols-2">
           <Section title="Who they are" icon={UserPlus} tone="place">
             <div className="space-y-3 text-sm">
-              <div>
-                <label htmlFor="name" className="mb-1.5 block font-medium">
-                  Name
-                </label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ramesh Yadav"
-                />
-              </div>
+              <Field
+                label="Name"
+                value={name}
+                onChange={setName}
+                onBlur={() => touch("name")}
+                error={check.errors.name}
+                placeholder="Ramesh Yadav"
+              />
 
-              <div>
-                <label htmlFor="phone" className="mb-1.5 block font-medium">
-                  Phone
-                </label>
-                <Input
-                  id="phone"
-                  value={phone}
-                  inputMode="tel"
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="98110 00003"
-                  aria-invalid={phone.trim() !== "" && !phoneOk}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {/* §9.4: phone + OTP is the main sign-in, so this is the
-                      credential rather than a contact detail. */}
-                  This is how they sign in — a ten-digit Indian mobile.
-                </p>
-              </div>
+              <Field
+                label="Phone"
+                value={phone}
+                inputMode="tel"
+                onChange={setPhone}
+                onBlur={() => touch("phone")}
+                error={check.errors.phone}
+                placeholder="98110 00003"
+                // §9.4: phone + OTP is the main sign-in, so this is the
+                // credential rather than a contact detail.
+                hint="This is how they sign in — a ten-digit Indian mobile."
+              />
 
-              <div>
-                <label htmlFor="email" className="mb-1.5 block font-medium">
-                  Email <span className="text-muted-foreground">(optional)</span>
-                </label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Leave blank for field staff"
-                />
-              </div>
+              <Field
+                label="Email"
+                optional
+                type="email"
+                value={email}
+                onChange={setEmail}
+                onBlur={() => touch("email")}
+                error={check.errors.email}
+                placeholder="Leave blank for field staff"
+              />
 
               <div>
                 <p className="mb-1.5 font-medium">Role</p>
@@ -358,7 +365,7 @@ export function PersonForm({ existing }: { existing?: Person }) {
 
         <div className="mt-4 flex max-w-4xl flex-wrap items-center gap-2">
           <Button
-            disabled={missing.length > 0 || roleBlocked || needsAck}
+            disabled={!check.ok || roleBlocked || needsAck}
             onClick={save}
           >
             {existing ? "Save changes" : "Add person"}
@@ -371,13 +378,9 @@ export function PersonForm({ existing }: { existing?: Person }) {
             Cancel
           </Button>
 
-          {missing.length > 0 ? (
-            // Names what is missing rather than just disabling — a dead button
-            // with no explanation is the thing this whole pass removed.
-            <p className="text-xs text-muted-foreground">
-              Still needs {missing.join(" and ")}.
-            </p>
-          ) : null}
+          {/* Names what is wrong rather than only disabling — a dead button
+              with no explanation is the thing this pass removes. */}
+          <WhyDisabled reasons={check.summary} />
 
           {existing ? (
             <Button
