@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Building2, Clock, Hash, Landmark, Lock, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Building2, Clock, Hash, Landmark, Lock, ScrollText, ShieldCheck, type LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Requires } from "@/components/shared/requires";
 import { Numbering } from "@/components/settings/numbering";
+import { Activity } from "@/components/settings/activity";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { ShineBorder } from "@/components/ui/shine-border";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,7 @@ const SECTIONS = [
   { key: "branches", label: "Branches", icon: Building2 },
   { key: "policy", label: "Policy", icon: ShieldCheck },
   { key: "numbering", label: "Numbering", icon: Hash },
+  { key: "activity", label: "Activity", icon: ScrollText },
   { key: "data", label: "Data", icon: Lock },
 ] as const;
 
@@ -140,6 +142,7 @@ function Settings() {
             {section === "branches" ? <Branches /> : null}
             {section === "policy" ? <Policy /> : null}
             {section === "numbering" ? <Numbering /> : null}
+            {section === "activity" ? <Activity /> : null}
             {section === "data" ? <DataSection /> : null}
           </div>
         </div>

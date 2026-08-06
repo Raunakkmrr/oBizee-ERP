@@ -355,6 +355,7 @@ describe("restoring data written before a slice existed", () => {
       [
         "actingAs",
         "advances",
+        "audit",
         "board",
         "contracts",
         "invoices",

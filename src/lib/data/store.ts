@@ -58,6 +58,13 @@ import {
   type Advance,
 } from "./advances";
 import { issue, seriesStateSchema, type SeriesState } from "./series";
+import {
+  append as appendAudit,
+  auditSchema,
+  isAuditable,
+  summarise,
+  type AuditEntry,
+} from "./audit";
 import { SEED_TENANT } from "./fixtures/tenant";
 import { open, seal, destroyKey, unavailableMessage } from "./crypto";
 
@@ -108,6 +115,8 @@ export type StoreState = {
   /** FR-811: numbering is per branch, doc type and financial year. */
   /** FR-810 — money taken before the work, and the vouchers that account for it. */
   advances: Advance[];
+  /** FR-1305 — append-only, newest first. Never updated, never deleted. */
+  audit: AuditEntry[];
   /**
    * FR-811's counters, keyed by (branch, doc type, financial year).
    *
@@ -145,6 +154,9 @@ export function seedState(): StoreState {
     actingAs: "usr_0002",
     invoices: [],
     advances: structuredClone(SEED_ADVANCES),
+    // Empty on purpose: a seeded trail would be a record of things that did not
+    // happen, which is the one thing an audit trail must never contain.
+    audit: [],
     // Mid-year, as a live tenant would be — so the first thing this build
     // issues is 0441 / 0150 / 0007, not a suspiciously round 0001.
     series: {
@@ -185,10 +197,15 @@ function hasEverySlice(value: unknown): value is StoreState {
     known gap rather than a decision — recorded so the next person adding a
     field knows the guard will not catch them.
   */
-  const { people, series } = value as { people: unknown; series: unknown };
+  const { people, series, audit } = value as {
+    people: unknown;
+    series: unknown;
+    audit: unknown;
+  };
   return (
     z.array(personSchema).safeParse(people).success &&
-    seriesStateSchema.safeParse(series).success
+    seriesStateSchema.safeParse(series).success &&
+    auditSchema.safeParse(audit).success
   );
 }
 
@@ -442,7 +459,41 @@ function dateWord(now: Date): string {
  * Pure. `now` is a parameter rather than a `new Date()` call inside, so every
  * numbering and dating rule is testable without freezing the clock globally.
  */
+/**
+ * The reducer, plus FR-1305's trail.
+ *
+ * Auditing is a wrapper rather than a line in each case, because "every
+ * mutation" is a rule that survives the next action being added only if nobody
+ * has to remember it. A state the action did not change produces no entry — a
+ * trail full of no-ops is a trail nobody reads.
+ */
 export function reduce(state: StoreState, action: Action, now: Date): StoreState {
+  const next = applyAction(state, action, now);
+  if (next === state || !isAuditable(action.type)) return next;
+
+  const actor =
+    next.people.find((person) => person.id === next.actingAs)?.name ??
+    state.people.find((person) => person.id === state.actingAs)?.name ??
+    "Unknown";
+
+  return {
+    ...next,
+    audit: appendAudit(next.audit, {
+      id: `aud_${now.getTime()}_${next.audit.length}`,
+      at: now.toISOString(),
+      actor,
+      action: action.type,
+      summary: summarise(action as unknown as { type: string } & Record<string, unknown>),
+      // Every write today comes from this browser. It becomes `offline_sync`
+      // when the technician app replays a queue, which is why the field exists
+      // before that app does.
+      origin: "web",
+      occurredAt: null,
+    }),
+  };
+}
+
+function applyAction(state: StoreState, action: Action, now: Date): StoreState {
   switch (action.type) {
     case "RESET":
       return seedState();
@@ -681,6 +732,11 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
     }
 
     case "ASSIGN_JOB": {
+      // Nothing to assign is not a change. Returning a fresh object anyway made
+      // the audit trail record an assignment that never happened, and re-rendered
+      // every subscriber for nothing.
+      if (!state.board.jobs.some((job) => job.id === action.jobId)) return state;
+
       let wasUnassigned = false;
       const jobs = state.board.jobs.map((job): JobRow => {
         if (job.id !== action.jobId) return job;
