@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { reduce, seedState, type Action, type StoreState } from "./store";
+import { techniciansFromPeople } from "./board";
 
 /** 3 Aug 2026, a Monday, inside FY 26-27. */
 const NOW = new Date("2026-08-03T10:00:00+05:30");
@@ -341,7 +342,7 @@ describe("restoring data written before a slice existed", () => {
     // seed's own keys precisely so adding the next slice cannot repeat it.
     const keys = Object.keys(seedState()).sort();
     expect(keys).toEqual(
-      ["board", "contracts", "invoices", "leads", "money", "seq"].sort(),
+      ["board", "contracts", "invoices", "leads", "money", "people", "seq"].sort(),
     );
   });
 
@@ -385,5 +386,100 @@ describe("restoring data written before a slice existed", () => {
     );
     expect(after.board.jobs[0].slot).toBe("5-8");
     expect(after.board.jobs.slice(1)).toEqual(before.board.jobs.slice(1));
+  });
+});
+
+describe("the directory is the only record of a person", () => {
+  const now = new Date("2026-08-06T10:00:00");
+
+  it("adds someone with the next id in the tenant's own sequence", () => {
+    const before = seedState();
+    const after = reduce(
+      before,
+      {
+        type: "ADD_PERSON",
+        person: {
+          name: "Anil Kumar",
+          phone: "9811000099",
+          email: null,
+          role: "technician",
+          languageOverride: null,
+          active: true,
+          skills: ["Plumbing"],
+          localities: ["Rohini"],
+        },
+      },
+      now,
+    );
+    expect(after.people).toHaveLength(before.people.length + 1);
+    expect(after.people.at(-1)!.id).toBe("usr_0009");
+  });
+
+  it("puts a newly added technician on the board immediately", () => {
+    // The whole reason this slice exists: with two lists, someone added in
+    // Settings never appeared on the board at all.
+    const after = reduce(
+      seedState(),
+      {
+        type: "ADD_PERSON",
+        person: {
+          name: "Anil Kumar",
+          phone: "9811000099",
+          email: null,
+          role: "technician",
+          languageOverride: null,
+          active: true,
+          skills: ["Plumbing"],
+          localities: [],
+        },
+      },
+      now,
+    );
+    const board = techniciansFromPeople(after.people, after.board.jobs, new Map());
+    expect(board.map((t) => t.name)).toContain("Anil Kumar");
+  });
+
+  it("deactivating shows as leave on the board, and never deletes", () => {
+    // A technician who leaves still owns the history of every job he closed.
+    const before = seedState();
+    const after = reduce(
+      before,
+      { type: "SET_PERSON_ACTIVE", id: "usr_0003", active: false },
+      now,
+    );
+    expect(after.people).toHaveLength(before.people.length);
+    const board = techniciansFromPeople(after.people, after.board.jobs, new Map());
+    expect(board.find((t) => t.id === "usr_0003")!.status.kind).toBe("leave");
+  });
+
+  it("counts today's load from the jobs, not from a stored number", () => {
+    const state = seedState();
+    const board = techniciansFromPeople(state.people, state.board.jobs, new Map());
+    const ramesh = board.find((t) => t.id === "usr_0003")!;
+    const actual = state.board.jobs.filter(
+      (j) => j.technician?.id === "usr_0003",
+    ).length;
+    expect(ramesh.jobsToday).toBe(actual);
+  });
+
+  it("edits a person in place without touching anyone else", () => {
+    const before = seedState();
+    const after = reduce(
+      before,
+      { type: "UPDATE_PERSON", id: "usr_0003", changes: { skills: ["Generator"] } },
+      now,
+    );
+    expect(after.people.find((p) => p.id === "usr_0003")!.skills).toEqual([
+      "Generator",
+    ]);
+    expect(after.people.filter((p) => p.id !== "usr_0003")).toEqual(
+      before.people.filter((p) => p.id !== "usr_0003"),
+    );
+  });
+
+  it("only technicians reach the board", () => {
+    const state = seedState();
+    const board = techniciansFromPeople(state.people, state.board.jobs, new Map());
+    expect(board.map((t) => t.name)).not.toContain("Priya Sharma");
   });
 });

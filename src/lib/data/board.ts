@@ -17,6 +17,7 @@
  *    `visit` is nullable rather than defaulted.
  */
 import { z } from "zod";
+import type { Person } from "./people";
 import { asPaise, type Paise } from "@/lib/money";
 import { computed, uncomputable, type Computed } from "./result";
 import { defineQuery, type Fetched } from "./source";
@@ -506,12 +507,58 @@ export const SEED_BOARD: Board = {
 
 /* ------------------------------------------------------------------- query */
 
+/**
+ * Today's facts about a person, computed rather than stored.
+ *
+ * The board used to hold its **own** technician array with its own copy of each
+ * name, skill and locality — a second record for the same human that nothing
+ * kept in step. Adding a technician in Settings would not have put them on the
+ * board at all. Now the directory is the single source for who someone *is*,
+ * and this derives only what is true *today*: how many jobs they hold and where
+ * they are right now.
+ */
+export function techniciansFromPeople(
+  people: readonly Person[],
+  jobs: readonly JobRow[],
+  live: ReadonlyMap<string, Technician["status"]>,
+): Technician[] {
+  return people
+    .filter((person) => person.role === "technician")
+    .map((person) => ({
+      id: person.id,
+      name: person.name,
+      jobsToday: jobs.filter((job) => job.technician?.id === person.id).length,
+      // Someone off the strength is on leave as far as the board is concerned;
+      // otherwise use the live status, defaulting to free.
+      status: person.active
+        ? (live.get(person.id) ?? { kind: "free" as const, since: null })
+        : { kind: "leave" as const, since: null },
+      localities: person.localities,
+      skills: person.skills,
+    }));
+}
+
 export const getBoard = defineQuery<void, Board>({
   key: "board.today",
   schema: boardSchema,
-  fixture: async (): Promise<Fetched<unknown>> => ({
-    raw: (await import("./store")).getState().board,
-  }),
+  fixture: async (): Promise<Fetched<unknown>> => {
+    const state = (await import("./store")).getState();
+    // Whereabouts are the board's own live facts and stay on the board; who a
+    // person *is* comes from the directory.
+    const live = new Map(
+      state.board.technicians.map((tech) => [tech.id, tech.status]),
+    );
+    return {
+      raw: {
+        ...state.board,
+        technicians: techniciansFromPeople(
+          state.people,
+          state.board.jobs,
+          live,
+        ),
+      },
+    };
+  },
 });
 
 /** Exposed so the technician-panel-down state can be exercised in review. */

@@ -33,6 +33,7 @@ import { asPaise, type Paise } from "@/lib/money";
 import { SEED_LEADS, type Lead, type LeadsData } from "./leads";
 import { SEED_BOARD, type Board, type JobRow } from "./board";
 import { SEED_MONEY, type MoneyData } from "./money";
+import { SEED_PEOPLE, nextPersonId, type Person } from "./people";
 import {
   SEED_CONTRACTS,
   type BillingFrequency,
@@ -74,6 +75,8 @@ export type StoreState = {
   contracts: Contract[];
   invoices: Invoice[];
   money: MoneyData;
+  /** One record per human — the board's technicians are derived from these. */
+  people: Person[];
   /** FR-811: numbering is per branch, doc type and financial year. */
   seq: { job: number; contract: number; invoice: number };
 };
@@ -92,6 +95,7 @@ export function seedState(): StoreState {
     board: structuredClone(SEED_BOARD),
     contracts: structuredClone(SEED_CONTRACTS.contracts) as Contract[],
     money: structuredClone(SEED_MONEY) as MoneyData,
+    people: structuredClone(SEED_PEOPLE),
     invoices: [],
     seq: { job: 440, contract: 32, invoice: 149 },
   };
@@ -173,6 +177,21 @@ export type Action =
        */
       type: "MARK_PAYABLE_PAID";
       billId: string;
+    }
+  | {
+      /** Adding someone to the directory — Settings → People → Invite. */
+      type: "ADD_PERSON";
+      person: Omit<Person, "id">;
+    }
+  | { type: "UPDATE_PERSON"; id: string; changes: Partial<Omit<Person, "id">> }
+  | {
+      /**
+       * Leaving, not deleting. A technician who quits still owns the history of
+       * every job he closed, so the record stays and stops being assignable.
+       */
+      type: "SET_PERSON_ACTIVE";
+      id: string;
+      active: boolean;
     }
   | { type: "RESET" };
 
@@ -350,6 +369,33 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
       });
       return { ...state, leads: { ...state.leads, leads } };
     }
+
+    case "ADD_PERSON":
+      return {
+        ...state,
+        people: [
+          ...state.people,
+          { ...action.person, id: nextPersonId(state.people) },
+        ],
+      };
+
+    case "UPDATE_PERSON":
+      return {
+        ...state,
+        people: state.people.map((person) =>
+          person.id === action.id ? { ...person, ...action.changes } : person,
+        ),
+      };
+
+    case "SET_PERSON_ACTIVE":
+      return {
+        ...state,
+        people: state.people.map((person) =>
+          person.id === action.id
+            ? { ...person, active: action.active }
+            : person,
+        ),
+      };
 
     case "RESCHEDULE_JOB": {
       const jobs = state.board.jobs.map((job) =>

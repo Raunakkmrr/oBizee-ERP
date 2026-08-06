@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Building2,
   Clock,
@@ -14,7 +15,15 @@ import { AppShell } from "@/components/shell/app-shell";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { ShineBorder } from "@/components/ui/shine-border";
 import { cn } from "@/lib/utils";
-import { ROLE_LABELS, type Role } from "@/lib/roles";
+import Link from "next/link";
+import { Input } from "@/components/ui/input";
+// Aliased: this file already has a local `Chip`, which is a label/value
+// display pill rather than a control.
+import { Chip as FilterChip } from "@/components/shared/controls";
+import { useStoreState } from "@/lib/data/use-store";
+import { getState } from "@/lib/data/store";
+import { matchesQuery } from "@/lib/data/people";
+import { ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
 import {
   CURRENT_USER,
   SEED_TENANT,
@@ -85,7 +94,21 @@ const SURFACE =
   "rounded-2xl bg-card shadow-[var(--shadow-card)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--shadow-raised)]";
 
 export default function SettingsPage() {
-  const [section, setSection] = useState<SectionKey>("business");
+  /*
+    The tab is addressable.
+
+    Every route out of People — add someone, edit someone, cancel — links back
+    to `?tab=people`, and the page ignored the parameter and reopened on
+    Business. So saving a technician appeared to do nothing: the record was
+    there, on a tab the reader had been silently moved off.
+  */
+  const params = useSearchParams();
+  const requested = params.get("tab");
+  const [section, setSection] = useState<SectionKey>(
+    SECTIONS.some((entry) => entry.key === requested)
+      ? (requested as SectionKey)
+      : "business",
+  );
   const today = new Date();
 
   return (
@@ -219,8 +242,33 @@ function Tile({ label, value }: { label: string; value: string }) {
 
 /* --------------------------------------------------------------- people */
 
+/**
+ * The directory.
+ *
+ * **Two things were wrong here.** `Invite person` and `Edit` were raw `<button>`
+ * elements with no handler — dead controls over a hardcoded fixture, so there
+ * was no way to add or change a person at all. And every person was rendered as
+ * a card in a grid, which is fine for seven and unusable at fifty: no search,
+ * no filter, nothing to type at.
+ *
+ * Now it reads the store, filters as you type, and both controls go to a real
+ * page (forms are pages here, never popups).
+ */
 function People() {
-  const active = SEED_USERS.filter((u) => u.active).length;
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState<Role | null>(null);
+  // Subscribing re-renders when someone is added, edited or deactivated.
+  useStoreState();
+  const people = getState().people;
+
+  const visible = people.filter(
+    (person) =>
+      (role === null || person.role === role) && matchesQuery(person, query),
+  );
+  const active = people.filter((person) => person.active).length;
+  const technicians = people.filter(
+    (person) => person.role === "technician" && person.active,
+  ).length;
 
   return (
     <div>
@@ -229,19 +277,56 @@ function People() {
           <span className="font-semibold text-foreground tabular-nums">
             {active}
           </span>{" "}
-          people can sign in
+          people can sign in ·{" "}
+          <span className="font-semibold text-foreground tabular-nums">
+            {technicians}
+          </span>{" "}
+          technicians on the strength
         </p>
-        <button
-          type="button"
+        <Link
+          href="/settings/people/new"
           className="flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-[var(--shadow-raised)] transition-all hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
         >
           <Users className="size-4" />
           Invite person
-        </button>
+        </Link>
       </div>
 
+      {/* Search first, because at fifty people scanning is not an option. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search name, phone, skill or area"
+          aria-label="Search people"
+          className="max-w-xs"
+        />
+        <div className="flex flex-wrap gap-1.5">
+          <FilterChip
+            label="Everyone"
+            selected={role === null}
+            onClick={() => setRole(null)}
+          />
+          {ROLES.map((option) => (
+            <FilterChip
+              key={option}
+              label={ROLE_LABELS[option]}
+              selected={role === option}
+              onClick={() => setRole(role === option ? null : option)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {visible.length === 0 ? (
+        <div className={cn(SURFACE, "p-6 text-sm text-muted-foreground")}>
+          Nobody matches “{query}”
+          {role ? ` in ${ROLE_LABELS[role]}` : ""}.
+        </div>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {SEED_USERS.map((user) => (
+        {visible.map((user) => (
           <div
             key={user.id}
             className={cn(SURFACE, "p-5", !user.active && "opacity-60 hover:opacity-100")}
@@ -269,6 +354,17 @@ function People() {
                 <p className="truncate font-mono text-xs text-muted-foreground">
                   {user.phone}
                 </p>
+                {user.skills.length > 0 ? (
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {user.skills.join(" · ")}
+                  </p>
+                ) : user.role === "technician" ? (
+                  // Visible, because it is what makes the assign picker flag
+                  // him — and the fix is one click away.
+                  <p className="mt-0.5 truncate text-xs text-brand-brown">
+                    No skills recorded
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -287,12 +383,12 @@ function People() {
                   Disabled
                 </span>
               ) : null}
-              <button
-                type="button"
+              <Link
+                href={`/settings/people/${user.id}`}
                 className="ml-auto rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
               >
                 {user.active ? "Edit" : "Restore"}
-              </button>
+              </Link>
             </div>
           </div>
         ))}

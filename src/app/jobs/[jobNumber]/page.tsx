@@ -42,6 +42,7 @@ import {
 } from "@/lib/data/job-detail";
 import { Unavailable } from "@/components/shared/unavailable";
 import { Chip } from "@/components/shared/controls";
+import { PersonPicker } from "@/components/people/person-picker";
 import { telHref, whatsappHref } from "@/lib/contact";
 import {
   CURRENT_USER,
@@ -425,47 +426,52 @@ export default function JobDetailPage({
                     >
                       Reschedule
                     </Button>
-                    {picker ? (
+                    {picker === "technician" ? (
+                      <PersonPicker
+                        people={getState().people}
+                        job={{
+                          serviceType: job.serviceType,
+                          locality: job.site.locality,
+                        }}
+                        loadFor={(id) =>
+                          getState().board.jobs.filter(
+                            (candidate) => candidate.technician?.id === id,
+                          ).length
+                        }
+                        selectedId={job.technician?.id ?? null}
+                        onCancel={() => setPicker(null)}
+                        onPick={(person) =>
+                          move(job.jobNumber, (id) =>
+                            dispatch({
+                              type: "ASSIGN_JOB",
+                              jobId: id,
+                              technicianId: person.id,
+                              technicianName: person.name,
+                            }),
+                          )
+                        }
+                      />
+                    ) : picker === "slot" ? (
                       <div className="mt-1 flex w-full flex-wrap items-center gap-1.5 rounded-xl bg-muted p-2">
                         <span className="mr-1 text-xs font-medium text-muted-foreground">
-                          {picker === "technician" ? "Assign to" : "Move to"}
+                          Move to
                         </span>
-                        {picker === "technician"
-                          ? SEED_USERS.filter(
-                              (u) => u.role === "technician" && u.active,
-                            ).map((tech) => (
-                              <Chip
-                                key={tech.id}
-                                label={tech.name.split(" ")[0]}
-                                selected={job.technician?.id === tech.id}
-                                onClick={() =>
-                                  move(job.jobNumber, (id) =>
-                                    dispatch({
-                                      type: "ASSIGN_JOB",
-                                      jobId: id,
-                                      technicianId: tech.id,
-                                      technicianName: tech.name,
-                                    }),
-                                  )
-                                }
-                              />
-                            ))
-                          : SLOTS.map((slot) => (
-                              <Chip
-                                key={slot}
-                                label={slot}
-                                selected={false}
-                                onClick={() =>
-                                  move(job.jobNumber, (id) =>
-                                    dispatch({
-                                      type: "RESCHEDULE_JOB",
-                                      jobId: id,
-                                      slot,
-                                    }),
-                                  )
-                                }
-                              />
-                            ))}
+                        {SLOTS.map((slot) => (
+                          <Chip
+                            key={slot}
+                            label={slot}
+                            selected={false}
+                            onClick={() =>
+                              move(job.jobNumber, (id) =>
+                                dispatch({
+                                  type: "RESCHEDULE_JOB",
+                                  jobId: id,
+                                  slot,
+                                }),
+                              )
+                            }
+                          />
+                        ))}
                         <Button
                           variant="ghost"
                           size="sm"
