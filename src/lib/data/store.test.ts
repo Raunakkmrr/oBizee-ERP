@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { personSchema } from "./people";
-import { reduce, seedState, type Action, type StoreState } from "./store";
+import { latestInvoice, reduce, seedState, type Action, type StoreState } from "./store";
 import { techniciansFromPeople } from "./board";
 
 /** 3 Aug 2026, a Monday, inside FY 26-27. */
@@ -356,6 +356,7 @@ describe("restoring data written before a slice existed", () => {
         "actingAs",
         "advances",
         "audit",
+        "customers",
         "board",
         "contracts",
         "invoices",
@@ -710,5 +711,132 @@ describe("WORK_RENEWAL_AS_LEAD — FR-506", () => {
       NOW,
     );
     expect(twice.leads.leads.length).toBe(once.leads.leads.length);
+  });
+});
+
+describe("ADD_CUSTOMER, and the tax head it unblocks", () => {
+  const add = (over: Partial<{ stateCode: string; gstin: string | null }> = {}) =>
+    ({
+      type: "ADD_CUSTOMER" as const,
+      name: "Sunrise Apartments RWA",
+      customerType: "BUSINESS" as const,
+      gstin: over.gstin === undefined ? "06AABCS1234M1Z5" : over.gstin,
+      creditDays: 15,
+      site: {
+        label: "Main site",
+        addressLine1: "Tower B, Sector 44",
+        locality: "Sector 44",
+        city: "Gurgaon",
+        stateCode: over.stateCode ?? "06",
+        pincode: "122003",
+        landmark: null,
+      },
+      contact: { name: "Mr. Rana", phone: "98110 22334" },
+    });
+
+  it("adds the customer with their site, because one without the other cannot be billed", () => {
+    const after = reduce(seedState(), add(), NOW);
+    const customer = after.customers[0];
+    expect(customer.name).toBe("Sunrise Apartments RWA");
+    expect(customer.sites).toHaveLength(1);
+    expect(customer.sites[0].stateCode).toBe("06");
+  });
+
+  it("owes nothing on day one", () => {
+    // A seeded outstanding figure would be a debt nobody incurred.
+    expect(reduce(seedState(), add(), NOW).customers[0].outstandingPaise).toBe(0);
+  });
+
+  it("charges IGST once the site's own state is on file", () => {
+    /*
+      The defect this pins. Both invoice paths derived place of supply from
+      `branch.stateCode` against itself, because no record carried a site
+      state — so an interstate supply was charged CGST+SGST, which is the
+      commonest and most expensive GST error a service firm makes (FR-802).
+    */
+    const withCustomer = reduce(seedState(), add(), NOW);
+    const contract = withCustomer.contracts.find(
+      (candidate) => candidate.customer === "Sunrise Apartments RWA",
+    )!;
+    const billed = reduce(
+      withCustomer,
+      {
+        type: "CREATE_INVOICE_FROM_CONTRACT",
+        contractId: contract.id,
+        pointNumber: 1,
+        amountPaise: 15_000_00,
+      },
+      NOW,
+    );
+
+    const invoice = latestInvoice(billed)!;
+    // Supplier is Delhi (07), site is Haryana (06).
+    expect(invoice.head).toBe("IGST");
+    expect(invoice.explanation).toContain("Haryana");
+    expect(invoice.billTo?.siteStateCode).toBe("06");
+  });
+
+  it("charges CGST+SGST when the site is in the supplier's own state", () => {
+    const withCustomer = reduce(seedState(), add({ stateCode: "07" }), NOW);
+    const contract = withCustomer.contracts.find(
+      (candidate) => candidate.customer === "Sunrise Apartments RWA",
+    )!;
+    const billed = reduce(
+      withCustomer,
+      {
+        type: "CREATE_INVOICE_FROM_CONTRACT",
+        contractId: contract.id,
+        pointNumber: 1,
+        amountPaise: 15_000_00,
+      },
+      NOW,
+    );
+    expect(latestInvoice(billed)!.head).toBe("CGST_SGST");
+  });
+
+  it("carries no identity for a customer who is not on the register", () => {
+    // And the screen refuses to send in that case, rather than printing a
+    // plausible guess from the branch's own state.
+    const contract = seedState().contracts.find(
+      (candidate) => candidate.customer === "Sunrise Apartments RWA",
+    )!;
+    const billed = reduce(
+      seedState(),
+      {
+        type: "CREATE_INVOICE_FROM_CONTRACT",
+        contractId: contract.id,
+        pointNumber: 1,
+        amountPaise: 15_000_00,
+      },
+      NOW,
+    );
+    expect(latestInvoice(billed)!.billTo).toBeNull();
+  });
+});
+
+describe("the invoice register is chronological", () => {
+  it("puts the newest at the end, whichever path raised it", () => {
+    /*
+      The two paths disagreed: one prepended, one appended, while `invoices[0]`
+      was read as "the newest". Raising a contract invoice then reviewing it
+      showed the *oldest* document, with a previous invoice's tax derivation.
+    */
+    const contract = seedState().contracts[0];
+    let state = reduce(
+      seedState(),
+      { type: "CREATE_INVOICE_FROM_CONTRACT", contractId: contract.id, pointNumber: 1, amountPaise: 10_000_00 },
+      NOW,
+    );
+    const first = latestInvoice(state)!;
+    state = reduce(
+      state,
+      { type: "CREATE_INVOICE_FROM_CONTRACT", contractId: contract.id, pointNumber: 2, amountPaise: 20_000_00 },
+      NOW,
+    );
+    const second = latestInvoice(state)!;
+
+    expect(second.id).not.toBe(first.id);
+    expect(state.invoices[0].id).toBe(first.id);
+    expect(state.invoices[state.invoices.length - 1].id).toBe(second.id);
   });
 });

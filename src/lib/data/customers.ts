@@ -167,7 +167,7 @@ export function contactOrder(contacts: Contact[]): Contact[] {
   });
 }
 
-const FIXTURE = {
+export const SEED_CUSTOMERS = {
   customers: [
     {
       id: "cus_1",
@@ -398,10 +398,11 @@ export type BillingIdentity = {
 };
 
 export function billingIdentityFor(
+  customers: readonly Customer[],
   customerName: string,
   siteHint?: string | null,
 ): BillingIdentity | null {
-  const customer = FIXTURE.customers.find(
+  const customer = customers.find(
     (candidate) => candidate.name === customerName,
   );
   if (!customer) return null;
@@ -432,5 +433,9 @@ export function billingIdentityFor(
 export const getCustomers = defineQuery<void, CustomersData>({
   key: "customers.list",
   schema: customersSchema,
-  fixture: (): Fetched<unknown> => ({ raw: FIXTURE }),
+  // Reads the store, not the constant — customers are written to now, and a
+  // screen reading the seed would not see one that had just been added.
+  fixture: async (): Promise<Fetched<unknown>> => ({
+    raw: { customers: (await import("./store")).getState().customers },
+  }),
 });

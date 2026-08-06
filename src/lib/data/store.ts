@@ -57,7 +57,12 @@ import {
   adjustAdvance,
   type Advance,
 } from "./advances";
-import { billingIdentityFor, type BillingIdentity } from "./customers";
+import {
+  SEED_CUSTOMERS,
+  billingIdentityFor,
+  type BillingIdentity,
+  type Customer,
+} from "./customers";
 import { issue, seriesStateSchema, type SeriesState } from "./series";
 import {
   append as appendAudit,
@@ -113,6 +118,14 @@ export type StoreState = {
   /** One record per human — the board's technicians are derived from these. */
   people: Person[];
   /**
+   * The customer register.
+   *
+   * A slice rather than a fixture because an invoice's place of supply — and
+   * therefore its tax head — comes from a site on this list. A register that
+   * cannot be added to is a register that blocks billing.
+   */
+  customers: Customer[];
+  /**
    * Whose session this is.
    *
    * Until auth exists (DR-9) the acting user was a hardcoded const — Priya, a
@@ -160,6 +173,7 @@ export function seedState(): StoreState {
     contracts: structuredClone(SEED_CONTRACTS.contracts) as Contract[],
     money: structuredClone(SEED_MONEY) as MoneyData,
     people: structuredClone(SEED_PEOPLE),
+    customers: structuredClone(SEED_CUSTOMERS.customers) as Customer[],
     // Priya, the coordinator — the persona §6.4 is written for.
     actingAs: "usr_0002",
     invoices: [],
@@ -362,6 +376,28 @@ export type Action =
       type: "SET_PERSON_ACTIVE";
       id: string;
       active: boolean;
+    }
+  | {
+      /**
+       * FR-201. A customer and their first site arrive together, because a
+       * customer with no site has no place of supply and therefore cannot be
+       * billed — half a record that blocks the thing it exists to enable.
+       */
+      type: "ADD_CUSTOMER";
+      name: string;
+      customerType: "INDIVIDUAL" | "BUSINESS";
+      gstin: string | null;
+      creditDays: number;
+      site: {
+        label: string;
+        addressLine1: string;
+        locality: string;
+        city: string;
+        stateCode: string;
+        pincode: string;
+        landmark: string | null;
+      };
+      contact: { name: string; phone: string } | null;
     }
   | { type: "ACT_AS"; personId: string }
   | { type: "RESET" };
@@ -711,6 +747,55 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
       return { ...state, leads: { ...state.leads, leads } };
     }
 
+    case "ADD_CUSTOMER": {
+      const seq = state.customers.length + 1;
+      const stamp = now.getTime();
+      const customer: Customer = {
+        id: `cus_${seq}_${stamp}`,
+        name: action.name,
+        customerType: action.customerType,
+        gstin: action.gstin,
+        // FR-802 compares the site's state; the billing state is where the
+        // GSTIN is registered, which is the site's own until a second address
+        // is captured.
+        billingStateCode: action.site.stateCode,
+        creditDays: action.creditDays,
+        // Nothing owed by a customer who has never been billed. A seeded
+        // figure here would be a debt nobody incurred.
+        outstandingPaise: 0,
+        sites: [
+          {
+            id: `site_${seq}_${stamp}`,
+            label: action.site.label,
+            addressLine1: action.site.addressLine1,
+            locality: action.site.locality,
+            city: action.site.city,
+            stateCode: action.site.stateCode,
+            pincode: action.site.pincode,
+            landmark: action.site.landmark,
+            accessNotes: null,
+            contacts: action.contact
+              ? [
+                  {
+                    id: `con_${seq}_${stamp}`,
+                    name: action.contact.name,
+                    phone: action.contact.phone,
+                    // Assumed the same until told otherwise — §7.6 keeps it a
+                    // separate field precisely because it often differs.
+                    whatsapp: action.contact.phone,
+                    roleLabel: "OWNER",
+                    isPrimary: true,
+                  },
+                ]
+              : [],
+            assets: [],
+            timeline: [],
+          },
+        ],
+      };
+      return { ...state, customers: [customer, ...state.customers] };
+    }
+
     case "ACT_AS":
       return { ...state, actingAs: action.personId };
 
@@ -821,7 +906,24 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
       ];
 
       const branch = SEED_TENANT.branches[0];
-      const derivation = derivePlaceOfSupply(branch.stateCode, branch.stateCode);
+      const billTo = billingIdentityFor(
+        state.customers,
+        contract.customer,
+        contract.site,
+      );
+      /*
+        FR-802, finally derived from the site rather than the branch.
+
+        Both invoice paths used `derivePlaceOfSupply(branch, branch)` because no
+        record carried a site state — which quietly charged CGST+SGST on every
+        interstate supply. With the register writable and the site captured, the
+        real state is available; falling back to the branch's own only when the
+        customer is not on file, where the screen already refuses to send.
+      */
+      const derivation = derivePlaceOfSupply(
+        billTo?.siteStateCode ?? branch.stateCode,
+        branch.stateCode,
+      );
       const totals = computeTotals(lines, derivation.head);
       const issued = issue(state.series, branch, "invoice", now);
 
@@ -833,7 +935,7 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
         contractId: contract.id,
         contractPoint: action.pointNumber,
         customer: contract.customer,
-        billTo: billingIdentityFor(contract.customer, contract.site),
+        billTo,
         dateWord: dateWord(now),
         head: derivation.head,
         explanation: derivation.explanation,
@@ -914,11 +1016,14 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
       ];
 
       const branch = SEED_TENANT.branches[0];
-      // Place of supply from the site's state, derived and explained (FR-802).
-      // The seed board carries no site state code, so this uses the branch's own
-      // until sites are wired through — which keeps the derivation honest rather
-      // than inventing an interstate supply.
-      const derivation = derivePlaceOfSupply(branch.stateCode, branch.stateCode);
+      const billTo = billingIdentityFor(state.customers, job.customer, job.locality);
+      // Place of supply from the site's own state (FR-802) — the branch's is
+      // used only when the customer is not on the register, and the invoice
+      // screen refuses to send in that case rather than pretending.
+      const derivation = derivePlaceOfSupply(
+        billTo?.siteStateCode ?? branch.stateCode,
+        branch.stateCode,
+      );
       const totals = computeTotals(lines, derivation.head);
       const issued = issue(state.series, branch, "invoice", now);
 
@@ -930,7 +1035,7 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
         contractId: null,
         contractPoint: null,
         customer: job.customer,
-        billTo: billingIdentityFor(job.customer, job.locality),
+        billTo,
         dateWord: dateWord(now),
         head: derivation.head,
         explanation: derivation.explanation,
@@ -944,7 +1049,14 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
 
       return {
         ...state,
-        invoices: [invoice, ...state.invoices],
+        /*
+          Appended, like the contract path. The two disagreed — one prepended,
+          one appended — while `invoices[0]` was read as "the newest". So after
+          raising a contract invoice the review screen showed the oldest one,
+          with the previous document's tax derivation on it. A register is
+          chronological; the newest is at the end, and callers say so.
+        */
+        invoices: [...state.invoices, invoice],
         board: {
           ...state.board,
           jobs: state.board.jobs.map((candidate) =>
@@ -1124,4 +1236,9 @@ export function hydrate(): Promise<void> {
   })();
 
   return hydration;
+}
+
+/** The most recent document in the register — invoices are chronological. */
+export function latestInvoice(state: StoreState): Invoice | null {
+  return state.invoices[state.invoices.length - 1] ?? null;
 }

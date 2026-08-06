@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapPin, MessageCircle, Phone, Users } from "lucide-react";
+import Link from "next/link";
+import { MapPin, MessageCircle, Phone, Plus, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
@@ -333,6 +334,12 @@ export default function CustomersPage() {
           breadcrumb={[{ label: "Work" }]}
           title="Customers &amp; sites"
           description="Everything about one customer, and whether this is a repeat problem."
+          actions={
+            <Button render={<Link href="/customers/new" />} nativeButton={false}>
+              <Plus className="size-4" />
+              Add customer
+            </Button>
+          }
         />
 
         <QueryBoundary query={query} label="customers" loadingRows={6}>

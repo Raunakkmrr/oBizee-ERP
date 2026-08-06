@@ -16,6 +16,7 @@ import {
   type Advance,
 } from "@/lib/data/advances";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { latestInvoice } from "@/lib/data/store";
 
 /**
  * Advances received - FR-810.
@@ -40,7 +41,7 @@ export function AdvancesPanel() {
   const taxOut = unadjustedTaxPaise(advances);
 
   /** The most recent invoice - the only thing an advance can be adjusted into. */
-  const latestInvoice = state.invoices[0] ?? null;
+  const newestInvoice = latestInvoice(state);
 
   return (
     <Panel
@@ -91,13 +92,13 @@ export function AdvancesPanel() {
             <AdvanceRow
               key={advance.id}
               advance={advance}
-              invoiceNumber={latestInvoice?.number ?? null}
+              invoiceNumber={newestInvoice?.number ?? null}
               onAdjust={() => {
-                if (!latestInvoice) return;
+                if (!newestInvoice) return;
                 dispatch({
                   type: "ADJUST_ADVANCE",
                   voucherNumber: advance.voucherNumber,
-                  invoiceNumber: latestInvoice.number,
+                  invoiceNumber: newestInvoice.number,
                 });
               }}
             />

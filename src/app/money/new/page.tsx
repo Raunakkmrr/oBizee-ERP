@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Info, Star, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
@@ -18,6 +18,7 @@ import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { Panel } from "@/components/shared/panel";
 import { Briefcase, Send, ShieldCheck } from "lucide-react";
 import { useStoreState } from "@/lib/data/use-store";
+import { latestInvoice } from "@/lib/data/store";
 import { billingIdentityFor } from "@/lib/data/customers";
 import { EM_DASH } from "@/lib/data/result";
 import { cn } from "@/lib/utils";
@@ -114,7 +115,7 @@ export default function CreateInvoicePage() {
    * still demonstrates the tax engine on a cold start.
    */
   const storeState = useStoreState();
-  const created = storeState.invoices[0] ?? null;
+  const created = latestInvoice(storeState);
   /*
     The fixture identity belongs to the cold-start example and to nothing else.
 
@@ -125,7 +126,7 @@ export default function CreateInvoicePage() {
   */
   const billTo = created
     ? created.billTo
-    : billingIdentityFor("Shakti Industries", "Okhla Phase II");
+    : billingIdentityFor(storeState.customers, "Shakti Industries", "Okhla Phase II");
 
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
@@ -154,22 +155,20 @@ export default function CreateInvoicePage() {
     screen exists to answer.
   */
   const siteStateCode = billTo?.siteStateCode ?? null;
-  const derivation = useMemo(
-    () =>
-      created
-        ? {
-            head: created.head,
-            explanation: created.explanation,
-            siteState: siteStateCode ?? supplierState,
-            supplierState,
-          }
-        : derivePlaceOfSupply(siteStateCode ?? supplierState, supplierState),
-    [created, siteStateCode, supplierState],
-  );
-  const totals = useMemo(
-    () => computeTotals(lines, derivation.head),
-    [lines, derivation.head],
-  );
+  /*
+    Plain expressions, not `useMemo`. Both are pure and cheap, and the React
+    Compiler memoizes them on its own — hand-written memos here only stopped it
+    compiling the component at all.
+  */
+  const derivation = created
+    ? {
+        head: created.head,
+        explanation: created.explanation,
+        siteState: siteStateCode ?? supplierState,
+        supplierState,
+      }
+    : derivePlaceOfSupply(siteStateCode ?? supplierState, supplierState);
+  const totals = computeTotals(lines, derivation.head);
 
   const aato = SEED_TENANT.aatoPaise;
   const today = new Date();
