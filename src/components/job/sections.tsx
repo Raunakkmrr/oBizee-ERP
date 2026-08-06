@@ -9,7 +9,9 @@ import {
   Clock,
   MapPin,
   MessageCircle,
+  Navigation,
   Package,
+  PenLine,
   Phone,
   TriangleAlert,
   WifiOff,
@@ -19,7 +21,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
-import type { Check as StageCheck, JobDetail, Stage } from "@/lib/data/job-detail";
+import {
+  nextStepFor,
+  type Check as StageCheck,
+  type JobDetail,
+  type Stage,
+} from "@/lib/data/job-detail";
 
 /**
  * The job detail screen's parts, so the page can order them by stage.
@@ -104,31 +111,72 @@ export function DecisionBand({
 /* -------------------------------------------------------------- containers */
 
 /**
+ * Each kind of section gets its own colour and its own shape.
+ *
+ * **Why.** Every section was the same white card with the same orange chip, so
+ * nothing said "this is an address" or "this is a history" until you read the
+ * words. On a screen whose whole job is being scanned in five seconds, that is
+ * the defect — the reader was doing the sorting that the design should do.
+ *
+ * The hues are the ones already in the palette, used only on the chip and a
+ * hairline rail, never as a filled background. One accent per *meaning*, not a
+ * second colour system: blue is place, orange is the job's own spine, brown is
+ * materials, amber is the machine, green is the customer's signature.
+ */
+export type Tone = "place" | "history" | "materials" | "machine" | "signature";
+
+const TONE: Record<Tone, { chip: string; rail: string }> = {
+  place: { chip: "bg-info/12 text-info", rail: "bg-info/60" },
+  history: { chip: "bg-primary-bg text-primary-text", rail: "bg-primary/60" },
+  materials: {
+    chip: "bg-brand-brown/12 text-brand-brown",
+    rail: "bg-brand-brown/60",
+  },
+  machine: { chip: "bg-warning/15 text-warning", rail: "bg-warning/60" },
+  signature: { chip: "bg-success/12 text-success", rail: "bg-success/60" },
+};
+
+/**
  * A section that leads: open, titled, full weight.
  *
- * No drawn head band and no rule beneath the title — the card's own surface is
- * the separation, which is the treatment the rest of the product now uses.
+ * The rail is a 3px bar down the left edge in the section's own colour — enough
+ * to tell two cards apart in peripheral vision, far less than a border round
+ * the whole card, which is the treatment that got rejected.
  */
 export function Section({
   title,
   icon: Icon,
+  tone,
   className,
   children,
 }: {
   title: string;
   icon: LucideIcon;
+  tone: Tone;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
     <section
       className={cn(
-        "rounded-xl bg-card p-4 shadow-[var(--shadow-card)]",
+        "relative overflow-hidden rounded-xl bg-card p-4 pl-5 shadow-[var(--shadow-card)]",
         className,
       )}
     >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-y-0 left-0 w-[3px] rounded-r-full",
+          TONE[tone].rail,
+        )}
+      />
       <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold tracking-tight">
-        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary-bg text-primary-text">
+        <span
+          className={cn(
+            "grid size-7 shrink-0 place-items-center rounded-lg",
+            TONE[tone].chip,
+          )}
+        >
           <Icon className="size-4" />
         </span>
         {title}
@@ -148,22 +196,31 @@ export function Section({
 export function CollapsedSection({
   title,
   icon: Icon,
+  tone,
   summary,
   children,
 }: {
   title: string;
   icon: LucideIcon;
+  tone: Tone;
   summary: string;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <section className="overflow-hidden rounded-xl bg-card shadow-[var(--shadow-card)]">
+    <section className="relative overflow-hidden rounded-xl bg-card shadow-[var(--shadow-card)]">
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-y-0 left-0 w-[3px] rounded-r-full",
+          TONE[tone].rail,
+        )}
+      />
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+        className="flex w-full items-center gap-2.5 py-2.5 pr-4 pl-5 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
       >
         <ChevronDown
           aria-hidden="true"
@@ -172,13 +229,20 @@ export function CollapsedSection({
             !open && "-rotate-90",
           )}
         />
-        <Icon aria-hidden="true" className="size-4 shrink-0 text-primary-text" />
+        <span
+          className={cn(
+            "grid size-6 shrink-0 place-items-center rounded-md",
+            TONE[tone].chip,
+          )}
+        >
+          <Icon aria-hidden="true" className="size-3.5" />
+        </span>
         <span className="text-sm font-medium">{title}</span>
         <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground">
           {summary}
         </span>
       </button>
-      {open ? <div className="px-4 pt-1 pb-4">{children}</div> : null}
+      {open ? <div className="pt-1 pr-4 pb-4 pl-5">{children}</div> : null}
     </section>
   );
 }
@@ -188,15 +252,45 @@ export function CollapsedSection({
 export function WhereBody({ job }: { job: JobDetail }) {
   return (
     <div className="space-y-3 text-sm">
-      <p>{job.site.addressLine}</p>
-      {job.site.landmark ? (
-        // On its own line — a landmark is how an Indian address is actually
-        // resolved on the ground (§6.5.1).
-        <p className="font-medium">Landmark: {job.site.landmark}</p>
-      ) : null}
-      <p className="text-muted-foreground tabular-nums">
-        {job.site.locality} {job.site.pincode}
-      </p>
+      {/*
+        The address block reads as a place rather than as three more lines of
+        prose: a faint map grid behind it, a pin marker, and the landmark given
+        its own icon. §6.5.1 puts the landmark on its own line because that is
+        how an Indian address is actually resolved on the ground — this makes
+        that line look like the instruction it is.
+      */}
+      <div className="relative overflow-hidden rounded-lg bg-info/[0.06] p-3">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-[0.5]"
+          style={{
+            backgroundImage:
+              "linear-gradient(var(--color-info) 1px, transparent 1px), linear-gradient(90deg, var(--color-info) 1px, transparent 1px)",
+            backgroundSize: "22px 22px",
+            maskImage:
+              "radial-gradient(120% 100% at 85% 0%, #000 10%, transparent 70%)",
+            opacity: 0.12,
+          }}
+        />
+        <div className="relative flex gap-2.5">
+          <MapPin className="mt-0.5 size-4 shrink-0 text-info" />
+          <div className="min-w-0">
+            <p className="font-medium">{job.site.addressLine}</p>
+            <p className="text-muted-foreground tabular-nums">
+              {job.site.locality} {job.site.pincode}
+            </p>
+            {job.site.landmark ? (
+              <p className="mt-1.5 flex items-start gap-1.5">
+                <Navigation className="mt-0.5 size-3.5 shrink-0 text-info" />
+                <span>
+                  <span className="text-muted-foreground">Landmark · </span>
+                  {job.site.landmark}
+                </span>
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
 
       <Button
         variant="outline"
@@ -311,6 +405,8 @@ export function AssetBody({ job }: { job: JobDetail }) {
 }
 
 export function TimelineBody({ job }: { job: JobDetail }) {
+  const next = nextStepFor(job.status);
+
   if (job.timeline.length === 0) {
     // A panel with nothing in it reads as a rendering failure. A job created in
     // this session genuinely has no history yet, and saying so is honest.
@@ -322,35 +418,88 @@ export function TimelineBody({ job }: { job: JobDetail }) {
     );
   }
 
+  // Newest first: what just happened is what she is being asked about on the
+  // phone. The rail therefore runs *up* from the present, and the dashed
+  // continuation sits at the top rather than the bottom.
+  const events = [...job.timeline].reverse();
+
   return (
-    <ul className="space-y-3 text-sm">
-      {/* Newest first: what just happened is what she is being asked about. */}
-      {[...job.timeline].reverse().map((event) => (
-        <li key={event.id} className="flex gap-3">
+    <ol className="relative text-sm">
+      {/*
+        What has not happened yet, drawn as a dashed stub above the newest
+        event. This is the difference between a log and a position: the reader
+        can see that the job is one step from being billable without counting
+        the entries.
+      */}
+      {next ? (
+        <li className="relative flex gap-3 pb-4">
           <span
             aria-hidden="true"
-            className="mt-1.5 size-2 shrink-0 rounded-full bg-primary"
+            className="absolute top-2 bottom-0 left-[7px] border-l-2 border-dashed border-muted-foreground/35"
           />
-          <span className="min-w-0">
-            <span className="block">{event.label}</span>
-            <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-              <span className="tabular-nums">{event.at}</span>
-              <span>· {event.actor}</span>
-              {event.place ? <span>· {event.place}</span> : null}
-              {event.offline ? (
-                // §4.2 rule 3 records whether an event originated offline;
-                // §9.2 makes `occurred_at` authoritative. A technician who
-                // finished at 4pm in a basement did the job at 4pm.
-                <span className="flex items-center gap-1 text-brand-brown">
-                  <WifiOff className="size-3" aria-hidden="true" />
-                  recorded offline
-                </span>
-              ) : null}
+          <span
+            aria-hidden="true"
+            className="relative z-10 mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border-2 border-dashed border-muted-foreground/45 bg-card"
+          />
+          <span className="min-w-0 pb-0.5">
+            <span className="block text-muted-foreground">{next}</span>
+            <span className="text-xs text-muted-foreground/80">
+              not yet — the next thing this job owes
             </span>
           </span>
         </li>
-      ))}
-    </ul>
+      ) : null}
+
+      {events.map((event, index) => {
+        const newest = index === 0;
+        const last = index === events.length - 1;
+        return (
+          <li key={event.id} className="relative flex gap-3 pb-4 last:pb-0">
+            {/* Solid, because everything below the marker has happened. */}
+            {!last ? (
+              <span
+                aria-hidden="true"
+                className="absolute top-4 bottom-0 left-[7px] w-0.5 bg-primary/25"
+              />
+            ) : null}
+
+            <span
+              aria-hidden="true"
+              className={cn(
+                "relative z-10 mt-0.5 size-4 shrink-0 rounded-full border-2 border-card",
+                // The newest event is where the job actually *is*, so it gets a
+                // ring — the "you are here" marker the rail exists to place.
+                newest
+                  ? "bg-primary ring-3 ring-primary/25"
+                  : "bg-primary/35",
+              )}
+            />
+
+            <span className="min-w-0">
+              <span
+                className={cn("block", newest && "font-medium")}
+              >
+                {event.label}
+              </span>
+              <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                <span className="tabular-nums">{event.at}</span>
+                <span>· {event.actor}</span>
+                {event.place ? <span>· {event.place}</span> : null}
+                {event.offline ? (
+                  // §4.2 rule 3 records whether an event originated offline;
+                  // §9.2 makes `occurred_at` authoritative. A technician who
+                  // finished at 4pm in a basement did the job at 4pm.
+                  <span className="flex items-center gap-1 text-brand-brown">
+                    <WifiOff className="size-3" aria-hidden="true" />
+                    recorded offline
+                  </span>
+                ) : null}
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -363,13 +512,18 @@ export function PartsBody({ job }: { job: JobDetail }) {
     );
   }
   return (
-    <ul className="space-y-1 text-sm">
+    /*
+      Quantity first and in its own chip, because that is the column being
+      scanned — "what came off the van, how much" — and a right-aligned number
+      at the end of a ragged label is read last.
+    */
+    <ul className="space-y-1.5 text-sm">
       {job.parts.map((part) => (
-        <li key={part.name} className="flex justify-between gap-2">
-          <span className="min-w-0 truncate">{part.name}</span>
-          <span className="shrink-0 tabular-nums">
+        <li key={part.name} className="flex items-center gap-2.5">
+          <span className="grid min-w-11 shrink-0 place-items-center rounded-md bg-brand-brown/12 px-1.5 py-0.5 text-xs font-semibold text-brand-brown tabular-nums">
             {part.qty} {part.unit}
           </span>
+          <span className="min-w-0 truncate">{part.name}</span>
         </li>
       ))}
     </ul>
@@ -384,25 +538,39 @@ export function SignOffBody({ job }: { job: JobDetail }) {
         to read "the technician hasn't completed the work" on every unsigned
         job — including one the header was simultaneously badging Work done.
       */
-      <p className="text-sm text-muted-foreground">
-        {job.status === "WORK_DONE"
-          ? "Work is finished — waiting on the customer to sign."
-          : job.status === "PARTS_AWAITED"
-            ? "Held for parts, so there is nothing to sign yet."
-            : "Not signed off yet — the work is still in progress."}
-      </p>
+      <div className="space-y-2">
+        {/*
+          An empty signature slot, drawn as one. The words alone made "not
+          signed" look the same as every other muted sentence on the screen;
+          the dashed box is the shape of the thing that is missing.
+        */}
+        <div className="grid h-16 place-items-center rounded-lg border-2 border-dashed border-muted-foreground/25">
+          <PenLine className="size-5 text-muted-foreground/40" aria-hidden="true" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {job.status === "WORK_DONE"
+            ? "Work is finished — waiting on the customer to sign."
+            : job.status === "PARTS_AWAITED"
+              ? "Held for parts, so there is nothing to sign yet."
+              : "Not signed off yet — the work is still in progress."}
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="space-y-2 text-sm">
-      <p>
-        Signed off at <span className="tabular-nums">{job.signOff.at}</span> by{" "}
-        {job.signOff.signerName}
-      </p>
-      <p className="text-muted-foreground tabular-nums">
-        Rated {job.signOff.rating} of 5
-      </p>
+      <div className="flex items-center gap-3 rounded-lg bg-success/[0.08] p-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-success/15 text-success">
+          <CircleCheck className="size-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="font-medium">{job.signOff.signerName}</p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {job.signOff.at} · rated {job.signOff.rating} of 5
+          </p>
+        </div>
+      </div>
       {!job.signOff.signatureUploaded ? (
         // §6.5.2: this happens many times a day and "must read as normal, not
         // as an error" — so it is muted text, not an alert.

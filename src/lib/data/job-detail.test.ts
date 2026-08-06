@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canBillNow,
+  nextStepFor,
   primaryActionFor,
   stageFor,
   type JobDetail,
@@ -170,5 +171,27 @@ describe("canBillNow — never offer what the settings forbid", () => {
 
   it("refuses a job that is still in progress", () => {
     expect(canBillNow(detail({ status: "ON_SITE" }), LENIENT)).toBe(false);
+  });
+});
+
+describe("nextStepFor — the dashed half of the timeline", () => {
+  it("names what the job is waiting on at each live state", () => {
+    expect(nextStepFor("WORK_DONE")).toBe("Customer signs off");
+    expect(nextStepFor("SIGNED_OFF")).toBe("Invoice raised");
+    expect(nextStepFor("EN_ROUTE")).toBe("Technician reaches site");
+    expect(nextStepFor("PARTS_AWAITED")).toBe(
+      "Part arrives and a revisit is scheduled",
+    );
+  });
+
+  it("returns null once nothing is owed", () => {
+    // Inventing a next step on a settled job puts a task on screen that the
+    // office cannot act on.
+    expect(nextStepFor("PAID")).toBeNull();
+    expect(nextStepFor("CLOSED")).toBeNull();
+  });
+
+  it("returns null rather than guessing at an unknown state", () => {
+    expect(nextStepFor("SOMETHING_NEW")).toBeNull();
   });
 });

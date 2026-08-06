@@ -25,6 +25,7 @@ import {
   SignOffBody,
   TimelineBody,
   WhereBody,
+  type Tone,
 } from "@/components/job/sections";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
 import { getState } from "@/lib/data/store";
@@ -167,11 +168,12 @@ export default function JobDetailPage({
               key: "where" | "asset" | "timeline" | "parts" | "signoff",
               title: string,
               icon: typeof MapPin,
+              tone: Tone,
               summary: string,
               body: React.ReactNode,
             ) =>
               leads.has(key) ? (
-                <Section key={key} title={title} icon={icon}>
+                <Section key={key} title={title} icon={icon} tone={tone}>
                   {body}
                 </Section>
               ) : (
@@ -179,6 +181,7 @@ export default function JobDetailPage({
                   key={key}
                   title={title}
                   icon={icon}
+                  tone={tone}
                   summary={summary}
                 >
                   {body}
@@ -190,6 +193,7 @@ export default function JobDetailPage({
                 "where",
                 "Where",
                 MapPin,
+                "place",
                 [
                   job.site.locality || null,
                   job.site.contacts.length > 0
@@ -204,6 +208,7 @@ export default function JobDetailPage({
                 "asset",
                 "Asset",
                 Package,
+                "machine",
                 job.asset
                   ? [job.asset.description, job.asset.repeatFailure && "repeat failure"]
                       .filter(Boolean)
@@ -215,6 +220,7 @@ export default function JobDetailPage({
                 "timeline",
                 "What happened",
                 Clock,
+                "history",
                 job.timeline.length > 0
                   ? `${job.timeline.length} events · last ${job.timeline.at(-1)?.at}`
                   : "nothing recorded yet",
@@ -224,6 +230,7 @@ export default function JobDetailPage({
                 "parts",
                 "Parts used",
                 Package,
+                "materials",
                 job.parts.length > 0
                   ? `${job.parts.length} recorded`
                   : "none recorded",
@@ -233,6 +240,7 @@ export default function JobDetailPage({
                 "signoff",
                 "Sign-off",
                 CircleCheck,
+                "signature",
                 job.signOff
                   ? `signed by ${job.signOff.signerName}`
                   : "not signed yet",
@@ -476,7 +484,13 @@ export default function JobDetailPage({
                   fall underneath as single rows, so the fold is spent on what
                   this stage actually needs.
                 */}
-                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {/*
+                  `items-start`, so a card sizes to its own content. Without it
+                  an empty Parts card stretched to match a long timeline beside
+                  it — a tall white rectangle holding one sentence, which reads
+                  as something failing to load.
+                */}
+                <div className="mt-4 grid items-start gap-3 lg:grid-cols-2">
                   {order
                     .filter((key) => leads.has(key))
                     .map((key) => sections[key])}

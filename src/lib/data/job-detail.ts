@@ -141,6 +141,51 @@ export function primaryActionFor(status: string): PrimaryAction {
   }
 }
 
+/* ------------------------------------------------------------- next step */
+
+/**
+ * What has not happened yet — the dashed continuation on the timeline.
+ *
+ * The timeline showed only the past, so it read as a log rather than a
+ * position: you could see five things that had happened without seeing that
+ * the job was one step from being billable. Naming the next expected event
+ * turns the rail into "you are here, and here is what is owed next".
+ *
+ * `null` where nothing is owed. A paid, closed job has no next step, and
+ * inventing one ("await payment" on a settled invoice) would be a task the
+ * office cannot do anything about.
+ */
+export function nextStepFor(status: string): string | null {
+  switch (status) {
+    case "CREATED":
+      return "Scheduled for a day and slot";
+    case "SCHEDULED":
+      return "Assigned to a technician";
+    case "ASSIGNED":
+      return "Technician starts travelling";
+    case "EN_ROUTE":
+      return "Technician reaches site";
+    case "ON_SITE":
+    case "IN_PROGRESS":
+      return "Work done";
+    case "PARTS_AWAITED":
+      return "Part arrives and a revisit is scheduled";
+    case "CUSTOMER_UNAVAILABLE":
+      return "Revisit scheduled with the customer";
+    case "WORK_DONE":
+      return "Customer signs off";
+    case "SIGNED_OFF":
+      return "Invoice raised";
+    case "INVOICED":
+      return "Payment received";
+    case "PAID":
+    case "CLOSED":
+      return null;
+    default:
+      return null;
+  }
+}
+
 /* ------------------------------------------------------------------ stage */
 
 /**
