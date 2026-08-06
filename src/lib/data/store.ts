@@ -57,6 +57,7 @@ import {
   adjustAdvance,
   type Advance,
 } from "./advances";
+import { billingIdentityFor, type BillingIdentity } from "./customers";
 import { issue, seriesStateSchema, type SeriesState } from "./series";
 import {
   append as appendAudit,
@@ -83,6 +84,15 @@ export type Invoice = {
   /** Which point in the contract's billing schedule this settles. */
   contractPoint: number | null;
   customer: string;
+  /**
+   * Who the bill is addressed to, as it stood when the invoice was issued.
+   *
+   * Null when the customer is not on file — the screen then says so rather than
+   * printing somebody else's. The defect this exists to prevent: a hardcoded
+   * "Registered office, Pune / GSTIN 27AABCS1234M1Z5 / Plot 14, MIDC Phase II"
+   * stamped onto every invoice regardless of who it was for.
+   */
+  billTo: BillingIdentity | null;
   dateWord: string;
   head: "CGST_SGST" | "IGST";
   explanation: string;
@@ -197,15 +207,32 @@ function hasEverySlice(value: unknown): value is StoreState {
     known gap rather than a decision — recorded so the next person adding a
     field knows the guard will not catch them.
   */
-  const { people, series, audit } = value as {
+  const { people, series, audit, invoices } = value as {
     people: unknown;
     series: unknown;
     audit: unknown;
+    invoices: unknown;
   };
+
+  /*
+    `invoices` is checked for the field that was added last, not against a full
+    schema. An invoice stored before `billTo` existed restores with it
+    undefined, and the screen would then have nothing to print for the customer
+    it is addressed to — which is how a fixture identity ends up on a real
+    document.
+  */
+  const invoicesCarryBillTo =
+    Array.isArray(invoices) &&
+    invoices.every(
+      (invoice) =>
+        typeof invoice === "object" && invoice !== null && "billTo" in invoice,
+    );
+
   return (
     z.array(personSchema).safeParse(people).success &&
     seriesStateSchema.safeParse(series).success &&
-    auditSchema.safeParse(audit).success
+    auditSchema.safeParse(audit).success &&
+    invoicesCarryBillTo
   );
 }
 
@@ -806,6 +833,7 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
         contractId: contract.id,
         contractPoint: action.pointNumber,
         customer: contract.customer,
+        billTo: billingIdentityFor(contract.customer, contract.site),
         dateWord: dateWord(now),
         head: derivation.head,
         explanation: derivation.explanation,
@@ -902,6 +930,7 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
         contractId: null,
         contractPoint: null,
         customer: job.customer,
+        billTo: billingIdentityFor(job.customer, job.locality),
         dateWord: dateWord(now),
         head: derivation.head,
         explanation: derivation.explanation,

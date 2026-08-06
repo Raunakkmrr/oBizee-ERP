@@ -374,6 +374,61 @@ const FIXTURE = {
   ],
 };
 
+/**
+ * Who a bill is addressed to, frozen at the moment it is issued — not joined.
+ *
+ * **Why a snapshot.** A tax invoice is a document, not a view. If a customer
+ * later corrects their GSTIN or moves office, every invoice already issued must
+ * keep showing what was printed and filed; joining live would silently rewrite
+ * history and put the register out of step with the returns. So the invoice
+ * carries these fields, and this function is only ever called at the moment one
+ * is created.
+ *
+ * Returns null when the customer is not on file. The caller must then say so —
+ * the defect this replaces was a screen that printed one customer's registered
+ * address and GSTIN on every other customer's invoice.
+ */
+export type BillingIdentity = {
+  gstin: string | null;
+  billingStateCode: string;
+  siteAddress: string;
+  siteLocality: string;
+  siteStateCode: string;
+  sitePincode: string;
+};
+
+export function billingIdentityFor(
+  customerName: string,
+  siteHint?: string | null,
+): BillingIdentity | null {
+  const customer = FIXTURE.customers.find(
+    (candidate) => candidate.name === customerName,
+  );
+  if (!customer) return null;
+
+  // The site the work was at, when we know it — a customer with a Pune office
+  // and a Nagpur plant has two different places of supply.
+  const site =
+    (siteHint
+      ? customer.sites.find(
+          (candidate) =>
+            candidate.locality === siteHint ||
+            candidate.label === siteHint ||
+            candidate.addressLine1 === siteHint,
+        )
+      : null) ?? customer.sites[0];
+
+  return {
+    gstin: customer.gstin,
+    billingStateCode: customer.billingStateCode,
+    siteAddress: site?.addressLine1 ?? "",
+    siteLocality: site?.locality ?? "",
+    // FR-802 compares the SITE's state, never the billing state.
+    siteStateCode: site?.stateCode ?? customer.billingStateCode,
+    sitePincode: site?.pincode ?? "",
+  };
+}
+
 export const getCustomers = defineQuery<void, CustomersData>({
   key: "customers.list",
   schema: customersSchema,

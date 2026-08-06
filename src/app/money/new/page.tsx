@@ -13,11 +13,14 @@ import { Separator } from "@/components/ui/separator";
 import { MoneyText } from "@/components/shared/money-text";
 import { ROW_TR } from "@/components/shared/controls";
 import { asPaise } from "@/lib/money";
-import { codeForAato, computeTotals, derivePlaceOfSupply, type InvoiceLine } from "@/lib/tax";
+import { STATE_NAMES, codeForAato, computeTotals, derivePlaceOfSupply, type InvoiceLine } from "@/lib/tax";
 import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { Panel } from "@/components/shared/panel";
 import { Briefcase, Send, ShieldCheck } from "lucide-react";
 import { useStoreState } from "@/lib/data/use-store";
+import { billingIdentityFor } from "@/lib/data/customers";
+import { EM_DASH } from "@/lib/data/result";
+import { cn } from "@/lib/utils";
 import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
 import { whatsappHref } from "@/lib/contact";
 import { adviseSupply } from "@/lib/tax";
@@ -43,7 +46,6 @@ import { UpiQr } from "@/components/shared/upi-qr";
  * is stored on the invoice** — genuine exceptions occur, silent ones must not.
  */
 
-const SITE_STATE = "27"; // Maharashtra — the job's site
 /** Fallback only — used when nothing has been billed yet in this session. */
 const JOB_NUMBER = "J-2607-0431";
 
@@ -113,6 +115,17 @@ export default function CreateInvoicePage() {
    */
   const storeState = useStoreState();
   const created = storeState.invoices[0] ?? null;
+  /*
+    The fixture identity belongs to the cold-start example and to nothing else.
+
+    `created?.billTo ?? fixture` was the same defect one level up: an invoice
+    that carries no identity would fall through to Shakti Industries' GSTIN and
+    print it on somebody else's bill. A real invoice answers for itself or says
+    it cannot.
+  */
+  const billTo = created
+    ? created.billTo
+    : billingIdentityFor("Shakti Industries", "Okhla Phase II");
 
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
@@ -131,17 +144,27 @@ export default function CreateInvoicePage() {
   // Every reference on this screen follows the same invoice, so the header,
   // the line table and the evidence panel cannot describe different jobs.
   const jobRef = created?.jobNumber ?? JOB_NUMBER;
+  /*
+    Derived from the site on the register, not a constant.
+
+    Two literals used to fight here: a `SITE_STATE = "27"` at the top of the
+    file, and a `siteState: supplierState` on the created branch. The screen
+    could therefore print "Place of supply: Delhi (07)" one line above "Site in
+    Maharashtra (27) → IGST" — two different answers to the one question this
+    screen exists to answer.
+  */
+  const siteStateCode = billTo?.siteStateCode ?? null;
   const derivation = useMemo(
     () =>
       created
         ? {
             head: created.head,
             explanation: created.explanation,
-            siteState: supplierState,
+            siteState: siteStateCode ?? supplierState,
             supplierState,
           }
-        : derivePlaceOfSupply(SITE_STATE, supplierState),
-    [created, supplierState],
+        : derivePlaceOfSupply(siteStateCode ?? supplierState, supplierState),
+    [created, siteStateCode, supplierState],
   );
   const totals = useMemo(
     () => computeTotals(lines, derivation.head),
@@ -223,40 +246,89 @@ export default function CreateInvoicePage() {
                     <p className="mt-1 text-sm font-medium">
                       {created?.customer ?? "Shakti Industries"}
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      Registered office, Pune
-                    </p>
-                    <p className="text-sm text-muted-foreground tnum-id">
-                      GSTIN 27AABCS1234M1Z5
-                    </p>
+                    {/*
+                      Read off the invoice, never a literal. This block used to
+                      print "Registered office, Pune / GSTIN 27AABCS1234M1Z5" on
+                      every invoice regardless of who it was addressed to — one
+                      customer's identity stamped onto another's tax document.
+                    */}
+                    {billTo ? (
+                      <p className="text-sm text-muted-foreground tnum-id">
+                        {billTo.gstin ? (
+                          `GSTIN ${billTo.gstin}`
+                        ) : (
+                          // Unregistered is a fact, not a blank (§7.4).
+                          <span className="not-tabular">
+                            No GSTIN — unregistered customer
+                          </span>
+                        )}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-warning">
+                        Not on the customer register — add them before sending
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p className="text-xs font-medium text-muted-foreground">
                       Place of supply
                     </p>
-                    <p className="mt-1 text-sm font-medium">
-                      Plot 14, MIDC Phase II
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Okhla Phase II
-                    </p>
-                    <p className="text-sm text-muted-foreground tnum-id">
-                      State: {derivation.siteState} ({SITE_STATE})
-                    </p>
+                    {billTo ? (
+                      <>
+                        <p className="mt-1 text-sm font-medium">
+                          {billTo.siteAddress || EM_DASH}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {[billTo.siteLocality, billTo.sitePincode]
+                            .filter(Boolean)
+                            .join(" · ") || EM_DASH}
+                        </p>
+                        <p className="text-sm text-muted-foreground tnum-id">
+                          {/* One state, one code — this line read "07 (27)". */}
+                          {STATE_NAMES[billTo.siteStateCode] ??
+                            `State ${billTo.siteStateCode}`}{" "}
+                          ({billTo.siteStateCode})
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-sm text-warning">
+                        No site on file — the tax head cannot be derived
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 {/* ================= THE DERIVATION LINE ================= */}
-                <div className="rounded-xl bg-primary-bg p-3">
+                <div
+                  className={cn(
+                    "rounded-xl p-3",
+                    siteStateCode === null ? "bg-destructive-bg" : "bg-primary-bg",
+                  )}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <p className="flex items-start gap-2 text-sm font-medium">
-                      <Info
-                        aria-hidden="true"
-                        className="mt-0.5 size-4 shrink-0 text-primary"
-                      />
-                      {/* Rendered verbatim from the pure function, so the screen
-                          and the computation cannot disagree. */}
-                      <span>{derivation.explanation}</span>
+                      {siteStateCode === null ? (
+                        <TriangleAlert
+                          aria-hidden="true"
+                          className="mt-0.5 size-4 shrink-0 text-destructive"
+                        />
+                      ) : (
+                        <Info
+                          aria-hidden="true"
+                          className="mt-0.5 size-4 shrink-0 text-primary"
+                        />
+                      )}
+                      {/*
+                        With no site on file there is no derivation, and printing
+                        one anyway is precisely the silent error §6.11.2 exists
+                        to prevent — the sentence would read plausibly and be a
+                        guess from the branch's own state.
+                      */}
+                      <span>
+                        {siteStateCode === null
+                          ? "Place of supply cannot be derived — this customer has no site on the register, so CGST+SGST or IGST is unknown"
+                          : derivation.explanation}
+                      </span>
                     </p>
                     <Button
                       variant="outline"
@@ -528,10 +600,19 @@ export default function CreateInvoicePage() {
                   />
                 }
                 nativeButton={false}
-                disabled={!whatsappHref(CUSTOMER_PHONE)}
+                // §6.14's rule applied one document down: a partial GST export
+                // is worse than none, and so is an invoice sent with a tax head
+                // nobody could derive.
+                disabled={!whatsappHref(CUSTOMER_PHONE) || siteStateCode === null}
               >
                 Finalise &amp; send on WhatsApp
               </Button>
+              {siteStateCode === null ? (
+                <p className="text-xs text-destructive">
+                  Add this customer and their site to the register first — an
+                  invoice cannot be sent with an underived place of supply.
+                </p>
+              ) : null}
               <div className="flex gap-2">
                 <Unavailable
                   label="Save as draft"

@@ -10,6 +10,7 @@ const invoice = (over: Partial<Invoice> = {}): Invoice => ({
   contractId: null,
   contractPoint: null,
   customer: "Shakti Industries",
+  billTo: null,
   dateWord: "6 Aug",
   head: "CGST_SGST",
   explanation: "Site in Delhi (07) · your GSTIN in Delhi (07) → CGST + SGST",
