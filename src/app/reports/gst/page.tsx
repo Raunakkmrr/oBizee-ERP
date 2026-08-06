@@ -12,7 +12,8 @@ import { ColumnHeader, Panel } from "@/components/shared/panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { downloadJson, downloadXlsx, stampFor } from "@/lib/export";
+import { downloadCsv, downloadJson, downloadXlsx, stampFor } from "@/lib/export";
+import { ZOHO_COLUMNS, zohoRows } from "@/lib/zoho";
 import { tallyXml, type TallyInvoice } from "@/lib/tally";
 import { useCurrentUser, useStoreState } from "@/lib/data/use-store";
 
@@ -247,6 +248,31 @@ export default function GstWorkspacePage() {
                       >
                         <FileCode2 className="size-3.5" />
                         Export Tally XML
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        // Same guard as the Tally envelope: a CSV of headers
+                        // and no rows imports cleanly and books nothing, which
+                        // reads as "the export worked".
+                        disabled={readiness.kind !== "ready" || invoices.length === 0}
+                        onClick={() =>
+                          // FR-1001's other half. One row per line in Zoho's
+                          // own column names, so the importer auto-matches
+                          // instead of asking for eleven mappings.
+                          downloadCsv(
+                            [...ZOHO_COLUMNS],
+                            zohoRows(
+                              invoices,
+                              today,
+                              SEED_TENANT.branches[0].name,
+                            ),
+                            `Zoho-${period.periodLabel.replace(/\s+/g, "-")}-${stampFor(today)}.csv`,
+                          )
+                        }
+                      >
+                        <FileSpreadsheet className="size-3.5" />
+                        Export Zoho CSV
                       </Button>
                     </div>
                   </div>

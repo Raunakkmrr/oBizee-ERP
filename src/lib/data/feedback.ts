@@ -117,3 +117,37 @@ export function seedRatings(now: Date): LowRating[] {
     ratedAt: new Date(now.getTime() - minutesAgo[index] * 60_000),
   }));
 }
+
+/**
+ * A rating in words — FR-1202.
+ *
+ * > *"Rating uses **words**, not stars alone; ≥56 dp; not colour alone."*
+ *
+ * Three failures this closes at once. A bare `1 of 5` makes the reader do the
+ * arithmetic of whether that is good. Stars alone are unreadable to anyone
+ * using a screen reader and ambiguous in a screenshot. And colour alone fails
+ * the ~8% of men with a red-green deficiency — which is a large share of this
+ * product's actual users.
+ *
+ * The ≥56 dp half of the requirement is about the *input* on the technician's
+ * device, where a customer taps with a work-glove on. It has no meaning in a
+ * read-only web view, and is not claimed here.
+ */
+export const RATING_WORDS: Record<number, string> = {
+  1: "Very unhappy",
+  2: "Unhappy",
+  3: "Alright",
+  4: "Happy",
+  5: "Very happy",
+};
+
+export function ratingWord(rating: number): string {
+  return RATING_WORDS[rating] ?? "Not rated";
+}
+
+/** Which of the three tones a rating belongs to — never the only channel. */
+export function ratingTone(rating: number): "bad" | "middling" | "good" {
+  if (rating <= 2) return "bad";
+  if (rating === 3) return "middling";
+  return "good";
+}

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ageWords, escalations, seedRatings, type LowRating } from "./feedback";
+import {
+  ageWords,
+  escalations,
+  ratingTone,
+  ratingWord,
+  seedRatings,
+  type LowRating,
+} from "./feedback";
 
 const NOW = new Date("2026-08-06T12:00:00");
 const rating = (over: Partial<LowRating> = {}): LowRating => ({
@@ -72,5 +79,25 @@ describe("FR-1205 escalation", () => {
     expect(open).toHaveLength(2);
     expect(open.some((e) => e.breached)).toBe(true);
     expect(open.some((e) => !e.breached)).toBe(true);
+  });
+});
+
+describe("ratings in words — FR-1202", () => {
+  it("names every rating, so nobody has to interpret a number", () => {
+    expect(ratingWord(1)).toBe("Very unhappy");
+    expect(ratingWord(3)).toBe("Alright");
+    expect(ratingWord(5)).toBe("Very happy");
+  });
+
+  it("says 'Not rated' rather than inventing a word for an out-of-range value", () => {
+    expect(ratingWord(0)).toBe("Not rated");
+    expect(ratingWord(9)).toBe("Not rated");
+  });
+
+  it("groups 1 and 2 together — those are the two that escalate", () => {
+    expect(ratingTone(1)).toBe("bad");
+    expect(ratingTone(2)).toBe("bad");
+    expect(ratingTone(3)).toBe("middling");
+    expect(ratingTone(4)).toBe("good");
   });
 });

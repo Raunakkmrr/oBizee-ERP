@@ -9,6 +9,7 @@ import { telHref, whatsappHref } from "@/lib/contact";
 import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
 import { partBilling } from "@/lib/data/contracts";
+import { Rating } from "@/components/shared/rating";
 import { nextStepFor, type Check as StageCheck, type JobDetail, type Stage } from "@/lib/data/job-detail";
 
 /**
@@ -589,18 +590,39 @@ export function SignOffBody({ job }: { job: JobDetail }) {
     );
   }
 
+  /*
+    The block used to paint every sign-off in the success colour and print
+    `rated 1 of 5` beside it — the colour saying "good" while the number said
+    the opposite, on the exact job the escalation band is chasing. Signed and
+    happy are two different facts (FR-1202).
+  */
+  const unhappy = job.signOff.rating <= 2;
+
   return (
     <div className="space-y-2 text-sm">
-      <div className="flex items-center gap-3 rounded-lg bg-success/[0.08] p-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-success/15 text-success">
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-3 rounded-lg p-3",
+          unhappy ? "bg-destructive-bg" : "bg-success/[0.08]",
+        )}
+      >
+        <span
+          className={cn(
+            "grid size-9 shrink-0 place-items-center rounded-full",
+            unhappy
+              ? "bg-destructive/15 text-destructive"
+              : "bg-success/15 text-success",
+          )}
+        >
           <CircleCheck className="size-5" />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="font-medium">{job.signOff.signerName}</p>
           <p className="text-xs text-muted-foreground tabular-nums">
-            {job.signOff.at} · rated {job.signOff.rating} of 5
+            {job.signOff.at}
           </p>
         </div>
+        <Rating rating={job.signOff.rating} className="shrink-0" />
       </div>
       {!job.signOff.signatureUploaded ? (
         // §6.5.2: this happens many times a day and "must read as normal, not

@@ -9,6 +9,7 @@ import {
   ESCALATION_SECONDS,
   ageWords,
   escalations,
+  ratingWord,
   type LowRating,
 } from "@/lib/data/feedback";
 
@@ -80,9 +81,9 @@ export function EscalationBand({
 
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">
-                {/* Words, not stars alone (§6.13.4 and FR-1202). */}
-                {rating.rating === 1 ? "Very unhappy" : "Unhappy"} ·{" "}
-                {rating.customer}
+                {/* Words, not stars alone — one shared vocabulary, so the job
+                    sheet and this band cannot describe 2★ differently. */}
+                {ratingWord(rating.rating)} · {rating.customer}
               </p>
               <p className="truncate text-xs text-muted-foreground">
                 {rating.comment ?? "No comment left"} · {rating.jobNumber}
