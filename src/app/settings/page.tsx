@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Building2, Clock, Hash, Landmark, Lock, Percent, ScrollText, ShieldCheck, type LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
@@ -396,7 +396,16 @@ function DataSection() {
 export default function SettingsPage() {
   return (
     <Requires permission="settings:read">
-      <Settings />
+      {/*
+        `useSearchParams` opts this subtree out of prerendering, and without a
+        boundary the production build fails outright — which a dev server never
+        tells you. The fallback is null rather than a skeleton: the tab bar
+        resolves in the same tick, and a flashed skeleton would be slower to
+        read than nothing.
+      */}
+      <Suspense fallback={null}>
+        <Settings />
+      </Suspense>
     </Requires>
   );
 }
