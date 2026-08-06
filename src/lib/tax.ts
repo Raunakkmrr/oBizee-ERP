@@ -1,3 +1,4 @@
+import { STATE_BY_CODE } from "./data/pincode";
 /**
  * GST derivation and invoice rounding — FR-802, FR-806, FR-812.
  *
@@ -16,14 +17,15 @@
 import { asPaise, type Paise } from "./money";
 
 /** Indian state codes that appear in a GSTIN's first two digits. */
-export const STATE_NAMES: Record<string, string> = {
-  "07": "Delhi",
-  "24": "Gujarat",
-  "27": "Maharashtra",
-  "29": "Karnataka",
-  "33": "Tamil Nadu",
-  "36": "Telangana",
-};
+/**
+ * Every GST state code, not the six this file used to carry.
+ *
+ * The old table held Delhi, Gujarat, Maharashtra, Karnataka, Tamil Nadu and
+ * Telangana, so a site in Punjab rendered "State 03" on its own invoice — on
+ * the very line FR-802 exists to make readable. Re-exported from the PIN module
+ * so there is one list, and adding a state cannot leave the two disagreeing.
+ */
+export const STATE_NAMES: Record<string, string> = STATE_BY_CODE;
 
 export type TaxHead = "CGST_SGST" | "IGST";
 

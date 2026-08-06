@@ -7,8 +7,16 @@ import { ArrowLeft, Mic } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import { Chip } from "@/components/shared/controls";
-import { WhyDisabled } from "@/components/shared/field";
-import { dialablePhone, requiredName, validate } from "@/lib/validate";
+import { Field, WhyDisabled } from "@/components/shared/field";
+import { AddressFields, EMPTY_ADDRESS, type AddressValue } from "@/components/location/address-fields";
+import {
+  dialablePhone,
+  indianPin,
+  locality as localityRule,
+  personName,
+  requiredName,
+  validate,
+} from "@/lib/validate";
 import { z } from "zod";
 import { NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { Button } from "@/components/ui/button";
@@ -144,7 +152,13 @@ function DuplicatePanel({
 const LEAD_FORM = z
   .object({
     phone: dialablePhone,
-    name: requiredName("A name"),
+    name: personName("A name"),
+    // The address is validated here rather than trusted, because the site's
+    // state decides the GST head on every invoice this lead ever produces.
+    pin: indianPin,
+    city: requiredName("A city or district"),
+    stateCode: z.string().min(1, "The state is needed — it decides the tax head"),
+    locality: localityRule,
     source: z.string().nullable(),
     service: z.string().nullable(),
     // FR-104: a lead with no next date gets forgotten, which is why it blocks.
@@ -183,7 +197,7 @@ export default function NewLeadPage() {
   const [referredBy, setReferredBy] = useState("");
   const [service, setService] = useState<string | null>(null);
   const [otherService, setOtherService] = useState("");
-  const [locality, setLocality] = useState("");
+  const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
   const [takenBy, setTakenBy] = useState(CURRENT_USER.name);
   const [owner, setOwner] = useState(CURRENT_USER.name);
   const [followUp, setFollowUp] = useState<string>("Tomorrow");
@@ -193,7 +207,16 @@ export default function NewLeadPage() {
   const phoneRef = useRef<HTMLInputElement>(null);
 
   /** Fields the reader has left, so a blank form is not a wall of red. */
-  const [touched] = useState<Set<string>>(new Set());
+  /*
+    The defect this replaces: `const [touched] = useState(new Set())` — created
+    once, no setter, never added to. `check.errors` was therefore empty by
+    construction, so not one per-field message could ever appear no matter what
+    the schema found. The form greyed its button and said nothing, and a
+    27-digit phone number looked accepted.
+  */
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const touch = (field: string) =>
+    setTouched((previous) => new Set(previous).add(field));
 
   const digits = phone.replace(/\D/g, "");
   /**
@@ -232,9 +255,29 @@ export default function NewLeadPage() {
   */
   const check = validate(
     LEAD_FORM,
-    { phone, name, source, service: chosenService, followUp, referredBy },
+    {
+      phone,
+      name,
+      source,
+      service: chosenService,
+      followUp,
+      referredBy,
+      pin: address.pin,
+      city: address.city,
+      stateCode: address.stateCode,
+      locality: address.locality,
+    },
     touched as ReadonlySet<
-      "phone" | "name" | "source" | "service" | "followUp" | "referredBy"
+      | "phone"
+      | "name"
+      | "source"
+      | "service"
+      | "followUp"
+      | "referredBy"
+      | "pin"
+      | "city"
+      | "stateCode"
+      | "locality"
     >,
   );
   const canSave = check.ok;
@@ -283,26 +326,20 @@ export default function NewLeadPage() {
         <div className="max-w-[560px] space-y-4">
           <Card>
             <CardContent className="space-y-4 p-4">
-              <div>
-                <label
-                  htmlFor="lead-phone"
-                  className="mb-1.5 block text-sm font-medium"
-                >
-                  Phone
-                </label>
-                <Input
-                  id="lead-phone"
-                  ref={phoneRef}
-                  type="tel"
-                  inputMode="numeric"
-                  autoComplete="tel"
-                  placeholder="10 digits"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="tabular-nums"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">+91 assumed</p>
-              </div>
+              <Field
+                label="Phone"
+                ref={phoneRef}
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder="10 digits"
+                className="tabular-nums"
+                value={phone}
+                onChange={setPhone}
+                onBlur={() => touch("phone")}
+                error={check.errors.phone}
+                hint="+91 assumed"
+              />
 
               <DuplicatePanel
                 lookup={showPanel ? match : null}
@@ -310,20 +347,14 @@ export default function NewLeadPage() {
                 onDismiss={() => setDuplicateAcknowledged(true)}
               />
 
-              <div>
-                <label
-                  htmlFor="lead-name"
-                  className="mb-1.5 block text-sm font-medium"
-                >
-                  Name
-                </label>
-                <Input
-                  id="lead-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="How you'll greet them"
-                />
-              </div>
+              <Field
+                label="Name"
+                value={name}
+                onChange={setName}
+                onBlur={() => touch("name")}
+                error={check.errors.name}
+                placeholder="How you'll greet them"
+              />
 
               <div>
                 {/* Chips, not a dropdown — "a dropdown costs open-scroll-select
@@ -387,20 +418,23 @@ export default function NewLeadPage() {
                 />
               </div>
 
-              <div>
-                <label
-                  htmlFor="locality"
-                  className="mb-1.5 block text-sm font-medium"
-                >
-                  Locality
-                </label>
-                <Input
-                  id="locality"
-                  value={locality}
-                  onChange={(e) => setLocality(e.target.value)}
-                  placeholder="Area or pincode"
-                />
-              </div>
+              {/*
+                FR-201 / FR-802. A locality alone was a free-text box that
+                accepted anything and told the technician nothing; worse, no
+                job carried a site state, so every invoice fell back to the
+                branch's own and charged CGST+SGST on interstate work.
+              */}
+              <AddressFields
+                value={address}
+                onChange={setAddress}
+                errors={{
+                  pin: check.errors.pin,
+                  city: check.errors.city,
+                  stateCode: check.errors.stateCode,
+                  locality: check.errors.locality,
+                }}
+                onTouch={touch}
+              />
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>

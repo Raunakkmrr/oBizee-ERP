@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { e164 } from "@/lib/contact";
+import { isValidPin } from "@/lib/data/pincode";
 
 /**
  * Validation for what a person **types**, not for what the fixture returns.
@@ -121,3 +122,56 @@ export const rupees = (what: string) =>
       const n = Number(value.replace(/,/g, ""));
       return Number.isFinite(n) && n > 0;
     }, `${what} must be a number greater than zero`);
+
+/**
+ * A PIN code that could be delivered to.
+ *
+ * Six digits and a leading 1–8. The leading digit matters: 9 is the Army
+ * Postal Service, and a civilian job addressed to one is a job nobody reaches.
+ * The site's PIN also decides the state, which decides CGST+SGST versus IGST
+ * (FR-802) — so a wrong one here is a wrong tax head, not a wrong postbox.
+ */
+export const indianPin = z
+  .string()
+  .trim()
+  .min(1, "A PIN code is needed")
+  .refine((value) => isValidPin(value), {
+    message: "A PIN code is six digits, starting 1–8",
+  });
+
+/**
+ * A name with at least one letter in it.
+ *
+ * Worth being honest about the limit: this catches "1234", "..." and an empty
+ * field. It cannot catch a keyboard-mash that happens to be letters, because no
+ * rule separates that from a real Indian name without rejecting real ones —
+ * "Jyrytjy" is not a word, and neither is a great many surnames. Shape is
+ * checkable; sense is not.
+ */
+export const personName = (what: string) =>
+  z
+    .string()
+    .trim()
+    .min(2, `${what} is needed`)
+    .max(120, `${what} is too long`)
+    .refine((value) => /\p{L}/u.test(value), {
+      message: `${what} needs at least one letter`,
+    })
+    /*
+      One unbroken 30-character token is not a name in any Indian language.
+      The longest real ones are around eighteen — Thiruvananthapuram,
+      Lakshminarayanan — so this catches a keyboard mash without touching a
+      real record. It is the last thing shape can honestly check; a mash that
+      contains a space still gets through, and no rule fixes that.
+    */
+    .refine(
+      (value) => value.split(/\s+/).every((token) => token.length <= 30),
+      { message: `${what} does not look like a name — check it` },
+    );
+
+/** A locality somebody has to find on the ground. */
+export const locality = z
+  .string()
+  .trim()
+  .min(2, "A locality is needed — this is what the technician navigates to")
+  .max(120, "That is too long for a locality — use the address line");
