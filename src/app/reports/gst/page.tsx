@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleAlert, CircleCheck, Download, FileSpreadsheet, Info, ListChecks, Scale, TriangleAlert } from "lucide-react";
+import { CircleAlert, CircleCheck, Download, FileCode2, FileSpreadsheet, Info, ListChecks, Scale, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
@@ -12,7 +12,28 @@ import { ColumnHeader, Panel } from "@/components/shared/panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { downloadCsv, downloadJson, stampFor } from "@/lib/export";
+import { downloadJson, downloadXlsx, stampFor } from "@/lib/export";
+import { tallyXml, type TallyInvoice } from "@/lib/tally";
+import { useCurrentUser, useStoreState } from "@/lib/data/use-store";
+
+/** Writes the Tally envelope as a file, since `lib/export` only knows CSV/JSON. */
+function downloadTally(
+  company: string,
+  invoices: TallyInvoice[],
+  filename: string,
+): void {
+  const blob = new Blob([tallyXml(company, invoices)], {
+    type: "application/xml",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import { BLOCKS_EXPORT, READINESS_ACTION, READINESS_LABEL, exportReadiness, formatPaiseDelta, getGstPeriod, reconcile, type GstPeriod } from "@/lib/data/gst";
@@ -36,6 +57,10 @@ import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
  *   register **to the paisa**, and says which side is short when it does not.
  */
 export default function GstWorkspacePage() {
+  const me = useCurrentUser();
+  // The invoices the Tally envelope carries — the register's own rows, not a
+  // second copy that could disagree with the working paper beside it.
+  const invoices = useStoreState().invoices;
   const [query, setQuery] = useState<Query<GstPeriod>>(loading());
 
   useEffect(() => {
@@ -129,21 +154,30 @@ export default function GstWorkspacePage() {
                         size="sm"
                         disabled={readiness.kind !== "ready"}
                         onClick={() =>
-                          downloadCsv(
+                          // FR-1002: a real workbook, and a second sheet saying
+                          // which period and branch produced these figures — a
+                          // number whose filters are unknown cannot be defended.
+                          void downloadXlsx(
                             ["Table", "Covers", "Documents", "Taxable", "Tax"],
                             period.tables.map((table) => [
                               table.code,
                               table.label,
                               table.documents,
-                              (table.taxablePaise / 100).toFixed(2),
-                              (table.taxPaise / 100).toFixed(2),
+                              table.taxablePaise / 100,
+                              table.taxPaise / 100,
                             ]),
-                            `GSTR1-${period.periodLabel.replace(/\s+/g, "-")}-${stampFor(today)}.csv`,
+                            {
+                              source: "GSTR-1 working paper",
+                              filters: `${period.periodLabel} · ${SEED_TENANT.branches[0].name} · GSTIN ${SEED_TENANT.branches[0].gstin}`,
+                              exportedBy: me.name,
+                              exportedAt: today.toLocaleString("en-IN"),
+                            },
+                            `GSTR1-${period.periodLabel.replace(/\s+/g, "-")}-${stampFor(today)}.xlsx`,
                           )
                         }
                       >
                         <FileSpreadsheet className="size-3.5" />
-                        Export CSV
+                        Export XLSX
                       </Button>
                       <Button
                         size="sm"
@@ -175,6 +209,44 @@ export default function GstWorkspacePage() {
                       >
                         <Download className="size-3.5" />
                         Export JSON
+                      </Button>
+                      {/*
+                        FR-1001. The CA is a veto-holder on this pilot and a
+                        month-end handover that has to be re-keyed is where a
+                        pilot stalls — so Tally gets its own envelope rather
+                        than a spreadsheet somebody retypes.
+                      */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        // An envelope with no vouchers imports cleanly and does
+                        // nothing, which reads as a working export until the
+                        // accountant goes looking for the entries.
+                        disabled={readiness.kind !== "ready" || invoices.length === 0}
+                        title={
+                          invoices.length === 0
+                            ? "No invoices raised in this period yet"
+                            : undefined
+                        }
+                        onClick={() =>
+                          downloadTally(
+                            SEED_TENANT.legalName,
+                            invoices.map((invoice) => ({
+                              number: invoice.number,
+                              dateYyyymmdd: stampFor(today).replace(/-/g, ""),
+                              customer: invoice.customer,
+                              head: invoice.head,
+                              taxablePaise: invoice.taxablePaise,
+                              totalTaxPaise: invoice.totalTaxPaise,
+                              grandTotalPaise: invoice.grandTotalPaise,
+                              narration: invoice.lines[0]?.description ?? "",
+                            })),
+                            `Tally-${period.periodLabel.replace(/\s+/g, "-")}-${stampFor(today)}.xml`,
+                          )
+                        }
+                      >
+                        <FileCode2 className="size-3.5" />
+                        Export Tally XML
                       </Button>
                     </div>
                   </div>
