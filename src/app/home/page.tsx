@@ -167,8 +167,6 @@ export default function OwnerHomePage() {
 
   return (
     <AppShell
-      role="owner"
-      userName={owner.name}
       today={today}
       freshness={{ kind: "fresh", at: today }}
       hideAmounts={hideAmounts}

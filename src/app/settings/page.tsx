@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
+import { Requires } from "@/components/shared/requires";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { ShineBorder } from "@/components/ui/shine-border";
 import { cn } from "@/lib/utils";
@@ -93,7 +94,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 const SURFACE =
   "rounded-2xl bg-card shadow-[var(--shadow-card)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--shadow-raised)]";
 
-export default function SettingsPage() {
+function Settings() {
   /*
     The tab is addressable.
 
@@ -113,8 +114,6 @@ export default function SettingsPage() {
 
   return (
     <AppShell
-      role={CURRENT_USER.role}
-      userName={CURRENT_USER.name}
       today={today}
       freshness={{ kind: "fresh", at: today }}
     >
@@ -557,5 +556,13 @@ function DataSection() {
         Reset demo data
       </button>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Requires permission="settings:read">
+      <Settings />
+    </Requires>
   );
 }

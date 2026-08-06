@@ -100,8 +100,6 @@ export default function TodayBoardPage() {
 
   return (
     <AppShell
-      role={CURRENT_USER.role}
-      userName={CURRENT_USER.name}
       today={today}
       freshness={{ kind: "fresh", at: today }}
       badges={{ unassigned_today: board?.counters.unassigned, leads_overdue: 7 }}

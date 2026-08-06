@@ -121,8 +121,6 @@ export default function LeadsPage() {
 
   return (
     <AppShell
-      role={CURRENT_USER.role}
-      userName={CURRENT_USER.name}
       today={today}
       freshness={{ kind: "fresh", at: today }}
       badges={{ leads_overdue: 2 }}

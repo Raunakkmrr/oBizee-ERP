@@ -96,8 +96,6 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
 
   return (
     <AppShell
-      role={CURRENT_USER.role}
-      userName={CURRENT_USER.name}
       today={today}
       freshness={{ kind: "fresh", at: today }}
     >

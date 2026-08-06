@@ -55,8 +55,6 @@ export default function HomePage() {
 
   return (
     <AppShell
-      role={CURRENT_USER.role}
-      userName={CURRENT_USER.name}
       today={today}
       freshness={{ kind: "fresh", at: today }}
       badges={{ unassigned_today: 3, leads_overdue: 7 }}

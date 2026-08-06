@@ -342,7 +342,16 @@ describe("restoring data written before a slice existed", () => {
     // seed's own keys precisely so adding the next slice cannot repeat it.
     const keys = Object.keys(seedState()).sort();
     expect(keys).toEqual(
-      ["board", "contracts", "invoices", "leads", "money", "people", "seq"].sort(),
+      [
+        "actingAs",
+        "board",
+        "contracts",
+        "invoices",
+        "leads",
+        "money",
+        "people",
+        "seq",
+      ].sort(),
     );
   });
 

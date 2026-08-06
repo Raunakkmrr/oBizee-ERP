@@ -1,5 +1,6 @@
 "use client";
 
+import type { Person } from "./people";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
   dispatch,
@@ -55,4 +56,20 @@ export function useHydrationStatus(): HydrationStatus {
 
 export function useDispatch(): (action: Action) => void {
   return useCallback((action: Action) => dispatch(action), []);
+}
+
+/**
+ * The person whose session this is.
+ *
+ * Falls back to the first owner if the stored id no longer resolves — someone
+ * can be deactivated or removed while acting as them, and a screen with no user
+ * at all would crash the shell rather than degrade.
+ */
+export function useCurrentUser(): Person {
+  const state = useStoreState();
+  return (
+    state.people.find((person) => person.id === state.actingAs) ??
+    state.people.find((person) => person.role === "owner") ??
+    state.people[0]
+  );
 }

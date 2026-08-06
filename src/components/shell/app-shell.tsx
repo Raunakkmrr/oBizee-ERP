@@ -2,10 +2,9 @@
 
 import type { ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { useStoreState } from "@/lib/data/use-store";
+import { useCurrentUser, useStoreState } from "@/lib/data/use-store";
 import { AppSidebar, type BadgeCounts } from "./app-sidebar";
 import { TopBar, type Freshness } from "./top-bar";
-import type { Role } from "@/lib/roles";
 
 /**
  * The operator chrome — the same composition the oBizee dashboard uses:
@@ -23,8 +22,6 @@ import type { Role } from "@/lib/roles";
  * React Native codebase under DR-4 in any case.
  */
 export function AppShell({
-  role,
-  userName,
   today,
   freshness,
   badges,
@@ -32,8 +29,6 @@ export function AppShell({
   onToggleAmounts,
   children,
 }: {
-  role: Role;
-  userName: string;
   today: Date;
   freshness: Freshness;
   badges?: BadgeCounts;
@@ -49,14 +44,23 @@ export function AppShell({
    * form and the board.
    */
   useStoreState();
+  /*
+    The acting user is resolved here rather than passed in.
+
+    Every screen used to hand down `role` and `userName` read from a hardcoded
+    const, so switching user would have meant editing twenty call sites and
+    would silently miss one. The shell owns the session; a page cannot
+    contradict it.
+  */
+  const me = useCurrentUser();
 
   return (
     <SidebarProvider>
-      <AppSidebar role={role} badges={badges} userName={userName} />
+      <AppSidebar role={me.role} badges={badges} userName={me.name} />
       <SidebarInset>
         <TopBar
-          role={role}
-          userName={userName}
+          role={me.role}
+          userName={me.name}
           today={today}
           freshness={freshness}
           hideAmounts={hideAmounts}

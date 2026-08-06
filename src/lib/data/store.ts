@@ -77,6 +77,16 @@ export type StoreState = {
   money: MoneyData;
   /** One record per human — the board's technicians are derived from these. */
   people: Person[];
+  /**
+   * Whose session this is.
+   *
+   * Until auth exists (DR-9) the acting user was a hardcoded const — Priya, a
+   * coordinator — and §6.2 keeps Settings out of a coordinator's navigation.
+   * The result was a build where People management existed and was unreachable,
+   * with no way to become anyone else. Holding it in the store makes the
+   * role-gating demonstrable instead of invisible.
+   */
+  actingAs: string;
   /** FR-811: numbering is per branch, doc type and financial year. */
   seq: { job: number; contract: number; invoice: number };
 };
@@ -96,6 +106,8 @@ export function seedState(): StoreState {
     contracts: structuredClone(SEED_CONTRACTS.contracts) as Contract[],
     money: structuredClone(SEED_MONEY) as MoneyData,
     people: structuredClone(SEED_PEOPLE),
+    // Priya, the coordinator — the persona §6.4 is written for.
+    actingAs: "usr_0002",
     invoices: [],
     seq: { job: 440, contract: 32, invoice: 149 },
   };
@@ -193,6 +205,7 @@ export type Action =
       id: string;
       active: boolean;
     }
+  | { type: "ACT_AS"; personId: string }
   | { type: "RESET" };
 
 /* --------------------------------------------------------------- helpers */
@@ -369,6 +382,9 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
       });
       return { ...state, leads: { ...state.leads, leads } };
     }
+
+    case "ACT_AS":
+      return { ...state, actingAs: action.personId };
 
     case "ADD_PERSON":
       return {

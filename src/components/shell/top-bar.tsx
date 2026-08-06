@@ -5,6 +5,8 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import {
+  Check,
+  ChevronDown,
   CircleCheck,
   Eye,
   EyeOff,
@@ -16,6 +18,14 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
+import type { Person } from "@/lib/data/people";
 import { formatDateLong, formatTime } from "@/lib/datetime";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 
@@ -158,6 +168,76 @@ function ThemeToggle() {
   );
 }
 
+/**
+ * Who you are acting as.
+ *
+ * **Why this exists at all.** §6.2 role-gates the navigation, and the acting
+ * user was a hardcoded const — a coordinator, who by design has no Settings
+ * item. So People management shipped genuinely unreachable: the screen existed,
+ * the routes existed, and no sequence of clicks led to them.
+ *
+ * It is labelled as standing in for sign-in rather than dressed up as a profile
+ * menu, because that is what it is until auth lands (DR-9). Switching is what
+ * makes the role model visible instead of something you have to read the code
+ * to believe.
+ */
+function ActingAs({ me }: { me: Person }) {
+  const dispatch = useDispatch();
+  const people = useStoreState().people.filter((person) => person.active);
+  const initials =
+    me.name.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "OB";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-1 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+            aria-label={`Signed in as ${me.name}, ${ROLE_LABELS[me.role]}. Change user.`}
+          />
+        }
+      >
+        <Avatar className="size-8">
+          <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary ring-1 ring-primary/25">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+        <span className="hidden text-left leading-tight sm:grid">
+          <span className="text-sm">{me.name}</span>
+          {/* The role reads as a word, so nobody has to infer it. */}
+          <span className="text-xs text-muted-foreground">
+            {ROLE_LABELS[me.role]}
+          </span>
+        </span>
+        <ChevronDown className="hidden size-3.5 text-muted-foreground sm:block" />
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="end" className="min-w-56">
+        <p className="px-2 py-1.5 text-xs text-muted-foreground">
+          Standing in for sign-in until accounts exist
+        </p>
+        {people.map((person) => (
+          <DropdownMenuItem
+            key={person.id}
+            onClick={() => dispatch({ type: "ACT_AS", personId: person.id })}
+          >
+            <span className="flex min-w-0 flex-1 items-baseline gap-2">
+              <span className="truncate">{person.name}</span>
+              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                {ROLE_LABELS[person.role]}
+              </span>
+            </span>
+            {person.id === me.id ? (
+              <Check className="ml-1.5 size-3.5 shrink-0" aria-hidden="true" />
+            ) : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function TopBar({
   role,
   userName,
@@ -173,8 +253,7 @@ export function TopBar({
   hideAmounts?: boolean;
   onToggleAmounts?: () => void;
 }) {
-  const initials =
-    userName.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "OB";
+  const me = useCurrentUser();
 
   return (
     /*
@@ -232,20 +311,7 @@ export function TopBar({
 
         <ThemeToggle />
 
-        <span className="ml-2 flex items-center gap-2 pr-1">
-          <Avatar className="size-8">
-            <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary ring-1 ring-primary/25">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <span className="hidden text-left leading-tight sm:grid">
-            <span className="text-sm">{userName}</span>
-            {/* The role reads as a word, so nobody has to infer it. */}
-            <span className="text-xs text-muted-foreground">
-              {ROLE_LABELS[role]}
-            </span>
-          </span>
-        </span>
+        <ActingAs me={me} />
       </div>
     </header>
   );
