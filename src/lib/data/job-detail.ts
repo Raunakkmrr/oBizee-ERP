@@ -13,6 +13,7 @@
  * answer changes what she is allowed to charge.
  */
 import { z } from "zod";
+import { COVERAGES } from "./contracts";
 import { DataSourceError, defineQuery, type Fetched } from "./source";
 
 /* ---------------------------------------------------------------- contract */
@@ -83,8 +84,36 @@ export const jobDetailSchema = z.object({
 
   timeline: z.array(timelineEventSchema),
   parts: z.array(
-    z.object({ name: z.string(), qty: z.number(), unit: z.string() }),
+    z.object({
+      name: z.string(),
+      qty: z.number(),
+      unit: z.string(),
+      /**
+       * FR-504. A part off the van has a price whether or not the customer
+       * pays for it — under a comprehensive AMC it is the firm's own cost, and
+       * a cost nobody records is a margin nobody can see.
+       *
+       * Defaulted rather than required so the eleven thin fixtures still
+       * parse; a zero simply renders no money.
+       */
+      ratePaise: z.number().int().nonnegative().default(0),
+      /** HSN of the part itself — parts are taxed at their own rate, not the service's. */
+      code: z.string().default("8532"),
+      ratePercent: z.number().default(18),
+    }),
   ),
+  /**
+   * The AMC this visit belongs to, if any — FR-504.
+   *
+   * Coverage lives on the contract, and whether a consumed part becomes a
+   * billable line is decided by coverage alone. Carried onto the job so the
+   * technician's screen can say it at the moment the part is logged, rather
+   * than the office discovering it while raising the invoice.
+   */
+  contract: z
+    .object({ reference: z.string(), coverage: z.enum(COVERAGES) })
+    .nullable()
+    .default(null),
   signOff: z
     .object({
       signerName: z.string(),
@@ -392,6 +421,8 @@ const EMPTY_DEPTH: Omit<
   timeline: [],
   parts: [],
   signOff: null,
+  // No contract until one is linked — a job created loose is not an AMC visit.
+  contract: null,
   invoiceNumber: null,
 };
 
@@ -441,6 +472,7 @@ const FIXTURES: Record<string, JobDetail> = {
     ],
     parts: [],
     signOff: null,
+    contract: null,
     invoiceNumber: null,
   },
   /*
@@ -498,10 +530,13 @@ const FIXTURES: Record<string, JobDetail> = {
       { id: "t7", label: "Load test at 75% \u2014 held for 30 minutes", actor: "Ramesh", at: "5 Aug, 10:20 am", offline: true, place: null },
       { id: "t8", label: "Work done", actor: "Ramesh", at: "5 Aug, 11:02 am", offline: false, place: null },
     ],
+    // Comprehensive cover: every one of these is the firm's own cost, which is
+    // exactly the case FR-504 exists to make visible rather than surprising.
+    contract: { reference: "AMC-2627-0031", coverage: "COMPREHENSIVE" as const },
     parts: [
-      { name: "Diesel filter (Kirloskar)", qty: 1, unit: "no" },
-      { name: "Engine oil 15W-40", qty: 12, unit: "litre" },
-      { name: "Coolant concentrate", qty: 2, unit: "litre" },
+      { name: "Diesel filter (Kirloskar)", qty: 1, unit: "no", ratePaise: 1_450_00, code: "84212300", ratePercent: 18 },
+      { name: "Engine oil 15W-40", qty: 12, unit: "litre", ratePaise: 420_00, code: "27101981", ratePercent: 18 },
+      { name: "Coolant concentrate", qty: 2, unit: "litre", ratePaise: 380_00, code: "38200000", ratePercent: 18 },
     ],
     signOff: null,
     invoiceNumber: null,
@@ -536,7 +571,9 @@ const FIXTURES: Record<string, JobDetail> = {
       { id: "e4", label: "Work done", actor: "Ramesh", at: "1 Aug, 10:50 am", offline: false, place: null },
       { id: "e5", label: "Signed off — 1 star, “Left dirty”", actor: "Mrs. Deshpande", at: "1 Aug, 10:52 am", offline: false, place: null },
     ],
-    parts: [{ name: "Capacitor 45 MFD", qty: 1, unit: "no" }],
+    // Non-comprehensive: the capacitor is billed on top of the visit charge.
+    contract: { reference: "AMC-2627-0044", coverage: "NON_COMPREHENSIVE" as const },
+    parts: [{ name: "Capacitor 45 MFD", qty: 1, unit: "no", ratePaise: 340_00, code: "85321000", ratePercent: 18 }],
     signOff: {
       signerName: "Mrs. Deshpande",
       at: "1 Aug, 10:52 am",

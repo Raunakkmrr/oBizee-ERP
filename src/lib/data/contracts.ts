@@ -411,6 +411,13 @@ const contractSchema = z.object({
   status: z.enum(["DRAFT", "ACTIVE", "SUSPENDED", "EXPIRED"]),
   /** FR-1406: many schedules, each with its own scope and cadence. */
   schedules: z.array(scheduleSchema),
+  /**
+   * FR-503. Defaulted rather than required so contracts written before this
+   * field existed — seeds, and anything already in a reader's IndexedDB —
+   * still parse. Shifting is the safer default: it preserves the interval the
+   * equipment actually needs.
+   */
+  reschedulePolicy: z.enum(RESCHEDULE_POLICIES).default("SHIFT_SUBSEQUENT"),
 });
 
 export const contractsSchema = z.object({

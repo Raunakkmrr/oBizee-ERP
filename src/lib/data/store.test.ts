@@ -91,7 +91,7 @@ describe("CREATE_CONTRACT", () => {
     // FR-501 and FR-505 together: alternate monthly is six visits, and billing
     // monthly does not turn it into twelve.
     const state = run([
-      { type: "CREATE_CONTRACT", customer: "Grand Plaza Hotel", site: "Connaught Place", annualValuePaise: 3_60_000_00, coverage: "COMPREHENSIVE", recurrence: "ALTERNATE_MONTHLY", billing: "MONTHLY", anchorDay: 15, fromLeadReference: "L-2608-0151" },
+      { type: "CREATE_CONTRACT", customer: "Grand Plaza Hotel", site: "Connaught Place", annualValuePaise: 3_60_000_00, coverage: "COMPREHENSIVE", recurrence: "ALTERNATE_MONTHLY", billing: "MONTHLY", anchorDay: 15, reschedulePolicy: "SHIFT_SUBSEQUENT", fromLeadReference: "L-2608-0151" },
     ]);
     expect(state.contracts[0].schedules[0].visitsCommitted).toBe(6);
     expect(state.contracts[0].billing).toBe("MONTHLY");
@@ -100,14 +100,14 @@ describe("CREATE_CONTRACT", () => {
   it("references the contract against the financial year, not the calendar year", () => {
     // August 2026 is FY 26-27.
     const state = run([
-      { type: "CREATE_CONTRACT", customer: "C", site: "S", annualValuePaise: 1_00_000_00, coverage: "LABOUR_ONLY", recurrence: "MONTHLY", billing: "QUARTERLY", anchorDay: 1, fromLeadReference: null },
+      { type: "CREATE_CONTRACT", customer: "C", site: "S", annualValuePaise: 1_00_000_00, coverage: "LABOUR_ONLY", recurrence: "MONTHLY", billing: "QUARTERLY", anchorDay: 1, reschedulePolicy: "SHIFT_SUBSEQUENT", fromLeadReference: null },
     ]);
     expect(state.contracts[0].reference).toBe("AMC-2627-0033");
   });
 
   it("starts a new contract with a full term remaining, so it is never born behind", () => {
     const state = run([
-      { type: "CREATE_CONTRACT", customer: "C", site: "S", annualValuePaise: 1_00_000_00, coverage: "COMPREHENSIVE", recurrence: "MONTHLY", billing: "MONTHLY", anchorDay: 1, fromLeadReference: null },
+      { type: "CREATE_CONTRACT", customer: "C", site: "S", annualValuePaise: 1_00_000_00, coverage: "COMPREHENSIVE", recurrence: "MONTHLY", billing: "MONTHLY", anchorDay: 1, reschedulePolicy: "SHIFT_SUBSEQUENT", fromLeadReference: null },
     ]);
     const contract = state.contracts[0];
     expect(contract.daysRemaining).toBe(contract.termDays);
@@ -193,7 +193,7 @@ describe("RESET", () => {
   it("returns to seed, discarding everything created", () => {
     const dirty = run([
       { type: "CREATE_JOB", customer: "C", locality: "L", serviceType: "S", slot: "9-1", priority: "normal", technicianId: null, technicianName: null, fromLeadReference: null },
-      { type: "CREATE_CONTRACT", customer: "C", site: "S", annualValuePaise: 1, coverage: "COMPREHENSIVE", recurrence: "MONTHLY", billing: "MONTHLY", anchorDay: 1, fromLeadReference: null },
+      { type: "CREATE_CONTRACT", customer: "C", site: "S", annualValuePaise: 1, coverage: "COMPREHENSIVE", recurrence: "MONTHLY", billing: "MONTHLY", anchorDay: 1, reschedulePolicy: "SHIFT_SUBSEQUENT", fromLeadReference: null },
     ]);
     const clean = reduce(dirty, { type: "RESET" }, NOW);
     expect(clean.contracts.length).toBe(seedState().contracts.length);
@@ -212,7 +212,7 @@ describe("the full flow, end to end, as data", () => {
     const state = run(
       [
         { type: "LOG_LEAD_OUTCOME", leadId: lead.id, outcome: "Won", note: "Signed annual AMC", followUp: null },
-        { type: "CREATE_CONTRACT", customer: lead.name, site: lead.locality, annualValuePaise: 3_60_000_00, coverage: "COMPREHENSIVE", recurrence: "MONTHLY", billing: "QUARTERLY", anchorDay: 15, fromLeadReference: lead.reference },
+        { type: "CREATE_CONTRACT", customer: lead.name, site: lead.locality, annualValuePaise: 3_60_000_00, coverage: "COMPREHENSIVE", recurrence: "MONTHLY", billing: "QUARTERLY", anchorDay: 15, reschedulePolicy: "SHIFT_SUBSEQUENT", fromLeadReference: lead.reference },
         { type: "CREATE_JOB", customer: lead.name, locality: lead.locality, serviceType: "AC servicing", slot: "9-1", priority: "normal", technicianId: null, technicianName: null, fromLeadReference: lead.reference },
       ],
       seeded,
@@ -245,7 +245,7 @@ describe("actions dispatched before hydration are not lost", () => {
     // a later one (the job) must both survive.
     const stored = reduce(
       seedState(),
-      { type: "CREATE_CONTRACT", customer: "Grand Plaza Hotel", site: "Connaught Place", annualValuePaise: 3_60_000_00, coverage: "COMPREHENSIVE", recurrence: "MONTHLY", billing: "QUARTERLY", anchorDay: 15, fromLeadReference: "L-2608-0151" },
+      { type: "CREATE_CONTRACT", customer: "Grand Plaza Hotel", site: "Connaught Place", annualValuePaise: 3_60_000_00, coverage: "COMPREHENSIVE", recurrence: "MONTHLY", billing: "QUARTERLY", anchorDay: 15, reschedulePolicy: "SHIFT_SUBSEQUENT", fromLeadReference: "L-2608-0151" },
       NOW,
     );
 
@@ -346,6 +346,7 @@ describe("restoring data written before a slice existed", () => {
     expect(keys).toEqual(
       [
         "actingAs",
+        "advances",
         "board",
         "contracts",
         "invoices",

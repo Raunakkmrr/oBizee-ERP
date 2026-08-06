@@ -67,3 +67,53 @@ export function ageWords(seconds: number): string {
   const hours = Math.floor(minutes / 60);
   return `${hours}h ${minutes % 60}m`;
 }
+
+/* ------------------------------------------------------------------- seed */
+
+/**
+ * Ratings the pilot tenant would actually be looking at.
+ *
+ * Deliberately awkward: one just landed and is inside the sixty seconds, one is
+ * well past it and nobody has touched it, and one was picked up — so the screen
+ * has to show a promise being kept, a promise being broken, and a promise that
+ * was answered, rather than three rows of the same state.
+ */
+export const SEED_LOW_RATINGS: Omit<LowRating, "ratedAt">[] = [
+  {
+    jobNumber: "J-2608-0417",
+    customer: "Mrs. Deshpande",
+    technician: "Ramesh Yadav",
+    rating: 2,
+    comment: "AC still not cooling after the visit",
+    acknowledgedBy: null,
+    valuePaise: null,
+  },
+  {
+    jobNumber: "J-2608-0402",
+    customer: "Kapoor Residency",
+    technician: "Lakshminarayanan Subramaniam",
+    rating: 1,
+    comment: "Technician left without telling anyone",
+    acknowledgedBy: null,
+    valuePaise: null,
+  },
+  {
+    jobNumber: "J-2608-0398",
+    customer: "Shakti Industries",
+    technician: "Ramesh Yadav",
+    rating: 2,
+    // A rating with no words is still a rating — the absence is the data.
+    comment: null,
+    acknowledgedBy: "Priya Sharma",
+    valuePaise: null,
+  },
+];
+
+/** Ages relative to now, so the clock is live rather than baked into a fixture. */
+export function seedRatings(now: Date): LowRating[] {
+  const minutesAgo = [0.5, 47, 180];
+  return SEED_LOW_RATINGS.map((rating, index) => ({
+    ...rating,
+    ratedAt: new Date(now.getTime() - minutesAgo[index] * 60_000),
+  }));
+}

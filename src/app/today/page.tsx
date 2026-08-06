@@ -6,6 +6,8 @@ import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Plus } from "luci
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { TriageCard } from "@/components/board/triage-card";
+import { EscalationBand } from "@/components/board/escalation-band";
+import { seedRatings } from "@/lib/data/feedback";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Illustration } from "@/components/shared/illustration";
@@ -13,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { loading, type Query } from "@/lib/data/result";
 import { getBoard, restOfDay, triageJobs, type Board, type JobRow, type Technician } from "@/lib/data/board";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
 import { can } from "@/lib/roles";
 
 /**
@@ -71,6 +73,16 @@ export default function TodayBoardPage() {
   const today = new Date();
   const canAssign = can(CURRENT_USER.role, "job:dispatch");
   const board = query.status === "ready" ? query.data : null;
+
+  /*
+    Held locally rather than in the store: a rating is an inbound fact from the
+    technician app, and until that surface and its sync exist there is nothing
+    for the store to be the source of truth *about*. Acknowledging is real —
+    it just does not survive a reload yet, and pretending otherwise would be
+    the fabricated-record problem again.
+  */
+  const [ratings, setRatings] = useState(() => seedRatings(new Date()));
+  const me = useCurrentUser();
 
   const triage = useMemo(() => (board ? triageJobs(board.jobs) : []), [board]);
   const rest = useMemo(() => (board ? restOfDay(board.jobs) : []), [board]);
@@ -175,6 +187,26 @@ export default function TodayBoardPage() {
         {(data) => (
           <div className="grid gap-5 p-3 pb-20 sm:pb-3 lg:p-4 xl:grid-cols-5">
             <div className="min-w-0 xl:col-span-3">
+              {/*
+                FR-1205 sits above the job triage on purpose. A late job is a
+                problem the day can absorb; a customer who has just rated the
+                visit 1★ is one somebody has sixty seconds to reach.
+              */}
+              <div className="mb-5 empty:hidden">
+                <EscalationBand
+                  ratings={ratings}
+                  onAcknowledge={(jobNumber) =>
+                    setRatings((prev) =>
+                      prev.map((rating) =>
+                        rating.jobNumber === jobNumber
+                          ? { ...rating, acknowledgedBy: me.name }
+                          : rating,
+                      ),
+                    )
+                  }
+                />
+              </div>
+
               <SectionHeading
                 title="Needs you now"
                 count={triage.length}

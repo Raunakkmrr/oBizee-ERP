@@ -48,7 +48,14 @@ import {
   type Contract,
   type Coverage,
   type Recurrence,
+  type ReschedulePolicy,
 } from "./contracts";
+import {
+  SEED_ADVANCES,
+  adjustAdvance,
+  receiptVoucherNumber,
+  type Advance,
+} from "./advances";
 import { SEED_TENANT } from "./fixtures/tenant";
 import { open, seal, destroyKey, unavailableMessage } from "./crypto";
 
@@ -97,7 +104,9 @@ export type StoreState = {
    */
   actingAs: string;
   /** FR-811: numbering is per branch, doc type and financial year. */
-  seq: { job: number; contract: number; invoice: number };
+  /** FR-810 — money taken before the work, and the vouchers that account for it. */
+  advances: Advance[];
+  seq: { job: number; contract: number; invoice: number; advance: number };
 };
 
 export type HydrationStatus =
@@ -118,7 +127,8 @@ export function seedState(): StoreState {
     // Priya, the coordinator — the persona §6.4 is written for.
     actingAs: "usr_0002",
     invoices: [],
-    seq: { job: 440, contract: 32, invoice: 149 },
+    advances: structuredClone(SEED_ADVANCES),
+    seq: { job: 440, contract: 32, invoice: 149, advance: 6 },
   };
 }
 
@@ -172,6 +182,7 @@ export type Action =
       recurrence: Recurrence;
       billing: BillingFrequency;
       anchorDay: number;
+      reschedulePolicy: ReschedulePolicy;
       fromLeadReference: string | null;
     }
   | {
@@ -203,6 +214,19 @@ export type Action =
     }
   | { type: "ASSIGN_JOB"; jobId: string; technicianId: string; technicianName: string }
   | { type: "CREATE_INVOICE_FROM_JOB"; jobId: string }
+  | {
+      /**
+       * FR-810. Money arriving before the service is a taxable event in its own
+       * right, so recording it issues a Receipt Voucher rather than sitting as
+       * an unexplained credit until somebody raises an invoice.
+       */
+      type: "RECORD_ADVANCE";
+      customer: string;
+      receiptPaise: number;
+      head: "CGST_SGST" | "IGST";
+      contractId: string | null;
+    }
+  | { type: "ADJUST_ADVANCE"; voucherNumber: string; invoiceNumber: string }
   | {
       /**
        * Raising a contract's scheduled invoice — the recurring half of billing.
@@ -351,6 +375,7 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
         // therefore never call it behind on day one.
         daysRemaining: 365,
         status: "ACTIVE",
+        reschedulePolicy: action.reschedulePolicy,
         schedules: [
           {
             id: `sch_${seq}_1`,
@@ -556,6 +581,42 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
         ...state,
         invoices: [...state.invoices, invoice],
         seq: { ...state.seq, invoice: seq },
+      };
+    }
+
+    case "RECORD_ADVANCE": {
+      const seq = state.seq.advance + 1;
+      const advance: Advance = {
+        id: `adv_${seq}`,
+        voucherNumber: receiptVoucherNumber(seq, now),
+        contractId: action.contractId,
+        customer: action.customer,
+        // ISO, not `dateWord` — this field is sorted on, and "5 Aug" sorts
+        // alphabetically rather than chronologically.
+        receivedOn: `${now.getFullYear()}-${pad(now.getMonth() + 1, 2)}-${pad(now.getDate(), 2)}`,
+        receiptPaise: action.receiptPaise,
+        // 18% is the maintenance/repair rate this firm actually charges; the
+        // advance follows the service it is against, not a separate choice.
+        ratePercent: 18,
+        head: action.head,
+        status: "OPEN",
+        adjustedByInvoice: null,
+      };
+      return {
+        ...state,
+        advances: [advance, ...state.advances],
+        seq: { ...state.seq, advance: seq },
+      };
+    }
+
+    case "ADJUST_ADVANCE": {
+      return {
+        ...state,
+        advances: adjustAdvance(
+          state.advances,
+          action.voucherNumber,
+          action.invoiceNumber,
+        ),
       };
     }
 

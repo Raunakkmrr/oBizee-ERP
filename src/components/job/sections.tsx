@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
+import { MoneyText } from "@/components/shared/money-text";
+import { asPaise } from "@/lib/money";
+import { partBilling } from "@/lib/data/contracts";
 import { nextStepFor, type Check as StageCheck, type JobDetail, type Stage } from "@/lib/data/job-detail";
 
 /**
@@ -491,22 +494,70 @@ export function PartsBody({ job }: { job: JobDetail }) {
       </p>
     );
   }
+
+  /*
+    FR-504: coverage decides whether a consumed part becomes a billable line.
+    The model answers it; this section says it out loud, because the two
+    mistakes here are symmetrical and both expensive — billing a part that a
+    comprehensive AMC already covers, and absorbing one it does not.
+  */
+  const billing = partBilling(job.contract?.coverage ?? "LABOUR_ONLY");
+  const totalPaise = job.parts.reduce(
+    (sum, part) => sum + part.qty * part.ratePaise,
+    0,
+  );
+  const priced = job.parts.some((part) => part.ratePaise > 0);
+
   return (
-    /*
-      Quantity first and in its own chip, because that is the column being
-      scanned — "what came off the van, how much" — and a right-aligned number
-      at the end of a ragged label is read last.
-    */
-    <ul className="space-y-1.5 text-sm">
-      {job.parts.map((part) => (
-        <li key={part.name} className="flex items-center gap-2.5">
-          <span className="grid min-w-11 shrink-0 place-items-center rounded-md bg-brand-brown/12 px-1.5 py-0.5 text-xs font-semibold text-brand-brown tabular-nums">
-            {part.qty} {part.unit}
-          </span>
-          <span className="min-w-0 truncate">{part.name}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2.5">
+      <ul className="space-y-1.5 text-sm">
+        {job.parts.map((part) => (
+          /*
+            Quantity first and in its own chip, because that is the column being
+            scanned — "what came off the van, how much" — and a right-aligned
+            number at the end of a ragged label is read last.
+          */
+          <li key={part.name} className="flex items-center gap-2.5">
+            <span className="grid min-w-11 shrink-0 place-items-center rounded-md bg-brand-brown/12 px-1.5 py-0.5 text-xs font-semibold text-brand-brown tabular-nums">
+              {part.qty} {part.unit}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{part.name}</span>
+            {part.ratePaise > 0 ? (
+              <MoneyText
+                amount={asPaise(part.qty * part.ratePaise)}
+                className={cn(
+                  "shrink-0 text-xs",
+                  // Cost, not revenue — so it must not read like a charge.
+                  !billing.billable && "text-muted-foreground",
+                )}
+              />
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      {priced ? (
+        <div
+          className={cn(
+            "rounded-lg p-2.5 text-xs",
+            billing.billable ? "bg-success-bg" : "bg-muted",
+          )}
+        >
+          <p className="flex items-center justify-between gap-3 font-medium">
+            <span>
+              {billing.billable
+                ? "Billable — goes onto the invoice at the part's own HSN rate"
+                : "Covered by the AMC — no line on the invoice"}
+            </span>
+            <MoneyText amount={asPaise(totalPaise)} className="shrink-0" />
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            {billing.reason}
+            {job.contract ? ` · ${job.contract.reference}` : ""}
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -10,6 +10,7 @@ import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Panel } from "@/components/shared/panel";
+import { AdvancesPanel } from "@/components/money/advances-panel";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
@@ -279,7 +280,13 @@ function BillingDue({ onRaise }: { onRaise: (row: DueRow) => void }) {
           return (
             <div
               key={row.contract.id}
-              className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-muted-bg p-3"
+              /*
+                `min-w-0` is load-bearing: this row is a grid item, and a grid
+                item's `min-width` is `auto`, so without it the row refuses to
+                shrink below its own min-content and pushes 25px of itself off
+                a 360px screen. Third time this exact rule has bitten.
+              */
+              className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-muted-bg p-3"
             >
               <Clock
                 aria-hidden="true"
@@ -289,7 +296,7 @@ function BillingDue({ onRaise }: { onRaise: (row: DueRow) => void }) {
                 )}
               />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">
+                <p className="truncate text-sm font-medium">
                   {row.contract.customer}{" "}
                   <span className="text-muted-foreground tnum-id">
                     {row.contract.reference}
@@ -790,6 +797,13 @@ export default function MoneyPage() {
             <div className="space-y-5">
               <AlarmBand data={data} onPaid={markPaid} />
               <BillingDue onRaise={raise} />
+              {/*
+                FR-810 sits between the billing worklist and the two ledgers:
+                it is neither owed to us nor owed by us, it is money we hold
+                against work still to do - and it changes how both totals
+                should be read.
+              */}
+              <AdvancesPanel />
               <div className="grid gap-5 xl:grid-cols-2">
                 <Receivables data={data} />
                 <Payables data={data} onPaid={markPaid} />

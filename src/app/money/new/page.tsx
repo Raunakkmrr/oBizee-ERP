@@ -6,7 +6,9 @@ import { ArrowLeft, Check, Info, Star, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { z } from "zod";
+import { Field, WhyDisabled } from "@/components/shared/field";
+import { validate } from "@/lib/validate";
 import { Separator } from "@/components/ui/separator";
 import { MoneyText } from "@/components/shared/money-text";
 import { ROW_TR } from "@/components/shared/controls";
@@ -85,6 +87,20 @@ const UPI_PAYEE = {
   name: SEED_TENANT.businessName,
 };
 
+/**
+ * The only thing a reader types on this screen.
+ *
+ * §6.11.2 requires the override to carry a stored reason; a length floor is
+ * what makes that requirement mean something, since the control was previously
+ * satisfied by a single character.
+ */
+const OVERRIDE_FORM = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(10, "Say why in a sentence — this is the audit trail for the override"),
+});
+
 export default function CreateInvoicePage() {
   /**
    * The most recently created invoice, if there is one.
@@ -101,6 +117,12 @@ export default function CreateInvoicePage() {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
   const [overridden, setOverridden] = useState(false);
+  const [reasonTouched, setReasonTouched] = useState(false);
+  const reasonCheck = validate(
+    OVERRIDE_FORM,
+    { reason: overrideReason },
+    (reasonTouched ? new Set(["reason"]) : new Set()) as ReadonlySet<"reason">,
+  );
 
   const supplierState = SEED_TENANT.branches[0].stateCode;
   const lines = created?.lines ?? LINES;
@@ -247,22 +269,24 @@ export default function CreateInvoicePage() {
 
                   {overrideOpen ? (
                     <div className="mt-3 space-y-2">
-                      <label
-                        htmlFor="override-reason"
-                        className="block text-xs font-medium"
-                      >
-                        Reason — required, and stored on the invoice
-                      </label>
-                      <Input
-                        id="override-reason"
+                      {/*
+                        Validated rather than merely non-empty. This reason is
+                        the entire audit trail for departing from the derived
+                        tax head — "x" satisfies `!== ""` and explains nothing
+                        to the person reading the invoice two years from now.
+                      */}
+                      <Field
+                        label="Reason — required, and stored on the invoice"
                         value={overrideReason}
-                        onChange={(e) => setOverrideReason(e.target.value)}
+                        onChange={setOverrideReason}
+                        onBlur={() => setReasonTouched(true)}
+                        error={reasonCheck.errors.reason}
                         placeholder="Why the derived place of supply is wrong here"
                       />
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           size="sm"
-                          disabled={overrideReason.trim() === ""}
+                          disabled={!reasonCheck.ok}
                           onClick={() => {
                             setOverridden(true);
                             setOverrideOpen(false);
@@ -277,6 +301,7 @@ export default function CreateInvoicePage() {
                         >
                           Cancel
                         </Button>
+                        <WhyDisabled reasons={reasonCheck.summary} />
                       </div>
                     </div>
                   ) : null}

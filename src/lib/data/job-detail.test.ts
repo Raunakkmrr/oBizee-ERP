@@ -75,6 +75,7 @@ function detail(over: Partial<JobDetail> = {}): JobDetail {
     asset: null,
     timeline: [],
     parts: [],
+    contract: null,
     signOff: null,
     invoiceNumber: null,
     ...over,

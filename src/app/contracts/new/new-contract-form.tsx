@@ -9,12 +9,18 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Chip } from "@/components/shared/controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Field, WhyDisabled } from "@/components/shared/field";
+import { requiredName, rupees, validate } from "@/lib/validate";
+import { z } from "zod";
 import { Separator } from "@/components/ui/separator";
 import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
 import { EM_DASH } from "@/lib/data/result";
-import { BILLING_FREQUENCIES, BILLING_LABEL, COVERAGES, COVERAGE_LABEL, INVOICES_PER_YEAR, RECURRENCES, RECURRENCE_LABEL, VISITS_PER_YEAR, needsReceiptVoucher, perInvoiceAmount, type BillingFrequency, type Coverage, type Recurrence } from "@/lib/data/contracts";
+import {
+  RESCHEDULE_POLICIES,
+  RESCHEDULE_POLICY_LABEL,
+  type ReschedulePolicy,
+  BILLING_FREQUENCIES, BILLING_LABEL, COVERAGES, COVERAGE_LABEL, INVOICES_PER_YEAR, RECURRENCES, RECURRENCE_LABEL, VISITS_PER_YEAR, needsReceiptVoucher, perInvoiceAmount, type BillingFrequency, type Coverage, type Recurrence } from "@/lib/data/contracts";
 import { useDispatch } from "@/lib/data/use-store";
 
 /**
@@ -44,6 +50,28 @@ export type NewContractPrefill = {
   value: string | null;
 };
 
+/**
+ * What an AMC needs before it can start producing visits and invoices.
+ *
+ * The old guard was a three-item `missing` array built by hand, which said
+ * "Annual value still needed" and nothing about *why* "3,60,00o" was refused.
+ * The anchor day was never checked at all — `Number(anchorDay) || 1` quietly
+ * turned a typo into the 1st of the month, which is a wrong billing date the
+ * office would only find twelve invoices later.
+ */
+const CONTRACT_FORM = z.object({
+  customer: requiredName("A customer"),
+  site: requiredName("A site"),
+  annualValue: rupees("The annual contract value"),
+  anchorDay: z
+    .string()
+    .trim()
+    .refine((value) => {
+      const day = Number(value);
+      return Number.isInteger(day) && day >= 1 && day <= 31;
+    }, "The anchor day is a date of the month — 1 to 31"),
+});
+
 export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
   const { fromLead } = prefill;
   const dispatch = useDispatch();
@@ -67,6 +95,17 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
   const [recurrence, setRecurrence] = useState<Recurrence>("MONTHLY");
   const [billing, setBilling] = useState<BillingFrequency>("UPFRONT_ANNUAL");
   const [anchorDay, setAnchorDay] = useState("15");
+  const [reschedulePolicy, setReschedulePolicy] =
+    useState<ReschedulePolicy>("SHIFT_SUBSEQUENT");
+
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const touch = (field: string) =>
+    setTouched((prev) => new Set(prev).add(field));
+  const check = validate(
+    CONTRACT_FORM,
+    { customer, site, annualValue, anchorDay },
+    touched as ReadonlySet<"customer" | "site" | "annualValue" | "anchorDay">,
+  );
 
   const parsed = Number(annualValue);
   // A blank or non-numeric entry is "not yet known", not zero.
@@ -80,12 +119,7 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
   );
   const invoiceCount = invoices === "per_visit" ? visits : invoices;
 
-  const missing = [
-    customer.trim() === "" ? "Customer" : null,
-    site.trim() === "" ? "Site" : null,
-    hasValue ? null : "Annual value",
-  ].filter((label): label is string => label !== null);
-  const canCreate = missing.length === 0;
+  const canCreate = check.ok;
 
   const today = new Date();
 
@@ -124,55 +158,41 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                 <CardTitle className="text-base">Customer &amp; value</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="customer" className="mb-1.5 block text-sm font-medium">
-                    Customer
-                  </label>
-                  <Input
-                    id="customer"
-                    value={customer}
-                    onChange={(e) => setCustomer(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="site" className="mb-1.5 block text-sm font-medium">
-                    Site
-                  </label>
-                  <Input
-                    id="site"
-                    value={site}
-                    onChange={(e) => setSite(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="value" className="mb-1.5 block text-sm font-medium">
-                    Annual contract value (₹)
-                  </label>
-                  <Input
-                    id="value"
-                    inputMode="numeric"
-                    value={annualValue}
-                    onChange={(e) => setAnnualValue(e.target.value)}
-                    className="tabular-nums"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="anchor" className="mb-1.5 block text-sm font-medium">
-                    Anchor day of month
-                  </label>
-                  <Input
-                    id="anchor"
-                    inputMode="numeric"
-                    value={anchorDay}
-                    onChange={(e) => setAnchorDay(e.target.value)}
-                    className="tabular-nums"
-                  />
-                  {/* FR-501: anchor 31 in a 30-day month lands on the last day
-                      and does NOT spill into the next month. */}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Day 31 lands on the last day of a shorter month
-                  </p>
-                </div>
+                <Field
+                  label="Customer"
+                  value={customer}
+                  onChange={setCustomer}
+                  onBlur={() => touch("customer")}
+                  error={check.errors.customer}
+                />
+                <Field
+                  label="Site"
+                  value={site}
+                  onChange={setSite}
+                  onBlur={() => touch("site")}
+                  error={check.errors.site}
+                />
+                <Field
+                  label="Annual contract value (₹)"
+                  inputMode="numeric"
+                  className="tabular-nums"
+                  value={annualValue}
+                  onChange={setAnnualValue}
+                  onBlur={() => touch("annualValue")}
+                  error={check.errors.annualValue}
+                />
+                <Field
+                  label="Anchor day of month"
+                  inputMode="numeric"
+                  className="tabular-nums"
+                  value={anchorDay}
+                  onChange={setAnchorDay}
+                  onBlur={() => touch("anchorDay")}
+                  error={check.errors.anchorDay}
+                  // FR-501: anchor 31 in a 30-day month lands on the last day
+                  // of that month and does NOT spill into the next one.
+                  hint="Day 31 lands on the last day of a shorter month"
+                />
               </CardContent>
             </Card>
 
@@ -253,6 +273,37 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
               </CardContent>
             </Card>
           </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  When a visit has to move
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex flex-col gap-1.5">
+                  {RESCHEDULE_POLICIES.map((option) => (
+                    <Chip
+                      key={option}
+                      label={RESCHEDULE_POLICY_LABEL[option]}
+                      selected={reschedulePolicy === option}
+                      onClick={() => setReschedulePolicy(option)}
+                    />
+                  ))}
+                </div>
+                {/*
+                  FR-503. Both answers are right for different contracts, and
+                  the wrong one silently re-dates every remaining visit in the
+                  year — so it is asked once, here, rather than guessed at the
+                  moment somebody is already rushing to move a visit.
+                */}
+                <p className="text-xs text-muted-foreground">
+                  {reschedulePolicy === "SHIFT_SUBSEQUENT"
+                    ? "Equipment needs servicing at an interval, so moving one visit moves the rest with it."
+                    : "Sold as a fixed date — only the moved visit changes, the calendar holds."}
+                </p>
+              </CardContent>
+            </Card>
 
           {/* ---------------- What you just agreed ---------------- */}
           <div className="space-y-4">
@@ -340,6 +391,7 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                       recurrence,
                       billing,
                       anchorDay: Number(anchorDay) || 1,
+                      reschedulePolicy,
                       fromLeadReference: fromLead,
                     });
                     router.push("/contracts");
@@ -352,9 +404,7 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                   <Button className="w-full" disabled>
                     Create contract &amp; generate visits
                   </Button>
-                  <p className="text-xs text-muted-foreground">
-                    {missing.join(" · ")} still needed.
-                  </p>
+                  <WhyDisabled reasons={check.summary} />
                 </>
               )}
               <Button
