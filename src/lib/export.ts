@@ -65,6 +65,79 @@ export function downloadCsv(
   download(new Blob([toCsv(headers, rows)], { type: "text/csv;charset=utf-8" }), filename);
 }
 
+/* ---------------------------------------------------- FR-1002 XLSX + why */
+
+export type Provenance = {
+  /** The screen the figures came from. */
+  source: string;
+  /** Every filter in force, in words — "Week to 2 Aug 2026 · All branches". */
+  filters: string;
+  exportedBy: string;
+  exportedAt: string;
+};
+
+/**
+ * A real workbook, with a second sheet saying where the numbers came from.
+ *
+ * FR-1002 asks for filters *and provenance*, and that second half is the part
+ * that matters: a spreadsheet lands in an accountant's inbox with no memory of
+ * which period or branch produced it, and a figure whose filters are unknown is
+ * a figure nobody can defend in a review. The sheet travels with the file, so
+ * the two cannot be separated.
+ *
+ * CSV is kept alongside rather than replaced — it is what opens on a phone.
+ */
+export async function downloadXlsx(
+  headers: readonly string[],
+  rows: readonly (readonly (string | number | null)[])[],
+  provenance: Provenance,
+  filename: string,
+): Promise<void> {
+  /*
+    The browser entry point specifically. The package ships separate `node` and
+    `browser` builds and has no root export — importing the node one into a
+    client bundle pulls in `fs` and fails at build, not at run.
+
+    Imported dynamically so the workbook writer is only fetched when somebody
+    actually exports, rather than riding in every page's bundle.
+  */
+  const writeXlsxFile = (await import("write-excel-file/browser")).default;
+
+  const data = [
+    headers.map((value) => ({ value, fontWeight: "bold" as const })),
+    ...rows.map((row) =>
+      row.map((cell) =>
+        typeof cell === "number"
+          ? { value: cell, type: Number }
+          : { value: cell ?? "", type: String },
+      ),
+    ),
+  ];
+
+  const about = [
+    [{ value: "Where these figures came from", fontWeight: "bold" as const }],
+    [{ value: "Screen", type: String }, { value: provenance.source, type: String }],
+    [{ value: "Filters", type: String }, { value: provenance.filters, type: String }],
+    [{ value: "Exported by", type: String }, { value: provenance.exportedBy, type: String }],
+    [{ value: "Exported at", type: String }, { value: provenance.exportedAt, type: String }],
+    [{ value: "Rows", type: String }, { value: rows.length, type: Number }],
+  ];
+
+  // The multi-sheet overload takes one object per sheet, each carrying its own
+  // name — not a parallel `sheets` array, which silently type-errors into the
+  // single-sheet overload.
+  /*
+    The browser build hands back a workbook and downloads on `toFile`; only the
+    node build takes a `fileName` option. Getting these two confused produces a
+    workbook that is built correctly and never reaches the user.
+  */
+  const workbook = await writeXlsxFile([
+    { data, sheet: "Data" },
+    { data: about, sheet: "About this export" },
+  ]);
+  await workbook.toFile(filename);
+}
+
 /** `2026-08-06` — sortable, and unambiguous between date conventions. */
 export function stampFor(date: Date): string {
   return [

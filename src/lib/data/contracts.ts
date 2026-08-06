@@ -103,6 +103,86 @@ export const INVOICES_PER_YEAR: Record<BillingFrequency, number | "per_visit"> =
     PER_VISIT: "per_visit",
   };
 
+/* ------------------------------------------------- FR-504 coverage billing */
+
+/**
+ * Whether a part consumed on a contract job becomes a billable line.
+ *
+ * This is the whole commercial point of the coverage axis, and it was stored
+ * and never read: a comprehensive contract has already been paid for its parts,
+ * so billing them again is double-charging a customer who has a document saying
+ * otherwise. Labour-only is the reverse — the labour is covered, everything
+ * else is chargeable.
+ *
+ * Returned as a reason rather than a boolean because the invoice has to *say*
+ * why a part is not being charged; a line that silently disappears from a bill
+ * is how a customer stops trusting the bill.
+ */
+export type PartBilling =
+  | { billable: true; reason: string }
+  | { billable: false; reason: string };
+
+export function partBilling(coverage: Coverage): PartBilling {
+  switch (coverage) {
+    case "COMPREHENSIVE":
+      return {
+        billable: false,
+        reason: "Included — this contract is comprehensive",
+      };
+    case "NON_COMPREHENSIVE":
+      return { billable: true, reason: "Parts are billable on this contract" };
+    case "LABOUR_ONLY":
+      return {
+        billable: true,
+        reason: "Labour is covered; parts and materials are billable",
+      };
+  }
+}
+
+/* --------------------------------------------- FR-503 reschedule policy */
+
+/**
+ * What happens to the rest of the schedule when one visit moves.
+ *
+ * `SHIFT_SUBSEQUENT` — the whole run slides, keeping the interval. Right for a
+ * contract sold as "every 30 days", where the gap is the promise.
+ * `KEEP_SCHEDULE` — only this visit moves and the next stays put. Right for a
+ * contract sold as "the 1st of every month", where the date is the promise.
+ *
+ * Stored per contract because the answer differs by customer, and getting it
+ * wrong silently re-dates every remaining visit in the year.
+ */
+export const RESCHEDULE_POLICIES = ["SHIFT_SUBSEQUENT", "KEEP_SCHEDULE"] as const;
+export type ReschedulePolicy = (typeof RESCHEDULE_POLICIES)[number];
+
+export const RESCHEDULE_POLICY_LABEL: Record<ReschedulePolicy, string> = {
+  SHIFT_SUBSEQUENT: "Shift the rest — keep the interval between visits",
+  KEEP_SCHEDULE: "Keep the schedule — only this visit moves",
+};
+
+/** The visit dates after one is moved, under the contract's own policy. */
+export function applyReschedule(
+  dates: readonly Date[],
+  index: number,
+  to: Date,
+  policy: ReschedulePolicy,
+): Date[] {
+  const next = [...dates];
+  if (index < 0 || index >= next.length) return next;
+
+  if (policy === "KEEP_SCHEDULE") {
+    next[index] = to;
+    return next;
+  }
+
+  // Slide every later visit by the same delta, so the interval is preserved.
+  const delta = to.getTime() - next[index].getTime();
+  for (let i = index; i < next.length; i += 1) {
+    next[i] = new Date(next[i].getTime() + delta);
+  }
+  return next;
+}
+
 /* -------------------------------------------------------- billing schedule */
 
 /**

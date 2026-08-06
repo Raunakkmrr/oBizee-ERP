@@ -156,3 +156,60 @@ export function codeForAato(code: string, aatoPaise: number): string {
   const digits = aatoPaise > THRESHOLD ? 6 : 4;
   return code.slice(0, digits);
 }
+
+
+/* ------------------------------------------------- FR-806 composite supply */
+
+/**
+ * Whether an invoice is mixing goods and services in a way that needs a look.
+ *
+ * §8 of the CGST Act: where goods and services are **naturally bundled** and
+ * supplied together in the ordinary course of business, the whole supply takes
+ * the rate of the *principal* supply — a composite supply. Where they are not
+ * naturally bundled, each line stands on its own rate.
+ *
+ * **Advisory, never blocking**, exactly as FR-806 requires. Which of the two an
+ * AC service with a replaced capacitor is depends on facts the software does
+ * not have — the contract, the way it was sold, what the customer agreed. A
+ * product that decided this silently would be putting a tax position in a
+ * taxpayer's name; one that refused to file until it was answered would stop
+ * work over a question that is usually obvious to the person raising it.
+ */
+export type SupplyAdvice =
+  | { kind: "single_rate" }
+  | {
+      kind: "mixed";
+      /** The rate the principal supply would carry if this is composite. */
+      principalPercent: number;
+      /** What the reader has to decide, in words. */
+      question: string;
+      rates: number[];
+    };
+
+export function adviseSupply(lines: readonly InvoiceLine[]): SupplyAdvice {
+  const rates = [...new Set(lines.map((line) => line.ratePercent))].sort(
+    (a, b) => a - b,
+  );
+  const hasGoods = lines.some((line) => line.kind === "goods");
+  const hasService = lines.some((line) => line.kind === "service");
+
+  // One rate, or one kind, needs no decision at all.
+  if (rates.length <= 1 || !hasGoods || !hasService) return { kind: "single_rate" };
+
+  // The principal supply is the one carrying the most value, which for a
+  // service business is nearly always the labour.
+  const byValue = new Map<number, number>();
+  for (const line of lines) {
+    const value = line.qty * line.ratePaise;
+    byValue.set(line.ratePercent, (byValue.get(line.ratePercent) ?? 0) + value);
+  }
+  const principalPercent = [...byValue.entries()].sort((a, b) => b[1] - a[1])[0][0];
+
+  return {
+    kind: "mixed",
+    principalPercent,
+    rates,
+    question:
+      "Goods and services at different rates on one invoice. If they were naturally bundled and sold as one job, this is a composite supply and the whole invoice takes the principal rate. If they were sold separately, leave the lines as they are.",
+  };
+}
