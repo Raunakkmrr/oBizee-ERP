@@ -226,15 +226,44 @@ export default function LeadsPage() {
                     </div>
                   </Card>
 
-                  {/* Columns scroll inside their own strip; the body never
-                      scrolls sideways. */}
-                  <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+                  {/*
+                    All five stages fit at xl, and scroll below it.
+
+                    The board used to be a fixed strip of 256px columns, which
+                    at 1280px hid 620px of itself — 39% — behind a scroll
+                    nothing announced. The column that disappeared was `Parked`,
+                    which exists (see `PIPELINE_STAGES`) precisely because "an
+                    owner reviewing on Monday needs to see the pile". The one
+                    column that had to be seen was the one you could not.
+
+                    So: a six-column grid from xl up — one per stage, derived
+                    rather than hard-coded, because a five-column grid quietly
+                    wrapped `Parked` onto a second row the moment anyone read
+                    `PIPELINE_STAGES` and counted.
+                    Below that the strip scrolls, and `Parked` is pinned to the
+                    right edge so it is never the column that falls off — the
+                    rest slide underneath it.
+                  */}
+                  <div
+                    className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 xl:grid xl:overflow-x-visible"
+                    style={{
+                      // Tied to the stage list, so adding a stage can never
+                      // silently push one onto a second row again.
+                      ["--pipeline-cols" as string]: columns.length,
+                      gridTemplateColumns:
+                        "repeat(var(--pipeline-cols), minmax(0, 1fr))",
+                    }}
+                  >
                     {columns.map((column) => (
                       <div
                         key={column.stage}
-                        className="flex w-64 shrink-0 flex-col rounded-xl border bg-card"
+                        className={cn(
+                          "flex w-56 shrink-0 flex-col rounded-xl bg-card shadow-[var(--shadow-card)] xl:w-auto xl:min-w-0",
+                          column.stage === "PARKED" &&
+                            "sticky right-0 shadow-[var(--shadow-raised)] xl:static xl:shadow-[var(--shadow-card)]",
+                        )}
                       >
-                        <div className="bg-muted px-3 py-2">
+                        <div className="rounded-t-xl bg-muted px-3 py-2">
                           <div className="flex items-baseline justify-between gap-2">
                             <span className="truncate text-sm font-semibold">
                               {STAGE_LABEL[column.stage]}
@@ -273,10 +302,10 @@ export default function LeadsPage() {
                               <div
                                 key={lead.id}
                                 className={cn(
-                                  "rounded-lg border p-2.5 text-sm",
-                                  silent
-                                    ? "border-warning/40 bg-warning/5"
-                                    : "bg-background",
+                                  "rounded-lg p-2 text-sm",
+                                  // Nothing drawn: a silent lead is a tinted
+                                  // surface, the rest are the page ground.
+                                  silent ? "bg-warning-bg" : "bg-muted-bg",
                                 )}
                               >
                                 <p className="truncate font-medium">
