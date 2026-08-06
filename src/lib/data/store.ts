@@ -55,9 +55,9 @@ import {
 import {
   SEED_ADVANCES,
   adjustAdvance,
-  receiptVoucherNumber,
   type Advance,
 } from "./advances";
+import { issue, seriesStateSchema, type SeriesState } from "./series";
 import { SEED_TENANT } from "./fixtures/tenant";
 import { open, seal, destroyKey, unavailableMessage } from "./crypto";
 
@@ -108,6 +108,15 @@ export type StoreState = {
   /** FR-811: numbering is per branch, doc type and financial year. */
   /** FR-810 — money taken before the work, and the vouchers that account for it. */
   advances: Advance[];
+  /**
+   * FR-811's counters, keyed by (branch, doc type, financial year).
+   *
+   * Separate from `seq`, which numbers *records* (`job_441`) and may be
+   * anything. This one is the statutory series a customer and the department
+   * both read, so it resets on 1 April and never shares a counter across
+   * branches or document types.
+   */
+  series: SeriesState;
   seq: {
     job: number;
     contract: number;
@@ -136,6 +145,13 @@ export function seedState(): StoreState {
     actingAs: "usr_0002",
     invoices: [],
     advances: structuredClone(SEED_ADVANCES),
+    // Mid-year, as a live tenant would be — so the first thing this build
+    // issues is 0441 / 0150 / 0007, not a suspiciously round 0001.
+    series: {
+      "brn_0001:job:2026": 440,
+      "brn_0001:invoice:2026": 149,
+      "brn_0001:receipt_voucher:2026": 6,
+    },
     seq: { job: 440, contract: 32, invoice: 149, advance: 6, lead: 151 },
   };
 }
@@ -163,12 +179,17 @@ function hasEverySlice(value: unknown): value is StoreState {
     stale.
 
     `people` is validated against its own schema because it is the slice whose
-    shape has changed twice. The others are not yet schema-checked here, which
-    is a known gap rather than a decision — recorded so the next person adding
-    a field knows the guard will not catch them.
+    shape has changed twice. `series` is validated because a wrong counter is
+    worse than a missing one: it would issue a duplicate statutory number
+    rather than fail. The others are not yet schema-checked here, which is a
+    known gap rather than a decision — recorded so the next person adding a
+    field knows the guard will not catch them.
   */
-  const people = (value as { people: unknown }).people;
-  return z.array(personSchema).safeParse(people).success;
+  const { people, series } = value as { people: unknown; series: unknown };
+  return (
+    z.array(personSchema).safeParse(people).success &&
+    seriesStateSchema.safeParse(series).success
+  );
 }
 
 /* ---------------------------------------------------------------- actions */
@@ -307,12 +328,12 @@ function pad(value: number, width: number): string {
   return String(value).padStart(width, "0");
 }
 
-/** `J-2608-0441` — the series prefix belongs to the branch (FR-811). */
-function jobNumber(seq: number, now: Date): string {
-  const branch = SEED_TENANT.branches[0];
-  const yy = String(now.getFullYear()).slice(2);
-  return `${branch.jobSeriesPrefix}-${yy}${pad(now.getMonth() + 1, 2)}-${pad(seq, 4)}`;
-}
+/*
+  Job, invoice and receipt-voucher numbers are issued by `series.ts` (FR-811),
+  not formatted here. Three local formatters off one flat counter is what let
+  the financial year roll without the number resetting, and made the branch
+  invisible to the series.
+*/
 
 /**
  * Add a contract's due visits to the board — FR-502's whole mechanic.
@@ -335,11 +356,16 @@ function withGeneratedVisits(
   if (planned.length === 0) return state;
 
   let seq = state.seq.job;
+  let series = state.series;
   const created = planned.map((visit): JobRow => {
     seq += 1;
+    // Numbered on the visit's own date, so a job falling in the next financial
+    // year takes that year's series rather than this one's.
+    const issued = issue(series, SEED_TENANT.branches[0], "job", visit.on);
+    series = issued.next;
     return {
       id: `job_${seq}`,
-      jobNumber: jobNumber(seq, visit.on),
+      jobNumber: issued.number,
       // A generated visit carries the contract's slot promise, not a timestamp
       // nobody agreed to (FR-203).
       slot: "9-1",
@@ -369,6 +395,7 @@ function withGeneratedVisits(
         unassigned: state.board.counters.unassigned + created.length,
       },
     },
+    series,
     seq: { ...state.seq, job: seq },
   };
 }
@@ -377,14 +404,6 @@ function withGeneratedVisits(
 function leadReference(seq: number, now: Date): string {
   const yy = String(now.getFullYear()).slice(2);
   return `L-${yy}${pad(now.getMonth() + 1, 2)}-${pad(seq, 4)}`;
-}
-
-function invoiceNumber(seq: number, now: Date): string {
-  const branch = SEED_TENANT.branches[0];
-  const year = now.getFullYear();
-  // Financial year label, 1 April boundary — `26-27`.
-  const fyStart = now.getMonth() >= 3 ? year : year - 1;
-  return `${branch.invoiceSeriesPrefix}/${String(fyStart).slice(2)}-${String(fyStart + 1).slice(2)}/${pad(seq, 4)}`;
 }
 
 function contractReference(seq: number, now: Date): string {
@@ -556,9 +575,10 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
 
     case "CREATE_JOB": {
       const seq = state.seq.job + 1;
+      const issued = issue(state.series, SEED_TENANT.branches[0], "job", now);
       const job: JobRow = {
         id: `job_${seq}`,
-        jobNumber: jobNumber(seq, now),
+        jobNumber: issued.number,
         slot: action.slot,
         customer: action.customer,
         locality: action.locality,
@@ -589,6 +609,7 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
               state.board.counters.unassigned + (action.technicianId ? 0 : 1),
           },
         },
+        series: issued.next,
         seq: { ...state.seq, job: seq },
       };
     }
@@ -719,10 +740,11 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
       const branch = SEED_TENANT.branches[0];
       const derivation = derivePlaceOfSupply(branch.stateCode, branch.stateCode);
       const totals = computeTotals(lines, derivation.head);
+      const issued = issue(state.series, branch, "invoice", now);
 
       const invoice: Invoice = {
         id: `inv_${seq}`,
-        number: invoiceNumber(seq, now),
+        number: issued.number,
         jobId: null,
         jobNumber: null,
         contractId: contract.id,
@@ -742,15 +764,22 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
       return {
         ...state,
         invoices: [...state.invoices, invoice],
+        series: issued.next,
         seq: { ...state.seq, invoice: seq },
       };
     }
 
     case "RECORD_ADVANCE": {
       const seq = state.seq.advance + 1;
+      const issued = issue(
+        state.series,
+        SEED_TENANT.branches[0],
+        "receipt_voucher",
+        now,
+      );
       const advance: Advance = {
         id: `adv_${seq}`,
-        voucherNumber: receiptVoucherNumber(seq, now),
+        voucherNumber: issued.number,
         contractId: action.contractId,
         customer: action.customer,
         // ISO, not `dateWord` — this field is sorted on, and "5 Aug" sorts
@@ -767,6 +796,7 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
       return {
         ...state,
         advances: [advance, ...state.advances],
+        series: issued.next,
         seq: { ...state.seq, advance: seq },
       };
     }
@@ -806,10 +836,11 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
       // than inventing an interstate supply.
       const derivation = derivePlaceOfSupply(branch.stateCode, branch.stateCode);
       const totals = computeTotals(lines, derivation.head);
+      const issued = issue(state.series, branch, "invoice", now);
 
       const invoice: Invoice = {
         id: `inv_${seq}`,
-        number: invoiceNumber(seq, now),
+        number: issued.number,
         jobId: job.id,
         jobNumber: job.jobNumber,
         contractId: null,
@@ -837,6 +868,7 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
               : candidate,
           ),
         },
+        series: issued.next,
         seq: { ...state.seq, invoice: seq },
       };
     }

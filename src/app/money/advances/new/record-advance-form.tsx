@@ -15,7 +15,9 @@ import { Field, WhyDisabled } from "@/components/shared/field";
 import { MoneyText } from "@/components/shared/money-text";
 import { requiredName, rupees, validate } from "@/lib/validate";
 import { asPaise } from "@/lib/money";
-import { advanceTax, receiptVoucherNumber } from "@/lib/data/advances";
+import { advanceTax } from "@/lib/data/advances";
+import { peek } from "@/lib/data/series";
+import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
 
 /**
@@ -58,7 +60,17 @@ export function RecordAdvanceForm() {
   const tax = advanceTax(hasAmount ? receiptPaise : 0, 18, head);
 
   const today = new Date();
-  const nextVoucher = receiptVoucherNumber(state.seq.advance + 1, today);
+  /*
+    Peeked from the same series the reducer will issue from, rather than
+    formatted independently. Showing one number and taking another is how a
+    statutory series grows a hole (FR-811).
+  */
+  const nextVoucher = peek(
+    state.series,
+    SEED_TENANT.branches[0],
+    "receipt_voucher",
+    today,
+  );
 
   return (
     <AppShell today={today} freshness={{ kind: "fresh", at: today }}>
