@@ -126,6 +126,22 @@ export type Action =
       technicianName: string | null;
       fromLeadReference: string | null;
     }
+  | {
+      /**
+       * Moving a lead between pipeline stages — the board's drag, and the
+       * "Move to" menu that does the same thing from the keyboard.
+       *
+       * It is an action rather than local component state for the same reason
+       * every other change here is: the pipeline, the follow-up queue and the
+       * nav badge all read the same lead, and a stage that lived in the board's
+       * `useState` would be forgotten the moment the tab changed.
+       */
+      type: "MOVE_LEAD_STAGE";
+      leadId: string;
+      stage: string;
+      /** Who did it — the timeline entry names a person, never "system". */
+      actor: string;
+    }
   | { type: "ASSIGN_JOB"; jobId: string; technicianId: string; technicianName: string }
   | { type: "CREATE_INVOICE_FROM_JOB"; jobId: string }
   | { type: "RESET" };
@@ -156,6 +172,21 @@ function contractReference(seq: number, now: Date): string {
   const fyStart = now.getMonth() >= 3 ? year : year - 1;
   return `AMC-${String(fyStart).slice(2)}${String(fyStart + 1).slice(2)}-${pad(seq, 4)}`;
 }
+
+/**
+ * Stage codes as words, for the sentence written into the activity trail.
+ * `STAGE_LABEL` lives in `leads.ts`; importing it here would make the store
+ * depend on a screen's module, so the two words that end up in a *stored*
+ * string are kept beside the reducer that writes them.
+ */
+const STAGE_WORD: Record<string, string> = {
+  NEW: "New",
+  CONTACTED: "Contacted",
+  SURVEY_SCHEDULED: "Survey scheduled",
+  QUOTED: "Quoted",
+  ASSIGNED: "Assigned",
+  PARKED: "Parked",
+};
 
 function dateWord(now: Date): string {
   return now.toLocaleDateString("en-IN", {
@@ -269,6 +300,25 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
         },
         seq: { ...state.seq, job: seq },
       };
+    }
+
+    case "MOVE_LEAD_STAGE": {
+      const leads = state.leads.leads.map((lead): Lead => {
+        if (lead.id !== action.leadId) return lead;
+        // Moving a lead is a contact-shaped event: it resets the silence clock,
+        // because somebody just looked at this deal and made a decision about
+        // it. Leaving `lastActivity` alone would keep the card flagged silent
+        // while the owner was demonstrably working it.
+        return {
+          ...lead,
+          stage: action.stage,
+          lastActivity: {
+            date: dateWord(now).replace(/ \d{4}$/, ""),
+            text: `Moved to ${STAGE_WORD[action.stage] ?? action.stage} by ${action.actor}`,
+          },
+        };
+      });
+      return { ...state, leads: { ...state.leads, leads } };
     }
 
     case "ASSIGN_JOB": {

@@ -7,6 +7,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
 import { TabBar } from "@/components/shared/controls";
+import { PipelineBoard } from "@/components/board/pipeline-board";
 import { MoneyText } from "@/components/shared/money-text";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { LogOutcome } from "@/components/leads/log-outcome";
@@ -38,7 +39,7 @@ import {
   type LeadsData,
 } from "@/lib/data/leads";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
-import { useStoreState } from "@/lib/data/use-store";
+import { useDispatch, useStoreState } from "@/lib/data/use-store";
 
 /**
  * Leads — PRD §6.6. **The one decision:** *who do I call right now?*
@@ -68,6 +69,7 @@ export default function LeadsPage() {
 
   // Re-reads whenever any surface writes to the store.
   const storeState = useStoreState();
+  const dispatch = useDispatch();
 
   useEffect(() => {
     let cancelled = false;
@@ -226,135 +228,18 @@ export default function LeadsPage() {
                     </div>
                   </Card>
 
-                  {/*
-                    All five stages fit at xl, and scroll below it.
-
-                    The board used to be a fixed strip of 256px columns, which
-                    at 1280px hid 620px of itself — 39% — behind a scroll
-                    nothing announced. The column that disappeared was `Parked`,
-                    which exists (see `PIPELINE_STAGES`) precisely because "an
-                    owner reviewing on Monday needs to see the pile". The one
-                    column that had to be seen was the one you could not.
-
-                    So: a six-column grid from xl up — one per stage, derived
-                    rather than hard-coded, because a five-column grid quietly
-                    wrapped `Parked` onto a second row the moment anyone read
-                    `PIPELINE_STAGES` and counted.
-                    Below that the strip scrolls, and `Parked` is pinned to the
-                    right edge so it is never the column that falls off — the
-                    rest slide underneath it.
-                  */}
-                  <div
-                    className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 xl:grid xl:overflow-x-visible"
-                    style={{
-                      // Tied to the stage list, so adding a stage can never
-                      // silently push one onto a second row again.
-                      ["--pipeline-cols" as string]: columns.length,
-                      gridTemplateColumns:
-                        "repeat(var(--pipeline-cols), minmax(0, 1fr))",
-                    }}
-                  >
-                    {columns.map((column) => (
-                      <div
-                        key={column.stage}
-                        className={cn(
-                          "flex w-56 shrink-0 flex-col rounded-xl bg-card shadow-[var(--shadow-card)] xl:w-auto xl:min-w-0",
-                          column.stage === "PARKED" &&
-                            "sticky right-0 shadow-[var(--shadow-raised)] xl:static xl:shadow-[var(--shadow-card)]",
-                        )}
-                      >
-                        <div className="rounded-t-xl bg-muted px-3 py-2">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="truncate text-sm font-semibold">
-                              {STAGE_LABEL[column.stage]}
-                            </span>
-                            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                              {column.rows.length}
-                            </span>
-                          </div>
-                          {/* A column with nothing priced has no total — it does
-                              not have a zero one (§6.6.4). */}
-                          <p className="text-xs text-muted-foreground">
-                            {column.valuePaise === null ? (
-                              <span>{EM_DASH} not quoted</span>
-                            ) : (
-                              <MoneyText amount={asPaise(column.valuePaise)} />
-                            )}
-                            {column.stalled > 0 ? (
-                              <span className="ml-1.5 text-brand-brown">
-                                · {column.stalled} silent
-                              </span>
-                            ) : null}
-                          </p>
-                        </div>
-
-                        <div className="flex flex-1 flex-col gap-2 p-2">
-                          {column.rows.length === 0 ? (
-                            <p className="px-1 py-3 text-xs text-muted-foreground">
-                              Nothing at this stage.
-                            </p>
-                          ) : null}
-
-                          {column.rows.map((lead) => {
-                            const silent = isStalled(lead, today);
-                            const days = daysSinceContact(lead, today);
-                            return (
-                              <div
-                                key={lead.id}
-                                className={cn(
-                                  "rounded-lg p-2 text-sm",
-                                  // Nothing drawn: a silent lead is a tinted
-                                  // surface, the rest are the page ground.
-                                  silent ? "bg-warning-bg" : "bg-muted-bg",
-                                )}
-                              >
-                                <p className="truncate font-medium">
-                                  {lead.name}
-                                </p>
-                                <p className="truncate text-xs text-muted-foreground">
-                                  {lead.locality} · {lead.source}
-                                </p>
-                                <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-2">
-                                  <span className="text-sm font-semibold tabular-nums">
-                                    {lead.quotedUnavailable ||
-                                    lead.quotedPaise === null ? (
-                                      <span className="text-muted-foreground">
-                                        {EM_DASH}
-                                      </span>
-                                    ) : (
-                                      <MoneyText
-                                        amount={asPaise(lead.quotedPaise)}
-                                      />
-                                    )}
-                                  </span>
-                                  {/*
-                                    Age since contact, not the follow-up date —
-                                    this tab is about what has stopped moving.
-                                    A word, so the warm border is never the only
-                                    channel (§6.13.4).
-                                  */}
-                                  <span
-                                    className={cn(
-                                      "text-xs tabular-nums",
-                                      silent
-                                        ? "font-medium text-brand-brown"
-                                        : "text-muted-foreground",
-                                    )}
-                                  >
-                                    {days === null
-                                      ? "no contact logged"
-                                      : days === 0
-                                        ? "today"
-                                        : `silent ${days}d`}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <PipelineBoard
+                    columns={columns}
+                    today={today}
+                    onMove={(leadId, stage) =>
+                      dispatch({
+                        type: "MOVE_LEAD_STAGE",
+                        leadId,
+                        stage,
+                        actor: CURRENT_USER.name.split(" ")[0],
+                      })
+                    }
+                  />
                 </div>
               );
             }

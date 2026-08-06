@@ -256,3 +256,79 @@ describe("actions dispatched before hydration are not lost", () => {
     expect(replayed.board.jobs[0].customer).toBe("Grand Plaza Hotel");
   });
 });
+
+describe("MOVE_LEAD_STAGE — the board's drag, and its keyboard twin", () => {
+  const lead = () => seedState().leads.leads[0];
+
+  it("moves the lead to the dropped stage", () => {
+    const before = lead();
+    const after = reduce(
+      seedState(),
+      {
+        type: "MOVE_LEAD_STAGE",
+        leadId: before.id,
+        stage: "QUOTED",
+        actor: "Priya",
+      },
+      new Date("2026-08-06T10:00:00"),
+    );
+    expect(after.leads.leads[0].stage).toBe("QUOTED");
+  });
+
+  it("records who moved it, in words", () => {
+    const after = reduce(
+      seedState(),
+      {
+        type: "MOVE_LEAD_STAGE",
+        leadId: lead().id,
+        stage: "SURVEY_SCHEDULED",
+        actor: "Priya",
+      },
+      new Date("2026-08-06T10:00:00"),
+    );
+    expect(after.leads.leads[0].lastActivity?.text).toBe(
+      "Moved to Survey scheduled by Priya",
+    );
+  });
+
+  it("resets the silence clock, because somebody just worked the deal", () => {
+    // Leaving lastActivity alone would keep the card flagged silent while the
+    // owner was demonstrably moving it across the board.
+    const after = reduce(
+      seedState(),
+      {
+        type: "MOVE_LEAD_STAGE",
+        leadId: lead().id,
+        stage: "PARKED",
+        actor: "Manish",
+      },
+      new Date("2026-08-06T10:00:00"),
+    );
+    expect(after.leads.leads[0].lastActivity?.date).toBe("6 Aug");
+  });
+
+  it("touches only the lead that moved", () => {
+    const before = seedState();
+    const after = reduce(
+      before,
+      {
+        type: "MOVE_LEAD_STAGE",
+        leadId: before.leads.leads[0].id,
+        stage: "QUOTED",
+        actor: "Priya",
+      },
+      new Date("2026-08-06T10:00:00"),
+    );
+    expect(after.leads.leads.slice(1)).toEqual(before.leads.leads.slice(1));
+  });
+
+  it("is a no-op for an id that is not on the board", () => {
+    const before = seedState();
+    const after = reduce(
+      before,
+      { type: "MOVE_LEAD_STAGE", leadId: "nope", stage: "QUOTED", actor: "P" },
+      new Date("2026-08-06T10:00:00"),
+    );
+    expect(after.leads.leads).toEqual(before.leads.leads);
+  });
+});
