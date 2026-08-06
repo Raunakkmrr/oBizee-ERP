@@ -21,6 +21,7 @@ import { ColumnHeader, Panel } from "@/components/shared/panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { downloadCsv, downloadJson, stampFor } from "@/lib/export";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import {
@@ -147,11 +148,51 @@ export default function GstWorkspacePage() {
                         variant="outline"
                         size="sm"
                         disabled={readiness.kind !== "ready"}
+                        onClick={() =>
+                          downloadCsv(
+                            ["Table", "Covers", "Documents", "Taxable", "Tax"],
+                            period.tables.map((table) => [
+                              table.code,
+                              table.label,
+                              table.documents,
+                              (table.taxablePaise / 100).toFixed(2),
+                              (table.taxPaise / 100).toFixed(2),
+                            ]),
+                            `GSTR1-${period.periodLabel.replace(/\s+/g, "-")}-${stampFor(today)}.csv`,
+                          )
+                        }
                       >
                         <FileSpreadsheet className="size-3.5" />
-                        Export XLSX
+                        Export CSV
                       </Button>
-                      <Button size="sm" disabled={readiness.kind !== "ready"}>
+                      <Button
+                        size="sm"
+                        disabled={readiness.kind !== "ready"}
+                        onClick={() =>
+                          downloadJson(
+                            {
+                              gstin: SEED_TENANT.branches[0].gstin,
+                              fp: period.periodLabel,
+                              // Rupees, as the GSTN offline tool expects —
+                              // paise are this product's internal unit, and
+                              // exporting them would inflate every figure 100x.
+                              gt:
+                                period.tables.reduce(
+                                  (sum, table) => sum + table.taxablePaise,
+                                  0,
+                                ) / 100,
+                              tables: period.tables.map((table) => ({
+                                code: table.code,
+                                label: table.label,
+                                documents: table.documents,
+                                taxable: table.taxablePaise / 100,
+                                tax: table.taxPaise / 100,
+                              })),
+                            },
+                            `GSTR1-${period.periodLabel.replace(/\s+/g, "-")}-${stampFor(today)}.json`,
+                          )
+                        }
+                      >
                         <Download className="size-3.5" />
                         Export JSON
                       </Button>

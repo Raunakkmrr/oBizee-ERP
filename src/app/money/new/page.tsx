@@ -21,6 +21,8 @@ import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { Panel } from "@/components/shared/panel";
 import { Briefcase, Send, ShieldCheck } from "lucide-react";
 import { useStoreState } from "@/lib/data/use-store";
+import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
+import { whatsappHref } from "@/lib/contact";
 
 /**
  * Create invoice from job — PRD §6.11.
@@ -66,6 +68,13 @@ const LINES: InvoiceLine[] = [
 ];
 
 type Check = { label: string; state: "ok" | "info" | "warn"; detail?: string };
+
+/**
+ * The number the invoice goes to. One constant, so the Send panel and the
+ * WhatsApp link can never name different numbers — they were separate literals
+ * and only one of them was real.
+ */
+const CUSTOMER_PHONE = "98200 12345";
 
 export default function CreateInvoicePage() {
   /**
@@ -432,7 +441,8 @@ export default function CreateInvoicePage() {
               <div className="space-y-2 text-sm">
                 <p className="text-muted-foreground">
                   WhatsApp to{" "}
-                  <span className="tabular-nums">98200 12345</span> · in English
+                  <span className="tabular-nums">{CUSTOMER_PHONE}</span> · in
+                  English
                 </p>
                 <p className="text-muted-foreground">
                   UPI link and QR included · due in 15 days
@@ -446,14 +456,41 @@ export default function CreateInvoicePage() {
               that were never sent — a real and expensive failure mode."
             */}
             <div className="space-y-2">
-              <Button className="w-full">Finalise &amp; send on WhatsApp</Button>
+              {/*
+                A draft, opened in WhatsApp — never an automatic send. The
+                accountant sees the message and the number before it goes, which
+                is the right boundary for a document that carries a GSTIN.
+              */}
+              <Button
+                className="w-full"
+                render={
+                  <a
+                    href={
+                      whatsappHref(
+                        CUSTOMER_PHONE,
+                        `Namaste, please find invoice ${created?.number ?? "SVC"} for ${created?.customer ?? "your service"}. Thank you.`,
+                      ) ?? undefined
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                  />
+                }
+                nativeButton={false}
+                disabled={!whatsappHref(CUSTOMER_PHONE)}
+              >
+                Finalise &amp; send on WhatsApp
+              </Button>
               <div className="flex gap-2">
-                <Button variant="outline" className="flex-1">
-                  Save as draft
-                </Button>
-                <Button variant="outline" className="flex-1">
-                  Finalise without sending
-                </Button>
+                <Unavailable
+                  label="Save as draft"
+                  reason={NEEDS_BACKEND}
+                  className="flex-1"
+                />
+                <Unavailable
+                  label="Finalise without sending"
+                  reason={NEEDS_BACKEND}
+                  className="flex-1"
+                />
               </div>
             </div>
           </div>

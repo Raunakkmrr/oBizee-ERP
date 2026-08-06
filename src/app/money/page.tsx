@@ -40,6 +40,9 @@ import {
   type Payable,
   type Receivable,
 } from "@/lib/data/money";
+import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
+import { telHref, whatsappHref } from "@/lib/contact";
+import { useDispatch, useStoreState } from "@/lib/data/use-store";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
 
 /**
@@ -76,7 +79,13 @@ import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
 
 /* ------------------------------------------------------------------ alarms */
 
-function AlarmRow({ alarm }: { alarm: MoneyAlarm }) {
+function AlarmRow({
+  alarm,
+  onPaid,
+}: {
+  alarm: MoneyAlarm;
+  onPaid: (billId: string) => void;
+}) {
   const tone =
     alarm.kind === "deduction_lost"
       ? "destructive"
@@ -130,24 +139,22 @@ function AlarmRow({ alarm }: { alarm: MoneyAlarm }) {
 
       <div className="flex shrink-0 gap-1.5">
         {alarm.kind === "unverified_vendor" ? (
-          <Button size="sm" variant="outline">
-            Verify Udyam status
-          </Button>
+          // A Udyam lookup is a call to a government register. There is no
+          // honest way to fake it, so the control says so instead of pretending.
+          <Unavailable label="Verify Udyam status" reason={NEEDS_BACKEND} />
         ) : alarm.kind === "deduction_due" ? (
           <>
             {/* The one action that still saves the money. */}
-            <Button size="sm">Mark paid</Button>
+            <Button size="sm" onClick={() => onPaid(alarm.bill.id)}>
+              Mark paid
+            </Button>
             {!alarm.bill.hasWrittenAgreement ? (
-              // Attaching an agreement moves the limit from 15 days to 45 —
-              // offered exactly where the 15 is being counted against them.
-              <Button size="sm" variant="outline">
-                Attach agreement
-              </Button>
+              <Unavailable label="Attach agreement" reason={NEEDS_UPLOAD} />
             ) : null}
           </>
         ) : (
           // Nothing here saves the deduction; paying is still owed.
-          <Button size="sm" variant="outline">
+          <Button size="sm" variant="outline" onClick={() => onPaid(alarm.bill.id)}>
             Mark paid
           </Button>
         )}
@@ -156,7 +163,13 @@ function AlarmRow({ alarm }: { alarm: MoneyAlarm }) {
   );
 }
 
-function AlarmBand({ data }: { data: MoneyData }) {
+function AlarmBand({
+  data,
+  onPaid,
+}: {
+  data: MoneyData;
+  onPaid: (billId: string) => void;
+}) {
   const alarms = moneyAlarms(data.payables);
   if (alarms.length === 0) return null;
 
@@ -199,7 +212,7 @@ function AlarmBand({ data }: { data: MoneyData }) {
 
       <div className="mt-3 grid gap-2">
         {alarms.map((alarm) => (
-          <AlarmRow key={alarm.bill.id} alarm={alarm} />
+          <AlarmRow key={alarm.bill.id} alarm={alarm} onPaid={onPaid} />
         ))}
       </div>
 
@@ -293,6 +306,17 @@ function AgeingLine({
 }
 
 function ReceivableRow({ row, primary }: { row: Receivable; primary: boolean }) {
+  const call = telHref(row.phone);
+  /*
+    The message is a draft, never a send. wa.me opens WhatsApp with the text
+    ready and the person presses send — chasing ₹86,400 is not something
+    software should do on someone's behalf without them seeing it.
+  */
+  const remind = whatsappHref(
+    row.phone,
+    `Hello ${row.customer}, this is a reminder about invoice ${row.invoiceNumber} dated ${row.invoiceDate}, which is now ${row.daysOverdue} days overdue. Kindly let us know when we can expect payment. Thank you.`,
+  );
+
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors odd:bg-muted-bg hover:bg-accent">
       <div className="min-w-0 flex-1">
@@ -328,19 +352,42 @@ function ReceivableRow({ row, primary }: { row: Receivable; primary: boolean }) 
             Promised {row.promise.dateWord}
           </Badge>
         ) : (
-          <Button
-            variant={primary ? "default" : "outline"}
-            size="sm"
-            aria-label={`Send WhatsApp reminder to ${row.customer}`}
-          >
-            <MessageCircle className="size-3.5" />
-            Remind
-          </Button>
+          remind ? (
+            <Button
+              variant={primary ? "default" : "outline"}
+              size="sm"
+              aria-label={`Send WhatsApp reminder to ${row.customer}`}
+              render={<a href={remind} target="_blank" rel="noreferrer" />}
+              nativeButton={false}
+            >
+              <MessageCircle className="size-3.5" />
+              Remind
+            </Button>
+          ) : (
+            <Unavailable
+              label="Remind"
+              icon={MessageCircle}
+              reason={`No phone number on record for ${row.customer}`}
+            />
+          )
         )}
-        <Button variant="outline" size="sm">
-          <Phone className="size-3.5" />
-          Log call
-        </Button>
+        {call ? (
+          <Button
+            variant="outline"
+            size="sm"
+            render={<a href={call} />}
+            nativeButton={false}
+          >
+            <Phone className="size-3.5" />
+            Call
+          </Button>
+        ) : (
+          <Unavailable
+            label="Call"
+            icon={Phone}
+            reason={`No phone number on record for ${row.customer}`}
+          />
+        )}
       </div>
     </div>
   );
@@ -418,7 +465,13 @@ function Receivables({ data }: { data: MoneyData }) {
 
 /* --------------------------------------------------------------- payables */
 
-function PayableRow({ bill }: { bill: Payable }) {
+function PayableRow({
+  bill,
+  onPaid,
+}: {
+  bill: Payable;
+  onPaid: (billId: string) => void;
+}) {
   const countdown = countdownFor(bill);
   const running = countdown.kind === "counting" || countdown.kind === "lapsed";
 
@@ -448,11 +501,9 @@ function PayableRow({ bill }: { bill: Payable }) {
 
         <div className="flex shrink-0 gap-1">
           {countdown.kind === "unknown" ? (
-            <Button variant="outline" size="sm">
-              Verify Udyam status
-            </Button>
+            <Unavailable label="Verify Udyam status" reason={NEEDS_BACKEND} />
           ) : (
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => onPaid(bill.id)}>
               Mark paid
             </Button>
           )}
@@ -507,7 +558,13 @@ function PayableRow({ bill }: { bill: Payable }) {
   );
 }
 
-function Payables({ data }: { data: MoneyData }) {
+function Payables({
+  data,
+  onPaid,
+}: {
+  data: MoneyData;
+  onPaid: (billId: string) => void;
+}) {
   const total = data.payables.reduce((sum, b) => sum + b.amountPaise, 0);
   // Closest to its limit first; the ones the timeline never touches sink.
   const ordered = [...data.payables].sort((a, b) => {
@@ -544,7 +601,7 @@ function Payables({ data }: { data: MoneyData }) {
         flush
       >
         {ordered.map((bill) => (
-          <PayableRow key={bill.id} bill={bill} />
+          <PayableRow key={bill.id} bill={bill} onPaid={onPaid} />
         ))}
       </Panel>
     </div>
@@ -555,6 +612,8 @@ function Payables({ data }: { data: MoneyData }) {
 
 export default function MoneyPage() {
   const [query, setQuery] = useState<Query<MoneyData>>(loading());
+  const dispatch = useDispatch();
+  const storeState = useStoreState();
 
   useEffect(() => {
     let cancelled = false;
@@ -564,7 +623,13 @@ export default function MoneyPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // Re-reads after a bill is paid, so the alarm band and both totals
+    // recompute from the same facts rather than drifting from the list.
+  }, [storeState]);
+
+  function markPaid(billId: string) {
+    dispatch({ type: "MARK_PAYABLE_PAID", billId });
+  }
 
   const today = new Date();
 
@@ -592,10 +657,10 @@ export default function MoneyPage() {
         <QueryBoundary query={query} label="the money screen" loadingRows={8}>
           {(data) => (
             <div className="space-y-5">
-              <AlarmBand data={data} />
+              <AlarmBand data={data} onPaid={markPaid} />
               <div className="grid gap-5 xl:grid-cols-2">
                 <Receivables data={data} />
-                <Payables data={data} />
+                <Payables data={data} onPaid={markPaid} />
               </div>
             </div>
           )}

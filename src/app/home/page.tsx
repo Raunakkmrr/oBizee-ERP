@@ -74,7 +74,15 @@ function MoneyTile({
               money tiles share the row, and forcing the reason and the retry
               onto one line pushed the message to four lines. */}
           <p className="text-sm leading-tight text-brand-brown">{amount.reason}</p>
-          <Button variant="outline" size="xs" aria-label={`Retry ${label}`}>
+          <Button
+            variant="outline"
+            size="xs"
+            aria-label={`Retry ${label}`}
+            // A reload is the honest retry here: the figure comes from a query
+            // whose only source is this page load, so re-running it is exactly
+            // what "try again" means.
+            onClick={() => window.location.reload()}
+          >
             <RotateCw className="size-3" />
             Retry
           </Button>

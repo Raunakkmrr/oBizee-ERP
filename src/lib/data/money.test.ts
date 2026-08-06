@@ -22,6 +22,7 @@ function receivable(over: Partial<Receivable> = {}): Receivable {
     daysOverdue: 10,
     amountPaise: 1_000_00,
     lastContact: null,
+    phone: "98200 12345",
     promise: null,
     ...over,
   };

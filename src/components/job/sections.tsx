@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
+import { telHref, whatsappHref } from "@/lib/contact";
 import type { Check as StageCheck, JobDetail, Stage } from "@/lib/data/job-detail";
 
 /**
@@ -236,6 +238,8 @@ export function WhereBody({ job }: { job: JobDetail }) {
                 variant="outline"
                 size="icon-sm"
                 aria-label={`Call ${contact.name}`}
+                render={<a href={telHref(contact.phone) ?? undefined} />}
+                nativeButton={false}
               >
                 <Phone className="size-3.5" />
               </Button>
@@ -243,6 +247,14 @@ export function WhereBody({ job }: { job: JobDetail }) {
                 variant="outline"
                 size="icon-sm"
                 aria-label={`WhatsApp ${contact.name}`}
+                render={
+                  <a
+                    href={whatsappHref(contact.phone) ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                  />
+                }
+                nativeButton={false}
               >
                 <MessageCircle className="size-3.5" />
               </Button>
@@ -259,9 +271,7 @@ export function AssetBody({ job }: { job: JobDetail }) {
     return (
       <div className="space-y-3 text-sm">
         <p className="text-muted-foreground">No assets registered at this site.</p>
-        <Button variant="outline" size="sm">
-          Add asset
-        </Button>
+        <Unavailable label="Add asset" reason={NEEDS_BACKEND} />
       </div>
     );
   }

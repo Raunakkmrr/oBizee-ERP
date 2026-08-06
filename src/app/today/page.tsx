@@ -110,10 +110,25 @@ export default function TodayBoardPage() {
     >
       {/* Date + view bar, 48px (§6.4.1). */}
       <div className="flex h-12 shrink-0 items-center gap-2 px-3 lg:px-4">
-        <Button variant="ghost" size="icon-sm" aria-label="Previous day">
+        {/*
+          Disabled rather than dead: there is exactly one day of data behind
+          this screen, so stepping to another would show today's jobs under
+          yesterday's date — a lie that looks like a working control.
+        */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Previous day — unavailable: only today's jobs are loaded"
+          disabled
+        >
           <ChevronLeft className="size-4" />
         </Button>
-        <Button variant="ghost" size="icon-sm" aria-label="Next day">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Next day — unavailable: only today's jobs are loaded"
+          disabled
+        >
           <ChevronRight className="size-4" />
         </Button>
 

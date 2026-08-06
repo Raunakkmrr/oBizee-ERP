@@ -7,6 +7,7 @@ import { ArrowLeft, Mic } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import { Chip } from "@/components/shared/controls";
+import { NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -60,9 +61,12 @@ const FOLLOW_UPS = ["Today", "Tomorrow", "+3 days", "+1 week"] as const;
 function DuplicatePanel({
   lookup,
   unavailable,
+  onDismiss,
 }: {
   lookup: Lookup["match"];
   unavailable: boolean;
+  /** FR-102: the warning is advisory, so there has to be a way past it. */
+  onDismiss: () => void;
 }) {
   if (unavailable) {
     return (
@@ -94,7 +98,7 @@ function DuplicatePanel({
           <Button size="sm" render={<Link href="/jobs" />} nativeButton={false}>
             Create job for this customer
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onDismiss}>
             Still create a new lead
           </Button>
         </div>
@@ -120,7 +124,7 @@ function DuplicatePanel({
         <Button size="sm" render={<Link href="/leads" />} nativeButton={false}>
           Open existing lead
         </Button>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={onDismiss}>
           Still create a new lead
         </Button>
       </div>
@@ -146,7 +150,13 @@ export default function NewLeadPage() {
   const phoneRef = useRef<HTMLInputElement>(null);
 
   const digits = phone.replace(/\D/g, "");
-  const showPanel = digits.length === 10;
+  /**
+   * FR-102's duplicate warning is advisory, not a block — two customers really
+   * can share a landline. Acknowledging it hides the panel rather than
+   * disabling the save, which is what "still create a new lead" has to mean.
+   */
+  const [duplicateAcknowledged, setDuplicateAcknowledged] = useState(false);
+  const showPanel = digits.length === 10 && !duplicateAcknowledged;
 
   // FR-102: fires on the 10th digit, while the customer is still talking.
   useEffect(() => {
@@ -247,6 +257,7 @@ export default function NewLeadPage() {
               <DuplicatePanel
                 lookup={showPanel ? match : null}
                 unavailable={showPanel && lookupFailed}
+                onDismiss={() => setDuplicateAcknowledged(true)}
               />
 
               <div>
@@ -417,7 +428,11 @@ export default function NewLeadPage() {
                   <Button
                     variant="outline"
                     size="icon"
-                    aria-label="Record a voice note"
+                    // Recording needs somewhere to put the audio. Disabled with
+                    // the reason in the accessible name, rather than a mic
+                    // button that swallows a press.
+                    disabled
+                    aria-label={`Record a voice note — unavailable: ${NEEDS_UPLOAD}`}
                   >
                     <Mic className="size-4" />
                   </Button>

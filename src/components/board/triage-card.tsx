@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Flag, PackageSearch, PhoneCall, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { telHref } from "@/lib/contact";
+import { SEED_USERS } from "@/lib/data/fixtures/tenant";
 import {
   assignCandidates,
   recommendTechnician,
@@ -61,6 +63,11 @@ export function TriageCard({
   canAssign: boolean;
   onAssign: (job: JobRow, tech: Technician) => void;
 }) {
+  // The technician's number lives on the user record, not the board row —
+  // the board carries who, the directory carries how to reach them.
+  const techCall = telHref(
+    SEED_USERS.find((u) => u.id === job.technician?.id)?.phone,
+  );
   /*
     The fix is chosen by what the job *lacks*, not by its label.
 
@@ -132,7 +139,14 @@ export function TriageCard({
 
         {reason === "late" && !needsSomeone ? (
           <div className="mt-2.5 flex flex-wrap gap-2">
-            <Button size="sm">
+            <Button
+              size="sm"
+              render={<a href={techCall ?? undefined} />}
+              nativeButton={false}
+              // A late job whose technician has no number on file is exactly
+              // when you need one, so the disabled state names the gap.
+              disabled={!techCall}
+            >
               <PhoneCall className="size-4" />
               Call {job.technician?.name.split(" ")[0]}
             </Button>

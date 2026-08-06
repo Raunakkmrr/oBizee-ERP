@@ -32,6 +32,7 @@ import { computeTotals, derivePlaceOfSupply, type InvoiceLine } from "@/lib/tax"
 import { asPaise, type Paise } from "@/lib/money";
 import { SEED_LEADS, type Lead, type LeadsData } from "./leads";
 import { SEED_BOARD, type Board, type JobRow } from "./board";
+import { SEED_MONEY, type MoneyData } from "./money";
 import {
   SEED_CONTRACTS,
   type BillingFrequency,
@@ -72,6 +73,7 @@ export type StoreState = {
   board: Board;
   contracts: Contract[];
   invoices: Invoice[];
+  money: MoneyData;
   /** FR-811: numbering is per branch, doc type and financial year. */
   seq: { job: number; contract: number; invoice: number };
 };
@@ -89,9 +91,23 @@ export function seedState(): StoreState {
     leads: structuredClone(SEED_LEADS),
     board: structuredClone(SEED_BOARD),
     contracts: structuredClone(SEED_CONTRACTS.contracts) as Contract[],
+    money: structuredClone(SEED_MONEY) as MoneyData,
     invoices: [],
     seq: { job: 440, contract: 32, invoice: 149 },
   };
+}
+
+/**
+ * Does a restored blob carry every slice this build expects?
+ *
+ * Top-level only, deliberately. A deep structural check would be a schema
+ * validator, and there is already one of those at the query boundary; this
+ * catches the specific failure of a slice that did not exist when the data was
+ * written.
+ */
+function hasEverySlice(value: unknown): value is StoreState {
+  if (typeof value !== "object" || value === null) return false;
+  return Object.keys(seedState()).every((key) => key in value);
 }
 
 /* ---------------------------------------------------------------- actions */
@@ -144,6 +160,20 @@ export type Action =
     }
   | { type: "ASSIGN_JOB"; jobId: string; technicianId: string; technicianName: string }
   | { type: "CREATE_INVOICE_FROM_JOB"; jobId: string }
+  | {
+      /** Moving a job to a different day/slot — the Reschedule button. */
+      type: "RESCHEDULE_JOB";
+      jobId: string;
+      slot: string;
+    }
+  | {
+      /**
+       * Paying a vendor bill. This is the action that *saves the deduction*, so
+       * it is the one control on the money screen that must not be decorative.
+       */
+      type: "MARK_PAYABLE_PAID";
+      billId: string;
+    }
   | { type: "RESET" };
 
 /* --------------------------------------------------------------- helpers */
@@ -319,6 +349,23 @@ export function reduce(state: StoreState, action: Action, now: Date): StoreState
         };
       });
       return { ...state, leads: { ...state.leads, leads } };
+    }
+
+    case "RESCHEDULE_JOB": {
+      const jobs = state.board.jobs.map((job) =>
+        job.id === action.jobId ? { ...job, slot: action.slot } : job,
+      );
+      return { ...state, board: { ...state.board, jobs } };
+    }
+
+    case "MARK_PAYABLE_PAID": {
+      // Paid bills leave the list entirely. A "paid" row that stays put keeps
+      // its 43B(h) countdown on screen, and a countdown against a settled bill
+      // is a warning about nothing.
+      const payables = state.money.payables.filter(
+        (bill) => bill.id !== action.billId,
+      );
+      return { ...state, money: { ...state.money, payables } };
     }
 
     case "ASSIGN_JOB": {
@@ -512,6 +559,29 @@ export function hydrate(): Promise<void> {
 
     switch (result.kind) {
       case "opened":
+        /*
+          A blob written before a slice existed is not usable data.
+
+          `ENVELOPE_VERSION` deliberately guards the *ciphertext format*, not
+          the application schema — so adding `money` to `StoreState` produced a
+          restored state with no `money` key at all, and the Money screen died
+          on `expected object, received undefined`. A stored shape that predates
+          a slice must be treated exactly like a stale version: wiped, reseeded,
+          and said out loud.
+
+          Checked against the seed's own keys rather than a hand-maintained
+          version number, because a number is something someone has to remember
+          to bump and this is something nobody can forget.
+        */
+        if (!hasEverySlice(result.value)) {
+          window.localStorage.removeItem(STORAGE_KEY);
+          status = {
+            kind: "reset",
+            message:
+              "Saved data was written before this version's data model and has been cleared.",
+          };
+          break;
+        }
         state = result.value;
         // Replay anything dispatched while the vault was opening. Those actions
         // were applied to the seed for an immediate UI response; this puts them

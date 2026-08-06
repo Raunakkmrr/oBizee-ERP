@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/empty";
 import { Illustration } from "@/components/shared/illustration";
 import { cn } from "@/lib/utils";
+import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import {
@@ -82,7 +83,19 @@ function SitePanel({ site }: { site: Site }) {
               {site.accessNotes}
             </p>
           ) : null}
-          <Button variant="outline" size="sm" className="mt-3 w-fit self-start">
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3 w-fit self-start"
+            render={
+              <a
+                href={`https://maps.google.com/?q=${encodeURIComponent(`${site.addressLine1} ${site.locality} ${site.city} ${site.pincode}`)}`}
+                target="_blank"
+                rel="noreferrer"
+              />
+            }
+            nativeButton={false}
+          >
             <MapPin className="size-4" />
             Navigate
           </Button>
@@ -239,15 +252,16 @@ function SitePanel({ site }: { site: Site }) {
             </EmptyHeader>
             <EmptyContent>
               <div className="flex flex-wrap justify-center gap-2">
-                <Button size="sm">Add asset</Button>
+                <Unavailable label="Add asset" reason={NEEDS_BACKEND} />
                 {/*
                   §6.14 is specific that this second button **sends the
                   technician a task** — "which is how these records actually get
                   created". It is not a hint; it is the realistic path.
                 */}
-                <Button variant="outline" size="sm">
-                  Ask the technician to add on next visit
-                </Button>
+                <Unavailable
+                  label="Ask the technician to add on next visit"
+                  reason={NEEDS_BACKEND}
+                />
               </div>
             </EmptyContent>
           </Empty>

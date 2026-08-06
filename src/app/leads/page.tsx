@@ -259,8 +259,12 @@ export default function LeadsPage() {
                   </EmptyHeader>
                   <EmptyContent>
                     <div className="flex gap-2">
-                      <Button>See tomorrow</Button>
-                      <Button variant="outline">New lead</Button>
+                      <Button
+                        render={<Link href="/leads/new" />}
+                        nativeButton={false}
+                      >
+                        New lead
+                      </Button>
                     </div>
                   </EmptyContent>
                 </Empty>

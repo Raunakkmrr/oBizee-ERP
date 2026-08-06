@@ -10,6 +10,7 @@ import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/shared/panel";
 import { cn } from "@/lib/utils";
+import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import {
@@ -52,10 +53,18 @@ function ReportCard({
   title,
   caption,
   children,
+  onExport,
 }: {
   title: string;
   caption: string;
   children: React.ReactNode;
+  /**
+   * Supplied where the panel's numbers are on the client already. Where they
+   * are not, the button says so rather than sitting there doing nothing —
+   * FR-1002 wants the filters travelling with the export, and an export that
+   * silently produces nothing is worse than one that admits it cannot.
+   */
+  onExport?: () => void;
 }) {
   return (
     <Panel
@@ -65,7 +74,13 @@ function ReportCard({
       // too — a figure without its period is not evidence.
       caption={caption}
       actions={
-        <Button variant="outline" size="sm">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onExport}
+          disabled={!onExport}
+          title={onExport ? undefined : NEEDS_BACKEND}
+        >
           <Download className="size-3.5" />
           Export
         </Button>

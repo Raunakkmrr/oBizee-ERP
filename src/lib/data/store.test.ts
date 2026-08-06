@@ -332,3 +332,58 @@ describe("MOVE_LEAD_STAGE — the board's drag, and its keyboard twin", () => {
     expect(after.leads.leads).toEqual(before.leads.leads);
   });
 });
+
+describe("restoring data written before a slice existed", () => {
+  it("keeps every seed slice in the shape check", () => {
+    // The regression: `money` was added to StoreState and a blob sealed before
+    // that change restored with no `money` key, so the Money screen died on
+    // "expected object, received undefined". The guard is derived from the
+    // seed's own keys precisely so adding the next slice cannot repeat it.
+    const keys = Object.keys(seedState()).sort();
+    expect(keys).toEqual(
+      ["board", "contracts", "invoices", "leads", "money", "seq"].sort(),
+    );
+  });
+
+  it("seeds a money slice, so the money screen has something to read", () => {
+    const seed = seedState();
+    expect(seed.money.payables.length).toBeGreaterThan(0);
+    expect(seed.money.receivables.length).toBeGreaterThan(0);
+  });
+
+  it("removes a paid bill from the payables it reads from", () => {
+    const before = seedState();
+    const target = before.money.payables[0].id;
+    const after = reduce(
+      before,
+      { type: "MARK_PAYABLE_PAID", billId: target },
+      new Date("2026-08-06T10:00:00"),
+    );
+    expect(after.money.payables.map((b) => b.id)).not.toContain(target);
+    // A settled bill must not keep counting down: a 43B(h) warning against a
+    // bill that is already paid is a warning about nothing.
+    expect(after.money.payables.length).toBe(before.money.payables.length - 1);
+  });
+
+  it("leaves receivables alone when a payable is settled", () => {
+    const before = seedState();
+    const after = reduce(
+      before,
+      { type: "MARK_PAYABLE_PAID", billId: before.money.payables[0].id },
+      new Date("2026-08-06T10:00:00"),
+    );
+    expect(after.money.receivables).toEqual(before.money.receivables);
+  });
+
+  it("reschedules only the job named", () => {
+    const before = seedState();
+    const id = before.board.jobs[0].id;
+    const after = reduce(
+      before,
+      { type: "RESCHEDULE_JOB", jobId: id, slot: "5-8" },
+      new Date("2026-08-06T10:00:00"),
+    );
+    expect(after.board.jobs[0].slot).toBe("5-8");
+    expect(after.board.jobs.slice(1)).toEqual(before.board.jobs.slice(1));
+  });
+});

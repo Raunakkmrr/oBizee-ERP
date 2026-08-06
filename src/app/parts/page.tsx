@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/empty";
 import { Illustration } from "@/components/shared/illustration";
 import { cn } from "@/lib/utils";
+import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import { usePersistedChoice } from "@/lib/persisted-choice";
@@ -93,7 +94,11 @@ function Reorder({ data }: { data: PartsData }) {
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button variant="outline">See stock by location</Button>
+          <Unavailable
+            label="See stock by location"
+            size="default"
+            reason={NEEDS_BACKEND}
+          />
         </EmptyContent>
       </Empty>
     );
@@ -207,12 +212,11 @@ function Reorder({ data }: { data: PartsData }) {
       <ActionBar
         primary={
           <>
-            <Button variant="outline" size="sm">
-              Save draft
-            </Button>
-            <Button size="sm" disabled={selected.length === 0}>
-              Raise purchase order
-            </Button>
+            <Unavailable label="Save draft" reason={NEEDS_BACKEND} />
+            <Unavailable
+              label="Raise purchase order"
+              reason={NEEDS_BACKEND}
+            />
           </>
         }
       >
@@ -335,7 +339,7 @@ function Exceptions({ data }: { data: PartsData }) {
                 {exception.qty}
               </span>
             ) : null}
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" disabled title={NEEDS_BACKEND}>
               {exception.kind === "UNCATALOGUED"
                 ? "Catalogue part"
                 : exception.kind === "ISSUE_WITHOUT_CHALLAN"

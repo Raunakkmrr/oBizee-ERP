@@ -48,6 +48,12 @@ const receivableSchema = z.object({
   amountPaise: z.number().int(),
   lastContact: z.string().nullable(),
   /**
+   * The number to chase on. Added because `Remind` and `Log call` existed as
+   * buttons with nothing behind them — a chase list whose rows carry no phone
+   * number cannot do the one thing it is for.
+   */
+  phone: z.string().nullable(),
+  /**
    * A promise, if one was made. `broken` is derived by the caller against
    * today's date — a promise whose date has passed is no protection.
    */
@@ -302,7 +308,7 @@ export const moneySchema = z.object({
 
 export type MoneyData = z.infer<typeof moneySchema>;
 
-const FIXTURE = {
+export const SEED_MONEY = {
   receivables: [
     {
       id: "rcv_1",
@@ -312,6 +318,7 @@ const FIXTURE = {
       daysOverdue: 21,
       amountPaise: 1_18_000_00,
       lastContact: "24 Jul — spoke to accounts, said next week",
+      phone: "98110 34567",
       promise: null,
     },
     {
@@ -323,6 +330,7 @@ const FIXTURE = {
       amountPaise: 2_40_000_00,
       // Unbroken promise — excluded from reminders (FR-904).
       lastContact: "24 Jul — promised 5 Aug",
+      phone: "98110 77120",
       promise: { dateWord: "5 Aug", broken: false },
     },
     {
@@ -334,6 +342,7 @@ const FIXTURE = {
       amountPaise: 42_500_00,
       // A promise that has passed is no protection — back on the chase list.
       lastContact: "10 Jul — promised 20 Jul",
+      phone: "98200 12345",
       promise: { dateWord: "20 Jul", broken: true },
     },
     {
@@ -344,6 +353,7 @@ const FIXTURE = {
       daysOverdue: 8,
       amountPaise: 64_000_00,
       lastContact: null,
+      phone: "98111 20455",
       promise: null,
     },
     {
@@ -354,6 +364,7 @@ const FIXTURE = {
       daysOverdue: 52,
       amountPaise: 86_400_00,
       lastContact: "19 Jul — no answer",
+      phone: "98200 99887",
       promise: null,
     },
   ],
@@ -423,5 +434,17 @@ const FIXTURE = {
 export const getMoney = defineQuery<void, MoneyData>({
   key: "money.overview",
   schema: moneySchema,
-  fixture: (): Fetched<unknown> => ({ raw: FIXTURE }),
+  /**
+   * Read from the store, not from the constant.
+   *
+   * `Mark paid` is the action that saves a §43B(h) deduction — the single most
+   * consequential button in the product — and it cannot be real while this
+   * screen reads a frozen fixture. Money now lives in the store like leads and
+   * the board, so paying a bill survives a reload and the alarm band recomputes
+   * from the same facts.
+   */
+  fixture: async (): Promise<Fetched<unknown>> => {
+    const { getState } = await import("./store");
+    return { raw: getState().money };
+  },
 });

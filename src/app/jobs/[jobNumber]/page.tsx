@@ -39,7 +39,14 @@ import {
   stageFor,
   type JobDetail,
 } from "@/lib/data/job-detail";
-import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
+import { Unavailable } from "@/components/shared/unavailable";
+import { Chip } from "@/components/shared/controls";
+import { telHref, whatsappHref } from "@/lib/contact";
+import {
+  CURRENT_USER,
+  SEED_TENANT,
+  SEED_USERS,
+} from "@/lib/data/fixtures/tenant";
 import { can } from "@/lib/roles";
 
 /**
@@ -72,6 +79,9 @@ import { can } from "@/lib/roles";
  * it is deferred as a presentation change over content that is already correct.
  * Recorded in EXPAND_LOG rather than quietly dropped.
  */
+/** The tenant's own windows (§11-Q15), as the board renders them. */
+const SLOTS = ["9-1", "1-5", "5-8"] as const;
+
 export default function JobDetailPage({
   params,
 }: {
@@ -84,6 +94,8 @@ export default function JobDetailPage({
   const storeState = useStoreState();
   const [query, setQuery] = useState<Query<JobDetail>>(loading());
   const [hideAmounts, setHideAmounts] = useState(false);
+  /** Which inline picker is open — assignment, slot, or none. */
+  const [picker, setPicker] = useState<"technician" | "slot" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +112,14 @@ export default function JobDetailPage({
   const policy = {
     allowBillingWithoutSignoff: SEED_TENANT.toggles.allowBillingWithoutSignoff,
   };
+
+  function move(jobNumber: string, action: (id: string) => void) {
+    const match = getState().board.jobs.find(
+      (candidate) => candidate.jobNumber === jobNumber,
+    );
+    if (match) action(match.id);
+    setPicker(null);
+  }
 
   function bill(job: JobDetail) {
     const match = getState().board.jobs.find(
@@ -131,6 +151,16 @@ export default function JobDetailPage({
             const primary = primaryActionFor(job.status);
             const billable = canBillNow(job, policy);
             const leads = new Set(stage.lead);
+            // The first contact on the site record is the one to ring.
+            const siteCall = telHref(job.site.contacts[0]?.phone);
+            const techCall = telHref(
+              SEED_USERS.find((u) => u.id === job.technician?.id)?.phone,
+            );
+            // The sign-off request goes to the person at site, not the office.
+            const signOffRequest = whatsappHref(
+              job.site.contacts[0]?.phone,
+              `Namaste, the work on ${job.jobNumber} at ${job.site.locality} is complete. Kindly confirm sign-off so we can raise the invoice. Thank you.`,
+            );
 
             /** Open where the stage says so, collapsed with a summary otherwise. */
             const section = (
@@ -291,16 +321,53 @@ export default function JobDetailPage({
                       tenant that permits billing before sign-off.
                     */}
                     {primary ? (
-                      <Button
-                        size="sm"
-                        onClick={
-                          primary.href === "#invoice"
-                            ? () => bill(job)
-                            : undefined
-                        }
-                      >
-                        {primary.label}
-                      </Button>
+                      /*
+                        Every branch of §6.5.3's table does something. Wiring
+                        only `#invoice` left `Schedule revisit`, `Assign
+                        technician` and `Send sign-off link` looking identical
+                        to a working primary and doing nothing — which is how
+                        the whole dead-button problem started.
+                      */
+                      primary.href === "#signoff-link" ||
+                      primary.href === "#reminder" ? (
+                        <Button
+                          size="sm"
+                          render={
+                            <a
+                              href={signOffRequest ?? undefined}
+                              target="_blank"
+                              rel="noreferrer"
+                            />
+                          }
+                          nativeButton={false}
+                          disabled={!signOffRequest}
+                        >
+                          {primary.label}
+                        </Button>
+                      ) : primary.href === "#call-technician" ? (
+                        <Button
+                          size="sm"
+                          render={<a href={techCall ?? undefined} />}
+                          nativeButton={false}
+                          disabled={!techCall}
+                        >
+                          {primary.label}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (primary.href === "#invoice") bill(job);
+                            else if (primary.href === "#assign")
+                              setPicker("technician");
+                            // schedule, reschedule and revisit are all "put it
+                            // in a different slot".
+                            else setPicker("slot");
+                          }}
+                        >
+                          {primary.label}
+                        </Button>
+                      )
                     ) : null}
                     {billable && primary?.href !== "#invoice" ? (
                       <Button
@@ -312,16 +379,95 @@ export default function JobDetailPage({
                         Bill this job
                       </Button>
                     ) : null}
-                    <Button variant="outline" size="sm">
-                      <Phone className="size-4" />
-                      Call site
+                    {/*
+                      Real destinations, all three. These were decorative until
+                      an audit found 39 of the product's 91 buttons had no
+                      handler and no link — identical in appearance to the ones
+                      that worked, and silent when pressed.
+                    */}
+                    {siteCall ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        render={<a href={siteCall} />}
+                        nativeButton={false}
+                      >
+                        <Phone className="size-4" />
+                        Call site
+                      </Button>
+                    ) : (
+                      <Unavailable
+                        label="Call site"
+                        icon={Phone}
+                        reason="No contact number on record for this site"
+                      />
+                    )}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPicker("technician")}
+                    >
+                      {job.technician ? "Reassign" : "Assign"}
                     </Button>
-                    <Button variant="outline" size="sm">
-                      Reassign
-                    </Button>
-                    <Button variant="outline" size="sm">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPicker("slot")}
+                    >
                       Reschedule
                     </Button>
+                    {picker ? (
+                      <div className="mt-1 flex w-full flex-wrap items-center gap-1.5 rounded-xl bg-muted p-2">
+                        <span className="mr-1 text-xs font-medium text-muted-foreground">
+                          {picker === "technician" ? "Assign to" : "Move to"}
+                        </span>
+                        {picker === "technician"
+                          ? SEED_USERS.filter(
+                              (u) => u.role === "technician" && u.active,
+                            ).map((tech) => (
+                              <Chip
+                                key={tech.id}
+                                label={tech.name.split(" ")[0]}
+                                selected={job.technician?.id === tech.id}
+                                onClick={() =>
+                                  move(job.jobNumber, (id) =>
+                                    dispatch({
+                                      type: "ASSIGN_JOB",
+                                      jobId: id,
+                                      technicianId: tech.id,
+                                      technicianName: tech.name,
+                                    }),
+                                  )
+                                }
+                              />
+                            ))
+                          : SLOTS.map((slot) => (
+                              <Chip
+                                key={slot}
+                                label={slot}
+                                selected={false}
+                                onClick={() =>
+                                  move(job.jobNumber, (id) =>
+                                    dispatch({
+                                      type: "RESCHEDULE_JOB",
+                                      jobId: id,
+                                      slot,
+                                    }),
+                                  )
+                                }
+                              />
+                            ))}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-auto"
+                          onClick={() => setPicker(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : null}
                   </DecisionBand>
                 </div>
 
