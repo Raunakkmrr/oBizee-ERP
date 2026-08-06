@@ -18,6 +18,8 @@ import { Briefcase, Send, ShieldCheck } from "lucide-react";
 import { useStoreState } from "@/lib/data/use-store";
 import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
 import { whatsappHref } from "@/lib/contact";
+import { adviseSupply } from "@/lib/tax";
+import { UpiQr } from "@/components/shared/upi-qr";
 
 /**
  * Create invoice from job — PRD §6.11.
@@ -71,6 +73,18 @@ type Check = { label: string; state: "ok" | "info" | "warn"; detail?: string };
  */
 const CUSTOMER_PHONE = "98200 12345";
 
+/**
+ * The payee on every UPI code.
+ *
+ * ⚠️ **Fixture VPA.** This is the tenant's real bank handle in production and
+ * belongs in Settings → Business once the backend exists. Left here rather than
+ * hidden so nobody ships a QR that collects into the wrong account.
+ */
+const UPI_PAYEE = {
+  vpa: "shakticooling@okhdfcbank",
+  name: SEED_TENANT.businessName,
+};
+
 export default function CreateInvoicePage() {
   /**
    * The most recently created invoice, if there is one.
@@ -90,6 +104,8 @@ export default function CreateInvoicePage() {
 
   const supplierState = SEED_TENANT.branches[0].stateCode;
   const lines = created?.lines ?? LINES;
+  // FR-806 — computed from the lines actually on this invoice, not assumed.
+  const advice = adviseSupply(lines);
   // Every reference on this screen follows the same invoice, so the header,
   // the line table and the evidence panel cannot describe different jobs.
   const jobRef = created?.jobNumber ?? JOB_NUMBER;
@@ -127,6 +143,17 @@ export default function CreateInvoicePage() {
       state: "info",
       detail: "No — AATO below the ₹5 crore threshold",
     },
+    // FR-806: advisory, never blocking. Only appears when the invoice actually
+    // mixes goods and services at different rates.
+    ...(advice.kind === "mixed"
+      ? [
+          {
+            label: "Composite or separately valued?",
+            state: "warn" as const,
+            detail: `Principal rate ${advice.principalPercent}% · rates on this invoice: ${advice.rates.join("%, ")}%`,
+          },
+        ]
+      : []),
     { label: "Reverse charge", state: "info", detail: "No" },
     { label: "Advance to adjust", state: "info", detail: "₹0.00" },
     { label: "Rounding balanced", state: "ok" },
@@ -438,8 +465,15 @@ export default function CreateInvoicePage() {
                   English
                 </p>
                 <p className="text-muted-foreground">
-                  UPI link and QR included · due in 15 days
+                  Due in 15 days
                 </p>
+                {/* FR-901: the code *is* the link, generated here, so it can
+                    never drift from the amount printed beside it. */}
+                <UpiQr
+                  payee={UPI_PAYEE}
+                  amountPaise={totals.grandTotalPaise}
+                  invoiceNumber={created?.number ?? "DRAFT"}
+                />
               </div>
             </Panel>
 

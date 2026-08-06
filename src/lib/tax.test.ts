@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  adviseSupply,
   codeForAato,
   computeTotals,
   derivePlaceOfSupply,
@@ -176,5 +177,64 @@ describe("codeForAato — FR-803 digit precision", () => {
   it("treats exactly ₹5 crore as at-or-below", () => {
     // The threshold is "exceeded ₹5 crore", so equality stays at 4 digits.
     expect(codeForAato("998719", 5_00_00_000_00)).toBe("9987");
+  });
+});
+
+describe("FR-806 composite supply advisory", () => {
+  const line = (over: Partial<InvoiceLine> = {}): InvoiceLine => ({
+    description: "x",
+    code: "9987",
+    kind: "service",
+    qty: 1,
+    ratePaise: 1000_00,
+    ratePercent: 18,
+    ...over,
+  });
+
+  it("says nothing when every line is the same rate", () => {
+    // No decision to make, so no question to ask.
+    expect(adviseSupply([line(), line({ kind: "goods", code: "8532" })]).kind).toBe(
+      "single_rate",
+    );
+  });
+
+  it("says nothing when there are no goods at all", () => {
+    expect(
+      adviseSupply([line(), line({ ratePercent: 5 })]).kind,
+    ).toBe("single_rate");
+  });
+
+  it("raises the question when goods and services differ in rate", () => {
+    const advice = adviseSupply([
+      line({ ratePercent: 18, ratePaise: 4_500_00 }),
+      line({ kind: "goods", code: "8532", ratePercent: 28, ratePaise: 340_00 }),
+    ]);
+    expect(advice.kind).toBe("mixed");
+    if (advice.kind === "mixed") {
+      // The principal supply is the one carrying the value — for a service
+      // firm that is nearly always the labour.
+      expect(advice.principalPercent).toBe(18);
+      expect(advice.rates).toEqual([18, 28]);
+    }
+  });
+
+  it("picks the principal by value, not by line count", () => {
+    // Three cheap parts must not outvote one expensive service.
+    const advice = adviseSupply([
+      line({ ratePercent: 18, ratePaise: 50_000_00 }),
+      line({ kind: "goods", code: "1", ratePercent: 5, ratePaise: 100_00 }),
+      line({ kind: "goods", code: "2", ratePercent: 5, ratePaise: 100_00 }),
+      line({ kind: "goods", code: "3", ratePercent: 5, ratePaise: 100_00 }),
+    ]);
+    if (advice.kind === "mixed") expect(advice.principalPercent).toBe(18);
+  });
+
+  it("never blocks — it only ever returns advice", () => {
+    // The tax position belongs to the taxpayer, not to the software.
+    const advice = adviseSupply([
+      line(),
+      line({ kind: "goods", code: "8532", ratePercent: 28 }),
+    ]);
+    expect(advice.kind === "mixed" && advice.question.length).toBeGreaterThan(0);
   });
 });
