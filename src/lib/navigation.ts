@@ -264,16 +264,10 @@ export const NAV_BY_ROLE: Record<Role, readonly NavKey[]> = {
   ],
   /**
    * §6.2's rule that a role's navigation is not a reduced copy of another's.
-   * The support desk answers "where is my technician" all day, so Today leads;
-   * it has no money and no pipeline.
+   * The follow-up queue is this department's day whatever its level, so Leads
+   * leads. Reports carries the source performance a marketer is measured on.
    */
-  support: ["today", "jobs", "leads", "customers"],
-
-  /** The follow-up queue is this desk's entire day, so Leads leads. */
-  telecaller: ["leads", "customers", "jobs", "today"],
-
-  /** Quotes and conversions — the pipeline, then what it turned into. */
-  sales: ["leads", "contracts", "customers", "jobs", "reports"],
+  marketing: ["leads", "customers", "contracts", "jobs", "today", "reports"],
 
   accountant: [
     "money", // position 1 — for this persona it IS the spine (§3.4, defect D10)
@@ -294,11 +288,9 @@ export const NAV_BY_ROLE: Record<Role, readonly NavKey[]> = {
 export const LANDING: Record<Role, { web: string; mobile: string }> = {
   owner: { web: "/today", mobile: "/home" },
   coordinator: { web: "/today", mobile: "/today" },
-  // Each desk lands on the screen that *is* its job, never on a shared
-  // dashboard it would have to navigate away from.
-  support: { web: "/today", mobile: "/today" },
-  telecaller: { web: "/leads", mobile: "/leads" },
-  sales: { web: "/leads", mobile: "/leads" },
+  // Lands on the screen that *is* the job, never on a shared dashboard it
+  // would have to navigate away from.
+  marketing: { web: "/leads", mobile: "/leads" },
   accountant: { web: "/money", mobile: "/money" },
   readonly_ca: { web: "/reports", mobile: "/reports" },
   // Mobile only — there is no web technician surface at all (§2.2 declines a

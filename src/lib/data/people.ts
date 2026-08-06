@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ROLES, type Role } from "@/lib/roles";
+import { LEVELS_BY_ROLE, ROLES, type Role } from "@/lib/roles";
 
 /**
  * One record per human — FR-1301, and the fix for a split that could silently
@@ -32,28 +32,19 @@ export const SKILLS = [
 export type Skill = (typeof SKILLS)[number];
 
 /**
- * Seniority within a role — **not** a permission.
+ * Where somebody sits inside their role — **one dropdown, not more roles.**
  *
- * A commercial service firm runs roughly a dozen job titles (Senior Service
- * Tech, Installer Foreman, Controls Tech, Apprentice on the field side alone),
- * but an apprentice and a twenty-year senior have *identical* rights in the
- * software. Modelling seniority as a role would mean sixteen permission sets to
- * maintain and keep in step; modelling it here means eight roles and an
- * assignment picker that knows who can be sent alone.
+ * The ladders live in `LEVELS_BY_ROLE` beside the permissions they affect, so
+ * "which level?" is answered once, inside the role, rather than by adding a
+ * role tag per rung. A department has one tag; the rungs are a question you
+ * answer after picking it.
  *
- * `null` for the desks where it does not apply, and for anyone nobody has
- * graded yet — which is unknown, not junior.
+ * `null` where the role has no ladder, and for anyone nobody has placed yet —
+ * which is unknown, not the bottom rung.
  */
-export const GRADES = ["apprentice", "standard", "senior", "lead"] as const;
-
-export type Grade = (typeof GRADES)[number];
-
-export const GRADE_LABEL: Record<Grade, string> = {
-  apprentice: "Apprentice",
-  standard: "Standard",
-  senior: "Senior",
-  lead: "Lead",
-};
+export function levelsFor(role: string): readonly string[] {
+  return LEVELS_BY_ROLE[role as Role] ?? [];
+}
 
 /**
  * Work an apprentice should not be sent to on their own.
@@ -64,10 +55,10 @@ export const GRADE_LABEL: Record<Grade, string> = {
  * apprentice learns, so it is not restricted.
  */
 export function needsSupervision(
-  grade: Grade | null,
+  level: string | null,
   priority: "normal" | "urgent" | "breakdown",
 ): boolean {
-  return grade === "apprentice" && priority !== "normal";
+  return level === "apprentice" && priority !== "normal";
 }
 
 export const personSchema = z.object({
@@ -92,8 +83,8 @@ export const personSchema = z.object({
   skills: z.array(z.string()),
   /** Areas they normally cover. Used to cluster a day's work, not to restrict. */
   localities: z.array(z.string()),
-  /** Seniority, where the role has any. Never affects permissions. */
-  grade: z.enum(GRADES).nullable(),
+  /** The rung inside the role. See `LEVELS_BY_ROLE`. */
+  level: z.string().nullable(),
 });
 
 export type Person = z.infer<typeof personSchema>;
@@ -149,7 +140,7 @@ export function fitFor(
   jobsToday: number,
 ): Fit {
   const reasons: string[] = [];
-  const supervise = needsSupervision(person.grade, job.priority ?? "normal");
+  const supervise = needsSupervision(person.level, job.priority ?? "normal");
 
   const hasSkill =
     person.skills.length > 0 &&
@@ -348,7 +339,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: [],
-    grade: null,
+    level: null,
     localities: [],
   },
   {
@@ -361,7 +352,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: [],
-    grade: null,
+    level: null,
     localities: [],
   },
   {
@@ -374,7 +365,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: "mr",
     active: true,
     skills: ["AC", "Refrigeration"],
-    grade: "senior",
+    level: "senior",
     localities: ["Okhla Phase II", "Saket", "Karol Bagh"],
   },
   {
@@ -386,8 +377,45 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: ["AC", "Water treatment"],
-    grade: "standard",
+    level: "standard",
     localities: ["Vasant Kunj", "Greater Kailash", "Green Park"],
+  },
+  {
+    id: "usr_0009",
+    name: "Neha Bansal",
+    phone: "9811000009",
+    email: null,
+    role: "marketing",
+    languageOverride: null,
+    active: true,
+    level: "support",
+    skills: [],
+    localities: [],
+  },
+  {
+    id: "usr_0010",
+    name: "Farhan Khan",
+    phone: "9811000010",
+    email: null,
+    role: "marketing",
+    languageOverride: null,
+    active: true,
+    level: "leads",
+    skills: [],
+    localities: [],
+  },
+  {
+    id: "usr_0011",
+    name: "Anjali Mehta",
+    phone: "9811000011",
+    email: "anjali@shakticooling.example",
+    role: "marketing",
+    languageOverride: null,
+    active: true,
+    // The only marketing level that may price — the one who goes and looks.
+    level: "senior",
+    skills: [],
+    localities: [],
   },
   {
     id: "usr_0005",
@@ -398,7 +426,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: [],
-    grade: null,
+    level: null,
     localities: [],
   },
   {
@@ -410,7 +438,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: [],
-    grade: null,
+    level: null,
     localities: [],
   },
   {
@@ -424,7 +452,7 @@ export const SEED_PEOPLE: Person[] = [
     // not keep looking for him.
     active: false,
     skills: ["AC"],
-    grade: "apprentice",
+    level: "apprentice",
     localities: [],
   },
   {
@@ -436,7 +464,7 @@ export const SEED_PEOPLE: Person[] = [
     languageOverride: null,
     active: true,
     skills: ["Generator", "Electrical"],
-    grade: "standard",
+    level: "standard",
     localities: [],
   },
 ];

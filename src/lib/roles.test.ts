@@ -3,6 +3,7 @@ import {
   DEFAULT_TENANT_TOGGLES,
   ROLES,
   can,
+  levelLabel,
   rolesWith,
   type Role,
 } from "./roles";
@@ -152,9 +153,8 @@ describe("owner — §3.1", () => {
 
 describe("matrix integrity", () => {
   it("defines every role", () => {
-    // Eight: the office three, the three customer-facing desks a service firm
-    // actually runs, plus the technician and the read-only CA.
-    expect(ROLES).toHaveLength(8);
+    // Six: one tag per department. Levels live inside a role, not beside it.
+    expect(ROLES).toHaveLength(6);
     for (const role of ROLES) {
       expect(() => can(role, "job:read")).not.toThrow();
     }
@@ -186,44 +186,72 @@ describe("matrix integrity", () => {
   });
 });
 
-describe("the three customer-facing desks", () => {
-  it("lets only sales and the owner put a price in front of a customer", () => {
-    // The line the whole split is drawn on. A number given before anyone has
-    // seen the site is the most expensive habit a service firm can form.
-    expect(can("sales", "quote:write")).toBe(true);
-    expect(can("owner", "quote:write")).toBe(true);
-    expect(can("telecaller", "quote:write")).toBe(false);
-    expect(can("support", "quote:write")).toBe(false);
-    expect(can("coordinator", "quote:write")).toBe(false);
+describe("marketing is one role with levels inside it", () => {
+  it("gives every level the leads it works", () => {
+    for (const level of ["support", "leads", "senior"]) {
+      expect(can("marketing", "lead:read", undefined, level), level).toBe(true);
+      expect(can("marketing", "lead:write", undefined, level), level).toBe(true);
+    }
   });
 
-  it("keeps selling prices off the support desk", () => {
+  it("lets only the senior level put a price in front of a customer", () => {
+    // A number given before anyone has seen the site is the most expensive
+    // habit a service firm can form.
+    expect(can("marketing", "quote:write", undefined, "senior")).toBe(true);
+    expect(can("marketing", "quote:write", undefined, "leads")).toBe(false);
+    expect(can("marketing", "quote:write", undefined, "support")).toBe(false);
+  });
+
+  it("keeps selling prices off the support level", () => {
     // A desk that can see prices ends up quoting on the phone.
-    expect(can("support", "price:view_selling")).toBe(false);
-    expect(can("telecaller", "price:view_selling")).toBe(true);
-    expect(can("sales", "price:view_selling")).toBe(true);
+    expect(can("marketing", "price:view_selling", undefined, "support")).toBe(false);
+    expect(can("marketing", "price:view_selling", undefined, "leads")).toBe(true);
+  });
+
+  it("under-grants when the level is not supplied", () => {
+    // A caller that forgets the level must fall back to the role's base, never
+    // to the most permissive rung.
+    expect(can("marketing", "quote:write")).toBe(false);
+    expect(can("marketing", "price:view_selling")).toBe(false);
+  });
+
+  it("never lets any level dispatch or manage people", () => {
+    for (const level of ["support", "leads", "senior"]) {
+      expect(can("marketing", "job:dispatch", undefined, level), level).toBe(false);
+      expect(can("marketing", "people:manage", undefined, level), level).toBe(false);
+    }
   });
 
   it("keeps cost prices to the owner and the accountant (§3.1)", () => {
-    // An estimator who can see margin will discount to it. The accountant
-    // needs cost to close the books, which is a different job from selling.
+    // An estimator who can see margin will discount to it.
     const allowed = new Set(["owner", "accountant"]);
     for (const role of ROLES) {
       expect(can(role, "price:view_cost"), role).toBe(allowed.has(role));
     }
   });
 
-  it("gives every desk the leads it works, and none the dispatch board", () => {
-    for (const role of ["support", "telecaller", "sales"] as const) {
-      expect(can(role, "lead:read"), role).toBe(true);
-      expect(can(role, "job:dispatch"), role).toBe(false);
-    }
+  it("keeps the role list short", () => {
+    // The failure this replaces: three roles for one department. A title is
+    // not a permission set.
+    expect(ROLES).toHaveLength(6);
+  });
+});
+
+describe("two ladders may share a rung name", () => {
+  it("labels a senior technician as a technician, not as an estimator", () => {
+    // A flat label map collided: both ladders have `senior`, so a senior
+    // technician was rendered "Senior — quotes and site visits".
+    expect(levelLabel("technician", "senior")).toBe("Senior technician");
+    expect(levelLabel("marketing", "senior")).toBe(
+      "Senior — quotes and site visits",
+    );
   });
 
-  it("never lets a desk manage people", () => {
-    for (const role of ["support", "telecaller", "sales", "coordinator"] as const) {
-      expect(can(role, "people:manage"), role).toBe(false);
-    }
-    expect(can("owner", "people:manage")).toBe(true);
+  it("falls back to the raw value rather than rendering blank", () => {
+    expect(levelLabel("technician", "something-new")).toBe("something-new");
+  });
+
+  it("has no label for a role with no ladder", () => {
+    expect(levelLabel("accountant", null)).toBeNull();
   });
 });

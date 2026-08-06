@@ -16,13 +16,11 @@
  * Hiding them in the client only is a defect, because the payload is readable.
  */
 
-/** The eight built-in roles (FR-1301). Per-tenant overrides come later. */
+/** The six built-in roles (FR-1301). Per-tenant overrides come later. */
 export const ROLES = [
   "owner",
   "coordinator",
-  "support",
-  "telecaller",
-  "sales",
+  "marketing",
   "technician",
   "accountant",
   "readonly_ca",
@@ -34,9 +32,7 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_LABELS: Record<Role, string> = {
   owner: "Owner",
   coordinator: "Coordinator",
-  support: "Support desk",
-  telecaller: "Telecaller",
-  sales: "Sales & estimates",
+  marketing: "Marketing",
   technician: "Technician",
   accountant: "Accountant",
   readonly_ca: "Read-only CA",
@@ -148,59 +144,28 @@ const MATRIX: Record<Role, readonly Permission[]> = {
    * is granted at runtime only when the tenant's FR-1302 toggle is on.
    */
   /**
-   * The desk that answers the phone.
+   * Marketing — one role, with a **level** inside it.
    *
-   * Intake and status, nothing else. A support desk that can see selling
-   * prices ends up quoting on the phone, which is exactly the leak the
-   * estimator role exists to prevent — so `price:view_selling` is withheld
-   * even though it makes some screens read as blanks for them.
-   */
-  support: [
-    "lead:read",
-    "lead:write", // logging a complaint creates the lead
-    "job:read",
-    "customer:read",
-    "contract:read",
-    "part:read",
-  ],
-
-  /**
-   * The first call on a new enquiry.
+   * A first attempt split this into three roles (support desk, telecaller,
+   * estimator) because the industry has three job titles. That was the same
+   * mistake as modelling technician seniority as roles: a title is not a
+   * permission set, and eight roles to describe one department is a
+   * configuration burden nobody will maintain.
    *
-   * Qualifies, logs the outcome, books a survey — the §6.6 follow-up queue is
-   * this person's whole screen. Deliberately **cannot quote**: a number given
-   * before anyone has seen the site is the most expensive habit a service firm
-   * can form, and FR-102's duplicate check exists because this desk is where
-   * duplicates are created.
+   * This is the base every marketing person holds. What separates a phone
+   * support level from a senior who quotes and visits is `LEVEL_GRANTS` below,
+   * not a different role.
    */
-  telecaller: [
+  marketing: [
     "lead:read",
     "lead:write",
     "customer:read",
     "customer:write",
     "job:read",
     "contract:read",
-    "price:view_selling", // to repeat a quote already made, never to make one
-  ],
-
-  /**
-   * Quotes and site visits — the estimator.
-   *
-   * The only customer-facing desk holding `quote:write`, and the one that
-   * converts a lead into a contract. Cost prices stay owner-only (§3.1): an
-   * estimator who can see margin will discount to it.
-   */
-  sales: [
-    "lead:read",
-    "lead:write",
-    "quote:write",
-    "customer:read",
-    "customer:write",
-    "contract:read",
-    "contract:write",
-    "job:read",
-    "invoice:read",
-    "price:view_selling",
+    // Every level sees how the department is doing — source performance is the
+    // number a marketer is measured on, and hiding it from the people making
+    // the calls helps nobody. The level gates *pricing*, which is the risk.
     "report:read",
   ],
 
@@ -272,11 +237,79 @@ export const DEFAULT_TENANT_TOGGLES: TenantToggles = {
  * matrix stays a readable statement of §3, and the deviations stay visible as
  * deviations.
  */
+/**
+ * The ladder inside a role, and what each rung adds.
+ *
+ * **This is the axis that is not a category.** A firm has one marketing
+ * department; asking "which level?" once inside it is a dropdown, not five more
+ * role tags to configure, explain and keep permissions aligned.
+ *
+ * Only marketing's levels change what somebody may *do*, and only in one place
+ * — pricing. A technician's levels change who the board will send alone, which
+ * is a dispatch judgement rather than a permission, so they grant nothing here.
+ */
+export const LEVELS_BY_ROLE: Partial<Record<Role, readonly string[]>> = {
+  marketing: ["support", "leads", "senior"],
+  technician: ["apprentice", "standard", "senior", "lead"],
+};
+
+/**
+ * Labels are scoped to the role, not to the level string.
+ *
+ * A flat map collided: both ladders have a `senior` rung, so a senior
+ * *technician* was labelled "Senior — quotes and site visits". Two departments
+ * are allowed to use the same word for their top rung and mean different jobs.
+ */
+const LEVEL_LABELS_BY_ROLE: Partial<
+  Record<Role, Record<string, string>>
+> = {
+  marketing: {
+    support: "Support — answers calls",
+    leads: "New leads — qualifies and books",
+    senior: "Senior — quotes and site visits",
+  },
+  technician: {
+    apprentice: "Apprentice",
+    standard: "Technician",
+    senior: "Senior technician",
+    lead: "Lead / foreman",
+  },
+};
+
+/** Falls back to the raw value rather than rendering blank. */
+export function levelLabel(role: Role, level: string | null): string | null {
+  if (!level) return null;
+  return LEVEL_LABELS_BY_ROLE[role]?.[level] ?? level;
+}
+
+/**
+ * Extra permissions a level adds on top of its role.
+ *
+ * Pricing is the whole difference. A support level that can see selling prices
+ * ends up quoting on the phone, and a number given before anyone has seen the
+ * site is the most expensive habit a service firm can form — so `quote:write`
+ * and `price:view_selling` arrive only at the senior level, which is the person
+ * who actually goes and looks.
+ */
+const LEVEL_GRANTS: Record<string, readonly Permission[]> = {
+  // Repeating a quote already made is not making one.
+  leads: ["price:view_selling"],
+  senior: ["quote:write", "price:view_selling", "contract:write"],
+};
+
 export function can(
   role: Role,
   permission: Permission,
   toggles: TenantToggles = DEFAULT_TENANT_TOGGLES,
+  /**
+   * The rung inside the role. Omitted means the role's **base** — never the
+   * most permissive level, so a caller that forgets to pass it under-grants
+   * rather than over-grants.
+   */
+  level?: string | null,
 ): boolean {
+  if (level && LEVEL_GRANTS[level]?.includes(permission)) return true;
+
   if (
     role === "technician" &&
     permission === "price:view_selling" &&

@@ -21,7 +21,7 @@ function person(over: Partial<Person> = {}): Person {
     active: true,
     skills: ["AC", "Refrigeration"],
     localities: ["Okhla Phase II", "Saket"],
-    grade: "standard",
+    level: "standard",
     ...over,
   };
 }
@@ -274,12 +274,12 @@ describe("guards — block what cannot be undone, warn what merely surprises", (
   });
 });
 
-describe("grade is seniority, never permission", () => {
+describe("level is seniority, never permission", () => {
   it("keeps an apprentice off a breakdown on their own", () => {
     // Unplanned work in front of an unhappy customer is the visit where being
     // alone and inexperienced costs the most.
-    const apprentice = person({ id: "a", grade: "apprentice", skills: ["AC"] });
-    const senior = person({ id: "s", grade: "senior", skills: ["AC"] });
+    const apprentice = person({ id: "a", level: "apprentice", skills: ["AC"] });
+    const senior = person({ id: "s", level: "senior", skills: ["AC"] });
     const ranked = rankForJob(
       [apprentice, senior],
       { ...AC_IN_OKHLA, priority: "breakdown" },
@@ -292,7 +292,7 @@ describe("grade is seniority, never permission", () => {
   it("does not restrict an apprentice on routine work", () => {
     // Routine servicing is exactly how an apprentice learns.
     const fit = fitFor(
-      person({ grade: "apprentice", skills: ["AC"] }),
+      person({ level: "apprentice", skills: ["AC"] }),
       { ...AC_IN_OKHLA, priority: "normal" },
       0,
     );
@@ -303,7 +303,7 @@ describe("grade is seniority, never permission", () => {
     // Sending an apprentice with a senior is normal; the picker says so
     // rather than deciding for the dispatcher.
     const ranked = rankForJob(
-      [person({ id: "a", grade: "apprentice", skills: ["AC"] })],
+      [person({ id: "a", level: "apprentice", skills: ["AC"] })],
       { ...AC_IN_OKHLA, priority: "urgent" },
       () => 0,
     );
@@ -313,7 +313,7 @@ describe("grade is seniority, never permission", () => {
 
   it("treats an ungraded person as unknown, not as an apprentice", () => {
     const fit = fitFor(
-      person({ grade: null, skills: ["AC"] }),
+      person({ level: null, skills: ["AC"] }),
       { ...AC_IN_OKHLA, priority: "breakdown" },
       0,
     );

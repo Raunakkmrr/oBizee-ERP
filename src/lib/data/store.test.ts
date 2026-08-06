@@ -418,13 +418,15 @@ describe("the directory is the only record of a person", () => {
           active: true,
           skills: ["Plumbing"],
           localities: ["Rohini"],
-          grade: "standard",
+          level: "standard",
         },
       },
       now,
     );
     expect(after.people).toHaveLength(before.people.length + 1);
-    expect(after.people.at(-1)!.id).toBe("usr_0009");
+    // Derived from the highest id in the seed, so adding marketing people
+    // moved it — which is the behaviour, not a broken expectation.
+    expect(after.people.at(-1)!.id).toBe("usr_0012");
   });
 
   it("puts a newly added technician on the board immediately", () => {
@@ -443,7 +445,7 @@ describe("the directory is the only record of a person", () => {
           active: true,
           skills: ["Plumbing"],
           localities: [],
-          grade: "standard",
+          level: "standard",
         },
       },
       now,
@@ -502,7 +504,7 @@ describe("a stored slice whose shape has changed", () => {
     // The regression: `grade` was added to Person, the `people` slice still
     // existed, so the blob restored and every grade came back undefined. Slice
     // names alone do not catch a changed shape.
-    const stale = seedState().people.map(({ grade: _grade, ...rest }) => rest);
+    const stale = seedState().people.map(({ level: _level, ...rest }) => rest);
     expect(z.array(personSchema).safeParse(stale).success).toBe(false);
   });
 
@@ -512,13 +514,13 @@ describe("a stored slice whose shape has changed", () => {
     );
   });
 
-  it("carries a grade on every technician in the seed", () => {
+  it("carries a level on every technician in the seed", () => {
     // Grade drives who the picker will not send alone; an ungraded bench makes
     // that rule inert.
     for (const person of seedState().people.filter(
       (p) => p.role === "technician",
     )) {
-      expect(person.grade, person.name).not.toBeNull();
+      expect(person.level, person.name).not.toBeNull();
     }
   });
 });

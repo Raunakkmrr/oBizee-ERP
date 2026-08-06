@@ -13,8 +13,15 @@ import { Section } from "@/components/job/sections";
 import { cn } from "@/lib/utils";
 import { e164 } from "@/lib/contact";
 import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
-import { GRADES, GRADE_LABEL, SKILLS, guardDeactivate, guardRoleChange, type Grade, type Guard, type Person } from "@/lib/data/people";
-import { ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
+import {
+  SKILLS,
+  guardDeactivate,
+  guardRoleChange,
+  levelsFor,
+  type Guard,
+  type Person,
+} from "@/lib/data/people";
+import { levelLabel, ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
 
 /**
  * Add or edit a person — **a page, not a popup**, per the standing rule.
@@ -32,13 +39,6 @@ import { ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
  * - **Localities** are how a day gets clustered, so they are a hint and never
  *   a restriction.
  */
-
-/**
- * Roles with a ladder. Owner, accountant and the CA have no seniority tiers a
- * service firm would recognise, so the field is not offered for them rather
- * than being offered and ignored.
- */
-const GRADED_ROLES = new Set(["technician", "support", "telecaller", "sales"]);
 
 /** The localities the fixture already works in, offered as chips to save typing. */
 const KNOWN_LOCALITIES = [
@@ -93,7 +93,7 @@ export function PersonForm({ existing }: { existing?: Person }) {
   const [localities, setLocalities] = useState<string[]>(
     existing?.localities ?? [],
   );
-  const [grade, setGrade] = useState<Grade | null>(existing?.grade ?? null);
+  const [level, setLevel] = useState<string | null>(existing?.level ?? null);
 
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -152,8 +152,9 @@ export function PersonForm({ existing }: { existing?: Person }) {
       // skills — storing them would put an accountant in the assign picker.
       skills: role === "technician" ? skills : [],
       localities: role === "technician" ? localities : [],
-      // Kept for any role that has a ladder; cleared for the ones that do not.
-      grade: GRADED_ROLES.has(role) ? grade : null,
+      // Kept where the role has a ladder; cleared where it does not, so a
+      // level can never survive a change of department.
+      level: levelsFor(role).includes(level ?? "") ? level : null,
     };
 
     if (existing) {
@@ -250,6 +251,9 @@ export function PersonForm({ existing }: { existing?: Person }) {
                       onClick={() => {
                         setRole(option);
                         setAcknowledged(false);
+                        // A level belongs to its role; carrying one across
+                        // departments would silently mis-grant.
+                        setLevel(null);
                       }}
                     />
                   ))}
@@ -257,27 +261,34 @@ export function PersonForm({ existing }: { existing?: Person }) {
                 <div className="mt-2 empty:hidden">
                   <GuardNotice guard={roleGuard} />
                 </div>
-                {GRADED_ROLES.has(role) ? (
+                {/*
+                  The level question, asked *inside* the role rather than by
+                  offering more roles. Only shown where the role has a ladder.
+                */}
+                {levelsFor(role).length > 0 ? (
                   <div className="mt-3">
-                    <p className="mb-1.5 font-medium">Grade</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {GRADES.map((option) => (
-                        <Chip
-                          key={option}
-                          label={GRADE_LABEL[option]}
-                          selected={grade === option}
-                          onClick={() =>
-                            setGrade(grade === option ? null : option)
-                          }
-                        />
+                    <label htmlFor="level" className="mb-1.5 block font-medium">
+                      Level
+                    </label>
+                    <select
+                      id="level"
+                      value={level ?? ""}
+                      onChange={(event) =>
+                        setLevel(event.target.value || null)
+                      }
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    >
+                      <option value="">Not set</option>
+                      {levelsFor(role).map((option) => (
+                        <option key={option} value={option}>
+                          {levelLabel(role, option)}
+                        </option>
                       ))}
-                    </div>
+                    </select>
                     <p className="mt-1.5 text-xs text-muted-foreground">
-                      {/* The distinction the whole model turns on. */}
-                      Seniority, not permissions — an apprentice and a senior
-                      may do exactly the same things here. It decides who the
-                      board recommends, and who it will not send alone to a
-                      breakdown.
+                      {role === "marketing"
+                        ? "Only the senior level may put a price in front of a customer."
+                        : "Decides who the board recommends, and who it will not send alone to a breakdown."}
                     </p>
                   </div>
                 ) : null}

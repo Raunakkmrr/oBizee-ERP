@@ -11,8 +11,8 @@ import { Chip as FilterChip } from "@/components/shared/controls";
 import { cn } from "@/lib/utils";
 import { useStoreState } from "@/lib/data/use-store";
 import { getState } from "@/lib/data/store";
-import { GRADE_LABEL, matchesQuery } from "@/lib/data/people";
-import { ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
+import { matchesQuery } from "@/lib/data/people";
+import { levelLabel, ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
 
 /**
  * Team — the people who work here.
@@ -161,11 +161,11 @@ function Team() {
               <span className="rounded-lg bg-primary-bg px-2.5 py-1 text-xs font-medium text-primary-text">
                 {ROLE_LABELS[user.role as Role]}
               </span>
-              {user.grade ? (
-                // Beside the role, never instead of it — the two answer
-                // different questions.
+              {user.level ? (
+                // Beside the role, never instead of it — the tag says which
+                // department, the level says where inside it.
                 <span className="rounded-lg bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-                  {GRADE_LABEL[user.grade]}
+                  {levelLabel(user.role, user.level)}
                 </span>
               ) : null}
               {user.languageOverride ? (
