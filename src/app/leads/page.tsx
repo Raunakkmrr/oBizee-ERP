@@ -450,6 +450,36 @@ export default function LeadsPage() {
                                     lead={lead}
                                     onSaved={() => focusNext(flat, index)}
                                   />
+                                  {/*
+                                    Visible on every row, not gated behind an
+                                    outcome. Converting a lead is the moment an
+                                    AMC business lives or dies on, and it used
+                                    to be two clicks deep inside a popover.
+                                  */}
+                                  <Button
+                                    size="sm"
+                                    aria-label={`Convert ${lead.name}`}
+                                    render={
+                                      <Link
+                                        href={`/leads/convert?${new URLSearchParams({
+                                          leadId: lead.id,
+                                          fromLead: lead.reference,
+                                          customer: lead.name,
+                                          site: lead.locality,
+                                          ...(lead.quotedPaise !== null
+                                            ? {
+                                                value: String(
+                                                  Math.round(lead.quotedPaise / 100),
+                                                ),
+                                              }
+                                            : {}),
+                                        }).toString()}`}
+                                      />
+                                    }
+                                    nativeButton={false}
+                                  >
+                                    Convert
+                                  </Button>
                                 </div>
                               </div>
                             );

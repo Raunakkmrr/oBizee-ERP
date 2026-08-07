@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { OUTCOMES, isTerminalOutcome, type Lead } from "@/lib/data/leads";
 import { useDispatch } from "@/lib/data/use-store";
@@ -54,7 +52,6 @@ export function LogOutcome({
   onSaved: () => void;
 }) {
   const dispatch = useDispatch();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   // Pre-filled +2 days (§6.6.3) — a default she can change, never a blank she
@@ -65,16 +62,6 @@ export function LogOutcome({
   // Won and Lost end the lead's life in the queue, so no next date is asked for.
   const terminal = outcome !== null && isTerminalOutcome(outcome);
   const won = outcome === "Won";
-
-  /** FR-106: everything the next screen needs, so nothing is retyped. */
-  const carry = new URLSearchParams({
-    fromLead: lead.reference,
-    customer: lead.name,
-    site: lead.locality,
-    ...(lead.quotedPaise !== null
-      ? { value: String(Math.round(lead.quotedPaise / 100)) }
-      : {}),
-  }).toString();
 
   function save() {
     if (!outcome) return;
@@ -91,18 +78,6 @@ export function LogOutcome({
     setNote("");
     setFollowUp(plusDays(2));
     onSaved();
-  }
-
-  /** Log the outcome first, then navigate — conversion implies the lead is won. */
-  function convertTo(href: string) {
-    dispatch({
-      type: "LOG_LEAD_OUTCOME",
-      leadId: lead.id,
-      outcome: "Won",
-      note: note.trim() || "Won — converted",
-      followUp: null,
-    });
-    router.push(href);
   }
 
   return (
@@ -187,32 +162,11 @@ export function LogOutcome({
           )}
 
           {/*
-            FR-106's conversion, offered at the only moment it is knowable. The
-            two paths are genuinely different products — a one-off job bills once
-            and is done; a contract generates visits for a year — so this is a
-            choice, not a default.
+            Conversion used to live here, behind "Won", inside this popover —
+            the highest-value moment in an AMC business hidden behind an
+            unrelated choice. It is now a page of its own, reachable from the
+            row whether or not an outcome has been logged. See /leads/convert.
           */}
-          {won ? (
-            <>
-              <Separator />
-              <p className="text-xs font-medium">Convert this lead into</p>
-              <div className="grid gap-1.5">
-                <Button
-                  size="sm"
-                  onClick={() => convertTo(`/contracts/new?${carry}`)}
-                >
-                  AMC contract — recurring visits
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => convertTo(`/jobs/new?${carry}`)}
-                >
-                  One-off work order
-                </Button>
-              </div>
-            </>
-          ) : null}
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setOpen(false)}>

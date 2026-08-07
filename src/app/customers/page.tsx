@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MapPin, MessageCircle, Phone, Plus, Users } from "lucide-react";
+import { CalendarSync, MapPin, MessageCircle, Phone, Plus, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
@@ -35,7 +35,13 @@ import { CONDITION_LABEL, CONTACT_ROLE_LABEL, contactOrder, getCustomers, warran
  * asset**, because "has this happened before" is a question about the site
  * first and the unit second.
  */
-function SitePanel({ site }: { site: Site }) {
+function SitePanel({
+  site,
+  customerName,
+}: {
+  site: Site;
+  customerName: string;
+}) {
   const [assetFilter, setAssetFilter] = useState<string | null>(null);
   const entries = assetFilter
     ? site.timeline.filter((entry) => entry.assetId === assetFilter)
@@ -45,11 +51,36 @@ function SitePanel({ site }: { site: Site }) {
     <div className="grid gap-4 xl:grid-cols-3">
       <div className="space-y-4 xl:col-span-2">
         <Card className="p-4">
-          <p className="font-medium">{site.label}</p>
-          <p className="text-sm text-muted-foreground">
-            {site.addressLine1} · {site.locality} · {site.city}{" "}
-            <span className="tabular-nums">{site.pincode}</span>
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">{site.label}</p>
+              <p className="text-sm text-muted-foreground">
+                {site.addressLine1} · {site.locality} · {site.city}{" "}
+                <span className="tabular-nums">{site.pincode}</span>
+              </p>
+            </div>
+            {/*
+              The third missing path. A customer already on the register who now
+              wants an AMC had to be re-entered as a lead first — the whole
+              point of a register is that you do not retype what you know.
+            */}
+            <Button
+              size="sm"
+              className="shrink-0"
+              render={
+                <Link
+                  href={`/contracts/new?${new URLSearchParams({
+                    customer: customerName,
+                    site: site.locality,
+                  }).toString()}`}
+                />
+              }
+              nativeButton={false}
+            >
+              <CalendarSync className="size-3.5" />
+              Start an AMC
+            </Button>
+          </div>
           {/*
             Its own line, never folded into the address (§7.5). A site with no
             landmark says so rather than silently omitting the line, because the
@@ -405,7 +436,11 @@ export default function CustomersPage() {
                         />
                       </span>
                     </Card>
-                    <SitePanel key={active.site.id} site={active.site} />
+                    <SitePanel
+                      key={active.site.id}
+                      site={active.site}
+                      customerName={active.customer.name}
+                    />
                   </>
                 ) : null}
               </div>

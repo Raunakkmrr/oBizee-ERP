@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Info } from "lucide-react";
+import { ArrowLeft, ChevronDown, Info } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import { Chip } from "@/components/shared/controls";
@@ -15,6 +15,7 @@ import { z } from "zod";
 import { Separator } from "@/components/ui/separator";
 import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import { EM_DASH } from "@/lib/data/result";
 import {
   RESCHEDULE_POLICIES,
@@ -97,6 +98,7 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
   const [anchorDay, setAnchorDay] = useState("15");
   const [reschedulePolicy, setReschedulePolicy] =
     useState<ReschedulePolicy>("SHIFT_SUBSEQUENT");
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const touch = (field: string) =>
@@ -248,6 +250,45 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
               </CardContent>
             </Card>
 
+            {/*
+              Two decisions define the product — how often someone visits, and
+              how often they are billed. Those stay above. Coverage and the
+              reschedule policy are real choices with sensible defaults, and
+              asking six questions to close a deal is how a conversion screen
+              gets abandoned. They fold away, stating what they are set to.
+            */}
+            <Card>
+              <CardContent className="p-0">
+                <button
+                  type="button"
+                  aria-expanded={detailsOpen}
+                  onClick={() => setDetailsOpen((was) => !was)}
+                  className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-xl p-4 text-left transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">
+                      The rest, already set
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {COVERAGE_LABEL[coverage]} ·{" "}
+                      {reschedulePolicy === "SHIFT_SUBSEQUENT"
+                        ? "moving a visit moves the rest"
+                        : "only the moved visit changes"}
+                    </span>
+                  </span>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={cn(
+                      "size-4 shrink-0 text-muted-foreground transition-transform",
+                      detailsOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+              </CardContent>
+            </Card>
+
+            {detailsOpen ? (
+              <>
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Coverage</CardTitle>
@@ -272,7 +313,6 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                 </p>
               </CardContent>
             </Card>
-          </div>
 
             <Card>
               <CardHeader>
@@ -304,6 +344,10 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                 </p>
               </CardContent>
             </Card>
+
+              </>
+            ) : null}
+          </div>
 
           {/* ---------------- What you just agreed ---------------- */}
           <div className="space-y-4">
