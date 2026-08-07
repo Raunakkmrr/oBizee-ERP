@@ -14,7 +14,8 @@ import { Field, WhyDisabled } from "@/components/shared/field";
 import { requiredName, validate } from "@/lib/validate";
 import { z } from "zod";
 import { SEED_TENANT, SEED_USERS } from "@/lib/data/fixtures/tenant";
-import { useDispatch } from "@/lib/data/use-store";
+import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { cn } from "@/lib/utils";
 
 /**
  * New job / work order — FR-106, FR-201, FR-203, FR-205, FR-207.
@@ -85,12 +86,15 @@ const JOB_FORM = z.object({
 export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
   const { fromLead } = prefill;
   const dispatch = useDispatch();
+  const storeState = useStoreState();
   const router = useRouter();
 
-  const [customer, setCustomer] = useState(
-    prefill.customer ?? "Grand Plaza Hotel",
-  );
-  const [site, setSite] = useState(prefill.site ?? "Connaught Place");
+  /*
+    No default customer. It used to preset "Grand Plaza Hotel" — a name that is
+    not on the register, so the job it created could not be billed.
+  */
+  const [customer, setCustomer] = useState(prefill.customer ?? "");
+  const [site, setSite] = useState(prefill.site ?? "");
   const [landmark, setLandmark] = useState("");
   const [service, setService] = useState(prefill.service ?? "AC servicing");
   const [slot, setSlot] = useState<string>(SLOTS[0].label);
@@ -111,6 +115,8 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
   const technicians = SEED_USERS.filter(
     (u) => u.role === "technician" && u.active,
   );
+  const customers = storeState.customers;
+  const sites = customers.find((entry) => entry.name === customer)?.sites ?? [];
   const today = new Date();
 
   function toggleHelper(id: string) {
@@ -153,21 +159,96 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
               <CardTitle className="text-base">Where</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field
-                label="Customer"
-                value={customer}
-                onChange={setCustomer}
-                onBlur={() => touch("customer")}
-                error={check.errors.customer}
-              />
+              {/*
+                Picked, not typed. A free-text customer name matches nothing on
+                the register, and a job whose customer is not on file produces
+                an invoice with no place of supply — so it cannot state whether
+                it is CGST+SGST or IGST. The name is the join key; typing it is
+                how the join breaks.
+              */}
+              <div>
+                <label htmlFor="job-customer" className="mb-1.5 block text-sm font-medium">
+                  Customer
+                </label>
+                <select
+                  id="job-customer"
+                  value={customer}
+                  onChange={(event) => {
+                    const picked = event.target.value;
+                    setCustomer(picked);
+                    // Carry the site across, so the technician gets an address
+                    // rather than a locality somebody half-remembered.
+                    const match = customers.find((entry) => entry.name === picked);
+                    if (match?.sites[0]) setSite(match.sites[0].locality);
+                  }}
+                  onBlur={() => touch("customer")}
+                  aria-invalid={check.errors.customer !== undefined}
+                  className={cn(
+                    "h-9 w-full rounded-md border border-input bg-background px-2 text-sm",
+                    check.errors.customer && "border-destructive",
+                  )}
+                >
+                  <option value="">Pick a customer</option>
+                  {customers.map((entry) => (
+                    <option key={entry.id} value={entry.name}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+                {check.errors.customer ? (
+                  <p role="alert" className="mt-1 text-xs text-destructive">
+                    {check.errors.customer}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Not listed?{" "}
+                    <Link href="/customers/new" className="underline">
+                      Add them first
+                    </Link>{" "}
+                    — the site decides the tax on every invoice for this job.
+                  </p>
+                )}
+              </div>
 
-              <Field
-                label="Site / locality"
-                value={site}
-                onChange={setSite}
-                onBlur={() => touch("site")}
-                error={check.errors.site}
-              />
+              <div>
+                <label htmlFor="job-site" className="mb-1.5 block text-sm font-medium">
+                  Site
+                </label>
+                <select
+                  id="job-site"
+                  value={site}
+                  onChange={(event) => setSite(event.target.value)}
+                  onBlur={() => touch("site")}
+                  disabled={sites.length === 0}
+                  aria-invalid={check.errors.site !== undefined}
+                  className={cn(
+                    "h-9 w-full rounded-md border border-input bg-background px-2 text-sm",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                    check.errors.site && "border-destructive",
+                  )}
+                >
+                  <option value="">
+                    {customer === "" ? "Pick the customer first" : "Pick a site"}
+                  </option>
+                  {sites.map((entry) => (
+                    <option key={entry.id} value={entry.locality}>
+                      {entry.label} — {entry.addressLine1}, {entry.locality}
+                    </option>
+                  ))}
+                </select>
+                {check.errors.site ? (
+                  <p role="alert" className="mt-1 text-xs text-destructive">
+                    {check.errors.site}
+                  </p>
+                ) : sites.length > 1 ? (
+                  // A customer with a Pune office and a Nagpur plant has two
+                  // different places of supply.
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    This customer has {sites.length} sites — they can be in
+                    different states
+                  </p>
+                ) : null}
+              </div>
 
               <Field
                 label="Landmark"

@@ -127,3 +127,43 @@ describe("CREATE_ADHOC_INVOICE", () => {
     expect(invoice.grandTotalPaise % 100).toBe(0);
   });
 });
+
+describe("a customer with two sites in two states", () => {
+  const raise = (locality: string) => {
+    const withJob = reduce(
+      seedState(),
+      {
+        type: "CREATE_JOB",
+        customer: "Shakti Industries",
+        locality,
+        serviceType: "AC servicing",
+        slot: "9-1",
+        priority: "normal",
+        technicianId: null,
+        technicianName: null,
+        fromLeadReference: null,
+      },
+      NOW,
+    );
+    const created = withJob.board.jobs[0];
+    return latestInvoice(
+      reduce(withJob, { type: "CREATE_INVOICE_FROM_JOB", jobId: created.id }, NOW),
+    )!;
+  };
+
+  it("bills the Delhi plant as CGST+SGST", () => {
+    expect(raise("Okhla Phase II").head).toBe("CGST_SGST");
+  });
+
+  it("bills the Maharashtra unit as IGST", () => {
+    /*
+      The same customer, the same branch, a different site — and a different
+      return. This is why the job form picks a site rather than accepting a
+      typed locality: the site is what carries the state.
+    */
+    const invoice = raise("Butibori");
+    expect(invoice.head).toBe("IGST");
+    expect(invoice.billTo?.siteStateCode).toBe("27");
+    expect(invoice.explanation).toContain("Maharashtra");
+  });
+});
