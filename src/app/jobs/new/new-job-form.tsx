@@ -16,6 +16,7 @@ import { z } from "zod";
 import { SEED_TENANT, SEED_USERS } from "@/lib/data/fixtures/tenant";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
 import { cn } from "@/lib/utils";
+import { peek } from "@/lib/data/series";
 
 /**
  * New job / work order — FR-106, FR-201, FR-203, FR-205, FR-207.
@@ -184,7 +185,7 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
                   onBlur={() => touch("customer")}
                   aria-invalid={check.errors.customer !== undefined}
                   className={cn(
-                    "h-9 w-full rounded-md border border-input bg-background px-2 text-sm",
+                    "h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm",
                     check.errors.customer && "border-destructive",
                   )}
                 >
@@ -222,7 +223,10 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
                   disabled={sites.length === 0}
                   aria-invalid={check.errors.site !== undefined}
                   className={cn(
-                    "h-9 w-full rounded-md border border-input bg-background px-2 text-sm",
+                    // `min-w-0` on a select whose options are long: without it
+                    // the widest option sets the control's min-content width
+                    // and pushes the card off a 360px screen.
+                    "h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm",
                     "disabled:cursor-not-allowed disabled:opacity-50",
                     check.errors.site && "border-destructive",
                   )}
@@ -373,7 +377,7 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
           </Card>
         </div>
 
-        <div className="mt-4 flex max-w-4xl gap-2">
+        <div className="mt-4 flex max-w-4xl flex-wrap items-center gap-2">
           <Button
             disabled={!check.ok}
             onClick={() => {
@@ -405,9 +409,14 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
             Cancel
           </Button>
           <WhyDisabled reasons={check.summary} />
-          <span className="ml-auto self-center text-xs text-muted-foreground tnum-id">
-            Will be numbered J-{String(today.getFullYear()).slice(2)}
-            {String(today.getMonth() + 1).padStart(2, "0")}-nnnn ·{" "}
+          {/*
+            Peeked from the same series the reducer will issue from, and given
+            its own row on a narrow screen — as an `ml-auto` span it could not
+            shrink and pushed the form two pixels off a 360px display.
+          */}
+          <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto sm:self-center tnum-id">
+            Will be numbered{" "}
+            {peek(storeState.series, SEED_TENANT.branches[0], "job", today)} ·{" "}
             {SEED_TENANT.branches[0].name}
           </span>
         </div>

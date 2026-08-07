@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Panel } from "@/components/shared/panel";
 import { AdvancesPanel } from "@/components/money/advances-panel";
+import { RecordedBills } from "@/components/money/recorded-bills";
 import { groupByContract } from "@/lib/data/billable";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -794,6 +795,7 @@ export default function MoneyPage() {
                 should be read.
               */}
               <AdvancesPanel />
+              <RecordedBills />
               <div className="grid gap-5 xl:grid-cols-2">
                 <Receivables data={data} />
                 <Payables data={data} onPaid={markPaid} />

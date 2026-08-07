@@ -363,8 +363,10 @@ describe("restoring data written before a slice existed", () => {
         "leads",
         "money",
         "people",
+        "purchases",
         "seq",
         "series",
+        "vendors",
       ].sort(),
     );
   });

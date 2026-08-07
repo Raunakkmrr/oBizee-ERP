@@ -28,6 +28,7 @@ export type NavKey =
   | "contracts"
   | "customers"
   | "money"
+  | "vendors"
   | "parts"
   | "reports"
   | "team"
@@ -57,7 +58,8 @@ export type NavIcon =
   | "Users"
   | "ClipboardList"
   | "CalendarSync"
-  | "RefreshCw";
+  | "RefreshCw"
+  | "Store";
 
 /**
  * The kinds of badge a nav item may carry.
@@ -150,6 +152,19 @@ export const NAV_ITEMS: Record<NavKey, NavItem> = {
     requires: "invoice:read",
     rationale:
       "Downstream of the job. Sixth for the coordinator and technician; position 1 for the Accountant, because for that persona it is the spine.",
+  },
+  vendors: {
+    key: "vendors",
+    label: "Vendors & Bills",
+    href: "/vendors",
+    icon: "Store",
+    badge: null,
+    // FR-705 promoted to Must by decision D1: FR-905's §43B(h) countdown is a
+    // Must and cannot count without vendor records. Sits under Money because a
+    // vendor is a payable, not an operation.
+    requires: "invoice:read",
+    rationale:
+      "Beside Money rather than under Operations: a vendor exists in this product because bills have to be paid on time, not because stock has to be ordered.",
   },
   parts: {
     key: "parts",
@@ -248,6 +263,7 @@ export const NAV_BY_ROLE: Record<Role, readonly NavKey[]> = {
     "contracts",
     "customers",
     "money",
+    "vendors",
     "parts",
     "reports",
     "team",
@@ -260,6 +276,7 @@ export const NAV_BY_ROLE: Record<Role, readonly NavKey[]> = {
     "contracts",
     "customers",
     "money", // read-only for this role
+    "vendors",
     "parts", // view + issue to van
   ],
   /**
@@ -271,11 +288,13 @@ export const NAV_BY_ROLE: Record<Role, readonly NavKey[]> = {
 
   accountant: [
     "money", // position 1 — for this persona it IS the spine (§3.4, defect D10)
+    "vendors",
     "reports", // carries the GST workspace
     "customers",
     "jobs", // read-only, for the evidence behind a line
     "parts", // purchases
   ],
+  // The CA reads the returns; entering vendor bills is the office's job.
   readonly_ca: ["reports", "money", "customers"],
   technician: ["my_day", "upcoming", "sync"],
 };
@@ -321,7 +340,7 @@ export type NavGroup = {
 const GROUP_DEFINITIONS: readonly NavGroup[] = [
   { label: "Overview", items: ["today"] },
   { label: "Work", items: ["jobs", "leads", "contracts", "customers"] },
-  { label: "Money", items: ["money"] },
+  { label: "Money", items: ["money", "vendors"] },
   // Team sits with Operations rather than under Settings: staffing the day is
   // an operational act, and it is done far more often than configuration.
   { label: "Operations", items: ["parts", "team"] },

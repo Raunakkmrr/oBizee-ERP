@@ -63,6 +63,8 @@ import {
   type BillingIdentity,
   type Customer,
 } from "./customers";
+import { SEED_VENDORS, type Vendor } from "./vendors";
+import { billTotals, type PurchaseBill } from "./purchases";
 import { issue, seriesStateSchema, type SeriesState } from "./series";
 import {
   append as appendAudit,
@@ -125,6 +127,10 @@ export type StoreState = {
    * cannot be added to is a register that blocks billing.
    */
   customers: Customer[];
+  /** FR-705 — who we buy from, and everything the tax rules ask about them. */
+  vendors: Vendor[];
+  /** FR-705/807/906 — inward bills, with reverse charge and TDS on each. */
+  purchases: PurchaseBill[];
   /**
    * Whose session this is.
    *
@@ -174,6 +180,8 @@ export function seedState(): StoreState {
     money: structuredClone(SEED_MONEY) as MoneyData,
     people: structuredClone(SEED_PEOPLE),
     customers: structuredClone(SEED_CUSTOMERS.customers) as Customer[],
+    vendors: structuredClone(SEED_VENDORS),
+    purchases: [],
     // Priya, the coordinator — the persona §6.4 is written for.
     actingAs: "usr_0002",
     invoices: [],
@@ -409,6 +417,28 @@ export type Action =
       };
       contact: { name: string; phone: string } | null;
     }
+  | {
+      /** FR-705. A vendor is created with everything the tax rules need at once. */
+      type: "ADD_VENDOR";
+      vendor: Omit<Vendor, "id">;
+    }
+  | {
+      /**
+       * FR-705/807/906. Reverse charge and the TDS section arrive as decisions
+       * the reader confirmed, never as something this reducer inferred.
+       */
+      type: "RECORD_PURCHASE";
+      vendorId: string;
+      vendorBillNumber: string;
+      billDate: string;
+      description: string;
+      taxablePaise: number;
+      gstPercent: number;
+      reverseCharge: boolean;
+      tdsSection: PurchaseBill["tdsSection"];
+      tdsPaise: number;
+    }
+  | { type: "MARK_PURCHASE_PAID"; billId: string }
   | { type: "ACT_AS"; personId: string }
   | { type: "RESET" };
 
@@ -804,6 +834,57 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
         ],
       };
       return { ...state, customers: [customer, ...state.customers] };
+    }
+
+    case "ADD_VENDOR": {
+      const vendor: Vendor = {
+        ...action.vendor,
+        id: `ven_${state.vendors.length + 1}_${now.getTime()}`,
+      };
+      return { ...state, vendors: [vendor, ...state.vendors] };
+    }
+
+    case "RECORD_PURCHASE": {
+      const vendor = state.vendors.find((entry) => entry.id === action.vendorId);
+      if (!vendor) return state;
+
+      const totals = billTotals({
+        taxablePaise: action.taxablePaise,
+        gstPercent: action.gstPercent,
+        reverseCharge: action.reverseCharge,
+        tdsPaise: action.tdsPaise,
+      });
+
+      const purchase: PurchaseBill = {
+        id: `pb_${state.purchases.length + 1}_${now.getTime()}`,
+        vendorBillNumber: action.vendorBillNumber,
+        vendorId: vendor.id,
+        // Snapshotted like an invoice's billTo: the bill is a document, and
+        // renaming a vendor must not rewrite what was recorded.
+        vendorName: vendor.name,
+        billDate: action.billDate,
+        description: action.description,
+        taxablePaise: action.taxablePaise,
+        gstPercent: action.gstPercent,
+        gstPaise: totals.gstPaise,
+        reverseCharge: action.reverseCharge,
+        tdsSection: action.tdsSection,
+        tdsPaise: action.tdsPaise,
+        payablePaise: totals.payablePaise,
+        status: "UNPAID",
+      };
+
+      return { ...state, purchases: [...state.purchases, purchase] };
+    }
+
+    case "MARK_PURCHASE_PAID": {
+      if (!state.purchases.some((bill) => bill.id === action.billId)) return state;
+      return {
+        ...state,
+        purchases: state.purchases.map((bill) =>
+          bill.id === action.billId ? { ...bill, status: "PAID" } : bill,
+        ),
+      };
     }
 
     case "ACT_AS":

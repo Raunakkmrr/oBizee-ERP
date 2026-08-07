@@ -30,12 +30,19 @@ describe("the ordering claims §6.2 refuses to compromise on", () => {
     expect(owner.indexOf("leads") - owner.indexOf("jobs")).toBe(1);
   });
 
-  it("keeps Parts at position 7 — the thesis test", () => {
-    // §6.2: "if this ever creeps upward, the product has drifted off its
-    // thesis." A generic ERP puts inventory at 2.
-    expect(owner.indexOf("parts")).toBe(6);
-    expect(owner.indexOf("parts")).toBeGreaterThan(owner.indexOf("money"));
-    expect(owner.indexOf("parts")).toBeGreaterThan(owner.indexOf("contracts"));
+  it("keeps Parts below everything that earns money — the thesis test", () => {
+    /*
+      §6.2: "if this ever creeps upward, the product has drifted off its
+      thesis." A generic ERP puts inventory at 2.
+
+      Pinned by relation rather than by index. The absolute position was 7 until
+      Vendors was added above it; asserting the number would have failed on a
+      change that honours the thesis exactly — inventory still sits below every
+      screen that brings money in or sends it out.
+    */
+    for (const above of ["today", "jobs", "leads", "contracts", "customers", "money", "vendors"] as const) {
+      expect(owner.indexOf("parts"), above).toBeGreaterThan(owner.indexOf(above));
+    }
   });
 
   it("keeps Settings last — never a place a daily task lives", () => {
@@ -43,8 +50,8 @@ describe("the ordering claims §6.2 refuses to compromise on", () => {
   });
 
   it("gives the owner every primary destination", () => {
-    // Ten since Team became its own, out of Settings.
-    expect(owner).toHaveLength(10);
+    // Eleven since Vendors arrived with the payables block (decision D1).
+    expect(owner).toHaveLength(11);
   });
 });
 

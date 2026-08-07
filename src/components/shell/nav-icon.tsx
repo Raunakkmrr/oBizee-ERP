@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarSync, ChartColumn, ClipboardList, Building2, FileClock, Package, PhoneCall, ReceiptIndianRupee, RefreshCw, Settings, Users, Wrench } from "lucide-react";
+import { CalendarClock, CalendarSync, ChartColumn, ClipboardList, Building2, FileClock, Package, PhoneCall, ReceiptIndianRupee, RefreshCw, Settings, Store, Users, Wrench } from "lucide-react";
 import type { NavIcon as NavIconName } from "@/lib/navigation";
 
 /**
@@ -30,6 +30,7 @@ const ICONS: Record<
   ClipboardList,
   CalendarSync,
   RefreshCw,
+  Store,
 };
 
 export function NavIcon({
