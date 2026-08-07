@@ -1,5 +1,5 @@
 /**
- * Obez Service ERP design tokens — single source of truth (web).
+ * oBizee Service ERP design tokens — single source of truth (web).
  *
  * Mirrors `obizee-dashboard/src/lib/design/tokens.ts`, which in turn mirrors the
  * React Native app at `OrderManagement/src/constants/{colors,gradients,surfaces,

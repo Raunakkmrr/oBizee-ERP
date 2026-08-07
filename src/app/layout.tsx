@@ -13,7 +13,7 @@ import "./globals.css";
 const locale: Locale = "en";
 
 export const metadata: Metadata = {
-  title: "Obez Service ERP",
+  title: "oBizee Service ERP",
   description:
     "Lead to job to sign-off to GST invoice to payment, for Indian service businesses.",
 };

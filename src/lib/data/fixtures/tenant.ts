@@ -1,7 +1,7 @@
 /**
  * The seed tenant — a test service firm, and the identities that work inside it.
  *
- * **Obez Service ERP has its own identity domain.** Its users are a service
+ * **oBizee Service ERP has its own identity domain.** Its users are a service
  * firm's own staff, not oBizee merchant accounts, and its database is separate
  * (DR-3). A tenant here has no relationship to an oBizee merchant unless
  * account-linking is added deliberately later.
