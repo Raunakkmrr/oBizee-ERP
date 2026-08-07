@@ -19,6 +19,7 @@
  *    "validation failed".
  */
 import { z } from "zod";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 /* ------------------------------------------------------------- readiness */
@@ -265,8 +266,22 @@ const FIXTURE: GstPeriod = {
   ],
 };
 
-export const getGstPeriod = defineQuery<void, GstPeriod>({
+/**
+ * The period, as `2026-08`.
+ *
+ * A parameter rather than a constant: the fixture always returned the same
+ * month, which was invisible while the screen read a fixture and becomes wrong
+ * the moment it reads a ledger. An accountant files last month, not this one.
+ */
+export const getGstPeriod = defineQuery<string, GstPeriod>({
   key: "gst.period",
   schema: gstPeriodSchema,
+  api: async (period) => apiFetch<GstPeriod>(`/api/gst/${period}`),
   fixture: (): Fetched<unknown> => ({ raw: FIXTURE }),
 });
+
+/** `2026-08` for the month that is currently being filed — the one just past. */
+export function periodToFile(today: Date = new Date()): string {
+  const d = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}

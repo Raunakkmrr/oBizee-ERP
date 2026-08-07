@@ -13,6 +13,7 @@
 import { z } from "zod";
 import { asPaise, type Paise } from "@/lib/money";
 import { computed, uncomputable, type Computed } from "./result";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 /* ---------------------------------------------------------------- contract */
@@ -267,6 +268,7 @@ const FIXTURE: HomeSnapshot = {
 export const getHomeSnapshot = defineQuery<void, HomeSnapshot>({
   key: "home.snapshot",
   schema: homeSnapshotSchema,
+  api: async () => apiFetch<HomeSnapshot>("/api/home/snapshot"),
   fixture: (): Fetched<unknown> => ({
     raw: FIXTURE,
     // A designed degraded mode (§9.8): the ledger is down, so the screen shows

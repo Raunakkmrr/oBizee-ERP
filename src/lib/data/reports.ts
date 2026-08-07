@@ -16,6 +16,7 @@
  *   by the table it was drawn from.** So every series carries its own rows.
  */
 import { z } from "zod";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 /** Jobs by state, with dwell time — where PARTS_AWAITED loss becomes visible. */
@@ -145,5 +146,6 @@ const FIXTURE = {
 export const getReports = defineQuery<void, ReportsData>({
   key: "reports.weekly",
   schema: reportsSchema,
+  api: async () => apiFetch<ReportsData>("/api/reports/weekly"),
   fixture: (): Fetched<unknown> => ({ raw: FIXTURE }),
 });

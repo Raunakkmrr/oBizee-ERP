@@ -37,7 +37,7 @@ function downloadTally(
 }
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
-import { BLOCKS_EXPORT, READINESS_ACTION, READINESS_LABEL, exportReadiness, formatPaiseDelta, getGstPeriod, reconcile, type GstPeriod } from "@/lib/data/gst";
+import { BLOCKS_EXPORT, READINESS_ACTION, READINESS_LABEL, exportReadiness, formatPaiseDelta, getGstPeriod, periodToFile, reconcile, type GstPeriod } from "@/lib/data/gst";
 import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 
 /**
@@ -62,17 +62,19 @@ export default function GstWorkspacePage() {
   // The invoices the Tally envelope carries — the register's own rows, not a
   // second copy that could disagree with the working paper beside it.
   const invoices = useStoreState().invoices;
+  // The month being filed is the one just past, not the one in progress.
+  const [period] = useState(() => periodToFile());
   const [query, setQuery] = useState<Query<GstPeriod>>(loading());
 
   useEffect(() => {
     let cancelled = false;
-    getGstPeriod().then((result) => {
+    getGstPeriod(period).then((result) => {
       if (!cancelled) setQuery(result);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [period]);
 
   const today = new Date();
 

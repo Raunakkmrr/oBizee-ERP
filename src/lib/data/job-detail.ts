@@ -14,6 +14,7 @@
  */
 import { z } from "zod";
 import { COVERAGES } from "./contracts";
+import { apiFetch } from "../api/client";
 import { DataSourceError, defineQuery, type Fetched } from "./source";
 
 /* ---------------------------------------------------------------- contract */
@@ -588,6 +589,7 @@ const FIXTURES: Record<string, JobDetail> = {
 export const getJobDetail = defineQuery<string, JobDetail>({
   key: "job.detail",
   schema: jobDetailSchema,
+  api: async (id) => apiFetch<JobDetail>(`/api/job/${id}`),
   /**
    * **The store is the source of truth for a job's live facts.**
    *

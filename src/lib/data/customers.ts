@@ -17,6 +17,7 @@
  */
 import { z } from "zod";
 import { defineQuery, type Fetched } from "./source";
+import { apiFetch } from "@/lib/api/client";
 
 export const CONTACT_ROLES = [
   "OWNER",
@@ -646,6 +647,15 @@ export function billingIdentityFor(
 export const getCustomers = defineQuery<void, CustomersData>({
   key: "customers.list",
   schema: customersSchema,
+  /**
+   * The API, when `NEXT_PUBLIC_DATA_SOURCE=api`.
+   *
+   * The same `customersSchema` validates both, which is the point of the seam:
+   * if the backend ever returns a shape this screen cannot render, it fails at
+   * the boundary with a named error rather than three components deep with an
+   * undefined.
+   */
+  api: async () => apiFetch<CustomersData>("/api/customers"),
   // Reads the store, not the constant — customers are written to now, and a
   // screen reading the seed would not see one that had just been added.
   fixture: async (): Promise<Fetched<unknown>> => ({

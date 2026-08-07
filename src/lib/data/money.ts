@@ -14,6 +14,7 @@
  *    pitch of the screen.
  */
 import { z } from "zod";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 /* ------------------------------------------------------------ receivables */
@@ -434,6 +435,7 @@ export const SEED_MONEY = {
 export const getMoney = defineQuery<void, MoneyData>({
   key: "money.overview",
   schema: moneySchema,
+  api: async () => apiFetch<MoneyData>("/api/money/overview"),
   /**
    * Read from the store, not from the constant.
    *

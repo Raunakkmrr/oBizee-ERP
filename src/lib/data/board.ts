@@ -20,6 +20,7 @@ import { z } from "zod";
 import type { Person } from "./people";
 import { asPaise, type Paise } from "@/lib/money";
 import { computed, uncomputable, type Computed } from "./result";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 /* ---------------------------------------------------------------- contract */
@@ -564,6 +565,7 @@ export function techniciansFromPeople(
 export const getBoard = defineQuery<void, Board>({
   key: "board.today",
   schema: boardSchema,
+  api: async () => apiFetch<Board>("/api/board/today"),
   fixture: async (): Promise<Fetched<unknown>> => {
     const state = (await import("./store")).getState();
     // Whereabouts are the board's own live facts and stay on the board; who a

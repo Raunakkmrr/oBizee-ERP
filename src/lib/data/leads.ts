@@ -13,6 +13,7 @@
  * lead whose owner is late — nobody is even responsible for it".
  */
 import { z } from "zod";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 /* ---------------------------------------------------------------- contract */
@@ -433,6 +434,7 @@ export const SEED_LEADS: LeadsData = {
 export const getLeads = defineQuery<void, LeadsData>({
   key: "leads.queue",
   schema: leadsSchema,
+  api: async () => apiFetch<LeadsData>("/api/leads"),
   // Reads from the local store, whose seed is SEED_LEADS. Deferred import so
   // the static graph stays acyclic: the store imports this module for its seed,
   // and a static import back would be a cycle waiting to bite the first person

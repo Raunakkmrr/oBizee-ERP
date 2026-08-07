@@ -16,6 +16,7 @@
 import { z } from "zod";
 import { asPaise, type Paise } from "@/lib/money";
 import { computed, uncomputable, type Computed } from "./result";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 const computedMoneySchema = z.union([
@@ -135,5 +136,6 @@ const FIXTURE: OwnerHome = {
 export const getOwnerHome = defineQuery<void, OwnerHome>({
   key: "owner.home",
   schema: ownerHomeSchema,
+  api: async () => apiFetch<OwnerHome>("/api/home/owner"),
   fixture: (): Fetched<unknown> => ({ raw: FIXTURE }),
 });
