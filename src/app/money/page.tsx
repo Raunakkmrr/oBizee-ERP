@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Panel } from "@/components/shared/panel";
 import { AdvancesPanel } from "@/components/money/advances-panel";
+import { groupByContract } from "@/lib/data/billable";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
@@ -245,18 +246,7 @@ function BillingDue({ onRaise }: { onRaise: (row: DueRow) => void }) {
     the crowding this screen was rebuilt to avoid. You bill the oldest first
     anyway, so the row carries the oldest point and says how many follow.
   */
-  const byContract = new Map<string, typeof rows>();
-  for (const row of rows) {
-    byContract.set(row.contract.id, [
-      ...(byContract.get(row.contract.id) ?? []),
-      row,
-    ]);
-  }
-  const grouped = [...byContract.values()].map((points) => ({
-    oldest: points[0],
-    backlog: points.length - 1,
-    totalPaise: points.reduce((sum, row) => sum + row.point.amountPaise, 0),
-  }));
+  const grouped = groupByContract(rows);
 
   const overdue = rows.filter((row) => row.daysLate >= 0);
 
@@ -768,7 +758,7 @@ export default function MoneyPage() {
       pointNumber: row.point.number,
       amountPaise: row.point.amountPaise,
     });
-    router.push("/money/new");
+    router.push("/money/invoice");
   }
 
   const today = new Date();

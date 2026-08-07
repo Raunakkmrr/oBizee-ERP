@@ -100,7 +100,7 @@ export default function JobDetailPage({
     );
     if (!match) return;
     dispatch({ type: "CREATE_INVOICE_FROM_JOB", jobId: match.id });
-    router.push("/money/new");
+    router.push("/money/invoice");
   }
 
   return (

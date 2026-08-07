@@ -316,6 +316,16 @@ export type Action =
   | { type: "ADJUST_ADVANCE"; voucherNumber: string; invoiceNumber: string }
   | {
       /**
+       * An invoice that comes from no job and no contract — a counter sale, a
+       * one-off supply. Deliberately the third way in rather than the default:
+       * a register full of typed invoices reconciles with no work.
+       */
+      type: "CREATE_ADHOC_INVOICE";
+      customer: string;
+      lines: InvoiceLine[];
+    }
+  | {
+      /**
        * FR-502. The contract form has always said "generate visits"; this is
        * what makes the button honest. Idempotent by `visitKey`, so a second
        * run adds nothing.
@@ -995,6 +1005,47 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
           action.voucherNumber,
           action.invoiceNumber,
         ),
+      };
+    }
+
+    case "CREATE_ADHOC_INVOICE": {
+      if (action.lines.length === 0) return state;
+
+      const seq = state.seq.invoice + 1;
+      const branch = SEED_TENANT.branches[0];
+      const billTo = billingIdentityFor(state.customers, action.customer);
+      const derivation = derivePlaceOfSupply(
+        billTo?.siteStateCode ?? branch.stateCode,
+        branch.stateCode,
+      );
+      const totals = computeTotals(action.lines, derivation.head);
+      const issued = issue(state.series, branch, "invoice", now);
+
+      const invoice: Invoice = {
+        id: `inv_${seq}`,
+        number: issued.number,
+        jobId: null,
+        jobNumber: null,
+        contractId: null,
+        contractPoint: null,
+        customer: action.customer,
+        billTo,
+        dateWord: dateWord(now),
+        head: derivation.head,
+        explanation: derivation.explanation,
+        lines: action.lines,
+        taxablePaise: totals.taxablePaise,
+        totalTaxPaise: totals.totalTaxPaise,
+        roundOffPaise: totals.roundOffPaise,
+        grandTotalPaise: totals.grandTotalPaise,
+        status: "DRAFT",
+      };
+
+      return {
+        ...state,
+        invoices: [...state.invoices, invoice],
+        series: issued.next,
+        seq: { ...state.seq, invoice: seq },
       };
     }
 

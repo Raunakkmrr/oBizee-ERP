@@ -795,18 +795,38 @@ describe("ADD_CUSTOMER, and the tax head it unblocks", () => {
   });
 
   it("carries no identity for a customer who is not on the register", () => {
-    // And the screen refuses to send in that case, rather than printing a
-    // plausible guess from the branch's own state.
-    const contract = seedState().contracts.find(
-      (candidate) => candidate.customer === "Sunrise Apartments RWA",
+    /*
+      Every customer the seed references is now on the register, so this makes
+      one that is not: a contract raised for a name nobody has added. The screen
+      then refuses to send, rather than printing a plausible guess from the
+      branch's own state.
+    */
+    const withContract = reduce(
+      seedState(),
+      {
+        type: "CREATE_CONTRACT",
+        customer: "Nobody On File Pvt Ltd",
+        site: "Somewhere",
+        annualValuePaise: 1_20_000_00,
+        coverage: "LABOUR_ONLY",
+        recurrence: "MONTHLY",
+        billing: "MONTHLY",
+        anchorDay: 1,
+        reschedulePolicy: "SHIFT_SUBSEQUENT",
+        fromLeadReference: null,
+      },
+      NOW,
+    );
+    const contract = withContract.contracts.find(
+      (candidate) => candidate.customer === "Nobody On File Pvt Ltd",
     )!;
     const billed = reduce(
-      seedState(),
+      withContract,
       {
         type: "CREATE_INVOICE_FROM_CONTRACT",
         contractId: contract.id,
         pointNumber: 1,
-        amountPaise: 15_000_00,
+        amountPaise: 10_000_00,
       },
       NOW,
     );

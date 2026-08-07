@@ -9,6 +9,7 @@ import { telHref, whatsappHref } from "@/lib/contact";
 import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
 import { partBilling } from "@/lib/data/contracts";
+import { navigateHref } from "@/lib/data/geo";
 import { Rating } from "@/components/shared/rating";
 import { nextStepFor, type Check as StageCheck, type JobDetail, type Stage } from "@/lib/data/job-detail";
 
@@ -276,20 +277,27 @@ export function WhereBody({ job }: { job: JobDetail }) {
         </div>
       </div>
 
+      {/*
+        Directions, not a search. `?q=` drops the technician on a map of the
+        area and leaves them to work out the route; `navigateHref` opens
+        turn-by-turn to the destination, and hands off to whichever maps app is
+        installed on a phone. It also prefers a dropped pin over the text
+        address when one exists.
+      */}
       <Button
         variant="outline"
         size="sm"
         render={
           <a
-            href={`https://maps.google.com/?q=${encodeURIComponent(job.site.mapQuery)}`}
+            href={navigateHref(null, job.site.mapQuery) ?? undefined}
             target="_blank"
             rel="noreferrer"
           />
         }
         nativeButton={false}
       >
-        <MapPin className="size-4" />
-        Open in Maps
+        <Navigation className="size-4" />
+        Navigate there
       </Button>
 
       {job.site.accessNotes ? (

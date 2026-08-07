@@ -77,6 +77,10 @@ export function summarise(
       return `Raised an invoice from a job`;
     case "CREATE_INVOICE_FROM_CONTRACT":
       return `Raised a scheduled contract invoice`;
+    case "CREATE_ADHOC_INVOICE":
+      return `Raised an ad-hoc invoice for ${str(action.customer)}`;
+    case "ADD_CUSTOMER":
+      return `Added ${str(action.name)} to the customer register`;
     case "RECORD_ADVANCE":
       return `Recorded an advance from ${str(action.customer)} and issued a receipt voucher`;
     case "ADJUST_ADVANCE":
