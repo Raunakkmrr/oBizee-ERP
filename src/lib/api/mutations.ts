@@ -196,6 +196,19 @@ export const generateVisits = (id: string) =>
     {},
   ));
 
+/**
+ * FR-507 — work an expiring AMC as a renewal lead.
+ *
+ * Idempotent in the register: asking twice returns the lead that already
+ * exists with `alreadyWorking: true`, because two renewal leads for one
+ * contract is two people ringing the same customer on the same day.
+ */
+export const workRenewalAsLead = (contractId: string) =>
+  attempt(() => post<{ id: string; reference: string; alreadyWorking: boolean }>(
+    `/api/contracts/${contractId}/renewal-lead`,
+    {},
+  ));
+
 /* --------------------------------------------------------------- invoices */
 
 /**

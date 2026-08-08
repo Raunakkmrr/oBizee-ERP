@@ -6,7 +6,10 @@ import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { renewalsDue, RENEWAL_SOURCE, type Contract } from "@/lib/data/contracts";
-import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
+import { useCallback, useEffect, useState } from "react";
+import { getLeads, type Lead } from "@/lib/data/leads";
+import { workRenewalAsLead } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
 
 /**
  * AMC renewals inside 45 days — FR-506.
@@ -23,18 +26,38 @@ import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store
  * disappearing — vanishing would read as "handled" to the next person to look.
  */
 export function RenewalsBand({ contracts }: { contracts: readonly Contract[] }) {
-  const state = useStoreState();
-  const dispatch = useDispatch();
-  const me = useCurrentUser();
+  /*
+    Which renewals are already being worked, asked of the pipeline rather than
+    tracked on the contract — one source of truth, and it survives a lead
+    being reassigned. From the register now, so a colleague's renewal lead is
+    visible instead of only this browser's.
+  */
+  const [renewalLeads, setRenewalLeads] = useState<Lead[]>([]);
+  const reload = useCallback(() => {
+    void getLeads().then((result) => {
+      if (result.status === "ready") {
+        setRenewalLeads(result.data.leads.filter((lead) => lead.source === RENEWAL_SOURCE));
+      }
+    });
+  }, []);
+  useEffect(reload, [reload]);
+
+  const work = useMutation(
+    useCallback(
+      async (contractId: string) => {
+        const result = await workRenewalAsLead(contractId);
+        if (result.ok) reload();
+        return result;
+      },
+      [reload],
+    ),
+  );
 
   /*
     A renewal lead records the contract it came from in its activity line, so
     "already worked" is asked of the pipeline rather than tracked on the
     contract — one source of truth, and it survives a lead being reassigned.
   */
-  const renewalLeads = state.leads.leads.filter(
-    (lead) => lead.source === RENEWAL_SOURCE,
-  );
   const worked = new Set(
     contracts
       .filter((contract) =>
@@ -101,13 +124,8 @@ export function RenewalsBand({ contracts }: { contracts: readonly Contract[] }) 
               <Button
                 size="sm"
                 variant={daysToExpiry <= 15 ? "default" : "outline"}
-                onClick={() =>
-                  dispatch({
-                    type: "WORK_RENEWAL_AS_LEAD",
-                    contractId: contract.id,
-                    actor: me.name,
-                  })
-                }
+                disabled={work.pending}
+                onClick={() => void work.run(contract.id)}
               >
                 Work as a lead
               </Button>

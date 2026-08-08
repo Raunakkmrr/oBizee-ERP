@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
 import { loading, type Query } from "@/lib/data/result";
 import { BILLING_LABEL, COVERAGE_LABEL, RECURRENCE_LABEL, getContracts, scheduleProgress, visitSchedule, type Contract } from "@/lib/data/contracts";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { generateVisits } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { getBoard } from "@/lib/data/board";
 import { RenewalsBand } from "@/components/contracts/renewals-band";
 
 /**
@@ -28,9 +30,30 @@ import { RenewalsBand } from "@/components/contracts/renewals-band";
  * carries its own `n of m` bar, which is also how FR-1406's multi-schedule
  * contracts stay legible: one contract, several cadences, each measurable.
  */
-function ContractCard({ contract }: { contract: Contract }) {
-  const state = useStoreState();
-  const dispatch = useDispatch();
+function ContractCard({
+  contract,
+  visitKeys,
+  onGenerated,
+}: {
+  contract: Contract;
+  /*
+    The visit keys already on the board, from the register.
+
+    FR-502's idempotency key is what makes "generate visits" safe to run
+    twice, and it only works if the keys being compared are the ones the
+    register holds. Reading a local board meant a second machine's visits were
+    invisible and the button offered to create them again.
+  */
+  visitKeys: ReadonlySet<string>;
+  onGenerated: () => void;
+}) {
+  const generate = useMutation(
+    async (contractId: string) => {
+      const result = await generateVisits(contractId);
+      if (result.ok) onGenerated();
+      return result;
+    },
+  );
 
   /*
     FR-502. What this contract owes in the next 90 days, and how much of that
@@ -38,11 +61,7 @@ function ContractCard({ contract }: { contract: Contract }) {
     "3 visits scheduled" is a fact the reader can check against Today, and a
     button that would create nothing says so instead of pretending to work.
   */
-  const existingKeys = new Set(
-    state.board.jobs
-      .map((job) => job.visitKey)
-      .filter((key): key is string => key !== null),
-  );
+  const existingKeys = visitKeys;
   const planned = visitSchedule(contract, new Date());
   const pending = planned.filter((visit) => !existingKeys.has(visit.key));
 
@@ -81,12 +100,8 @@ function ContractCard({ contract }: { contract: Contract }) {
               size="sm"
               variant="outline"
               className="shrink-0"
-              onClick={() =>
-                dispatch({
-                  type: "GENERATE_CONTRACT_VISITS",
-                  contractId: contract.id,
-                })
-              }
+              disabled={generate.pending}
+              onClick={() => void generate.run(contract.id)}
             >
               <CalendarPlus className="size-3.5" />
               Put {pending.length} on the board
@@ -195,18 +210,23 @@ export default function ContractsPage() {
     loading(),
   );
 
-  // Re-reads whenever any surface writes to the store.
-  const storeState = useStoreState();
+  const [visitKeys, setVisitKeys] = useState<ReadonlySet<string>>(new Set());
 
-  useEffect(() => {
-    let cancelled = false;
-    getContracts().then((result) => {
-      if (!cancelled) setQuery(result);
+  const reload = useCallback(() => {
+    void getContracts().then(setQuery);
+    // The board carries the visit keys FR-502 dedupes on.
+    void getBoard().then((result) => {
+      if (result.status !== "ready") return;
+      setVisitKeys(
+        new Set(
+          result.data.jobs
+            .map((job) => job.visitKey)
+            .filter((key): key is string => key !== null),
+        ),
+      );
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [storeState]);
+  }, []);
+  useEffect(reload, [reload]);
 
   const today = new Date();
 
@@ -235,7 +255,12 @@ export default function ContractsPage() {
               <RenewalsBand contracts={data.contracts} />
               <div className="grid gap-4 lg:grid-cols-2">
                 {data.contracts.map((contract) => (
-                  <ContractCard key={contract.id} contract={contract} />
+                  <ContractCard
+                    key={contract.id}
+                    contract={contract}
+                    visitKeys={visitKeys}
+                    onGenerated={reload}
+                  />
                 ))}
               </div>
             </>
