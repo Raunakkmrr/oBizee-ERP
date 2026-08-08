@@ -6,6 +6,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupConte
 import { NavStack } from "./nav-stack";
 import { footerNavFor, navGroupsFor, type NavBadge, type NavItem } from "@/lib/navigation";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
+import { homeHrefFor } from "@/lib/navigation";
 
 /**
  * The sidebar — mirrors `obizee-dashboard/src/components/shell/app-sidebar.tsx`.
@@ -57,7 +58,7 @@ export function AppSidebar({
       */}
       <SidebarHeader className="border-b border-sidebar-border pb-3">
         <Link
-          href="/"
+          href={homeHrefFor(role)}
           className="flex items-center gap-2.5 rounded-md px-2 py-1.5 group-data-[collapsible=icon]:justify-center focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-base font-bold text-primary-foreground shadow-sm">

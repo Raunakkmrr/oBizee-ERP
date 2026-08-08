@@ -13,6 +13,7 @@ import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store
 import type { Person } from "@/lib/data/people";
 import { formatDateLong, formatTime } from "@/lib/datetime";
 import { ROLE_LABELS } from "@/lib/roles";
+import { homeHrefFor } from "@/lib/navigation";
 
 /**
  * The top bar — mirrors `obizee-dashboard/src/components/shell/top-bar.tsx`:
@@ -261,7 +262,7 @@ export function TopBar({
         §6.13.1's own mobile rule: the mark shrinks to 20px but "the wordmark is
         never dropped".
       */}
-      <Link href="/" className="flex items-center gap-1.5 lg:hidden">
+      <Link href={homeHrefFor(me.role)} className="flex items-center gap-1.5 lg:hidden">
         <span className="grid size-5 shrink-0 place-items-center rounded bg-primary text-[10px] font-bold text-primary-foreground">
           oB
         </span>

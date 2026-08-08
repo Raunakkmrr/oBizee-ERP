@@ -367,6 +367,30 @@ export function navGroupsFor(
   })).filter((group) => group.items.length > 0);
 }
 
+/**
+ * Where the product logo takes this role — their own landing screen.
+ *
+ * The logo linked to `/` for everybody, and `/` renders §6.2's snapshot, which
+ * needs `job:read`. A technician has `job:read_own` and a CA has neither, so
+ * both of them got a permission refusal by clicking the product mark — the one
+ * control on screen that should never fail.
+ *
+ * A role's landing screen is the first item in its own navigation, which is
+ * what §6.2's role table already says. Deriving it here rather than keeping a
+ * second list means the two cannot disagree later.
+ */
+export function homeHrefFor(role: Role): string {
+  /*
+    Derived from what the sidebar actually renders, not from `NAV_BY_ROLE`
+    directly. The technician's entries — `my_day`, `upcoming`, `sync` — belong
+    to the field app and appear in no group, so reading the raw table sent them
+    to `/my-day`, a route this app does not have. A logo that 404s is not an
+    improvement on a logo that 403s.
+  */
+  const first = navGroupsFor(role)[0]?.items[0];
+  return first ? first.href : "/today";
+}
+
 /** Footer items for a role, filtered the same way. */
 export function footerNavFor(role: Role): NavItem[] {
   const allowed = new Set(NAV_BY_ROLE[role]);

@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  LANDING,
-  NAV_BY_ROLE,
-  NAV_ITEMS,
-  footerNavFor,
-  navFor,
-  navGroupsFor,
-  type NavKey,
-} from "./navigation";
+import { LANDING, NAV_BY_ROLE, NAV_ITEMS, footerNavFor, homeHrefFor, navFor, navGroupsFor, type NavKey } from "./navigation";
 import { ROLES, can } from "./roles";
 
 /**
@@ -194,6 +186,40 @@ describe("every permitted destination is actually reachable", () => {
       ]);
       for (const key of NAV_BY_ROLE[role]) {
         expect(rendered.has(key), `${role} cannot reach ${key}`).toBe(true);
+      }
+    }
+  });
+});
+
+describe("the logo never leads somewhere the role is refused", () => {
+  /*
+    The product mark linked to `/` for every role. `/` renders §6.2's snapshot,
+    which needs `job:read` — a technician has `job:read_own` and a CA has
+    neither, so both were shown a permission refusal by clicking the one
+    control on screen that should never fail.
+  */
+  /*
+    The routes this app actually has, mirroring `src/app`. Kept explicit so a
+    landing screen pointing at a page nobody built fails here rather than as a
+    404 in somebody's hands — which is what `/my-day` would have done: it is in
+    the technician's role table but belongs to the field app.
+  */
+  const REAL_ROUTES = new Set([
+    "/", "/today", "/jobs", "/leads", "/contracts", "/customers",
+    "/money", "/vendors", "/parts", "/reports", "/team", "/settings", "/home",
+  ]);
+
+  it("sends every role to a route that exists", () => {
+    for (const role of ROLES) {
+      const href = homeHrefFor(role);
+      expect(REAL_ROUTES.has(href), `${role} lands on ${href}, which is not a page`).toBe(true);
+    }
+  });
+
+  it("never sends a role to the snapshot it cannot read", () => {
+    for (const role of ROLES) {
+      if (!can(role, "job:read")) {
+        expect(homeHrefFor(role), `${role} lands on the snapshot`).not.toBe("/");
       }
     }
   });

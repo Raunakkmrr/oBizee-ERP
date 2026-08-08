@@ -8,7 +8,11 @@ import { TodaySnapshot } from "@/components/home/today-snapshot";
 import { NeedsYourCall } from "@/components/home/needs-your-call";
 import { AgainstLastWeek } from "@/components/home/against-last-week";
 import { ComingUp } from "@/components/home/coming-up";
+import { useRouter } from "next/navigation";
 import { getHomeSnapshot, type HomeSnapshot } from "@/lib/data/home";
+import { homeHrefFor } from "@/lib/navigation";
+import { can } from "@/lib/roles";
+import { useCurrentUser } from "@/lib/data/use-store";
 import { loading, type Query } from "@/lib/data/result";
 import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { formatDateLong, greetingFor } from "@/lib/datetime";
@@ -40,8 +44,30 @@ import { formatDateLong, greetingFor } from "@/lib/datetime";
 export default function HomePage() {
   const [query, setQuery] = useState<Query<HomeSnapshot>>(loading());
   const [hideAmounts, setHideAmounts] = useState(false);
+  const me = useCurrentUser();
+  const router = useRouter();
+
+  /*
+    §6.2's snapshot is a coordinator's and an owner's screen — it needs
+    `job:read`, which a technician (`job:read_own`) and a CA do not have. They
+    were shown a permission refusal on the product's own root instead of the
+    screen their day starts on.
+
+    Redirect rather than render the refusal: `/` is not a destination anybody
+    chose, it is where a logo or a bookmark lands you, and the honest answer to
+    "take me home" is that role's actual home.
+  */
+  const home = homeHrefFor(me.role);
+  // Gate on the permission the screen actually needs, not on where the role's
+  // nav points: `/` is in nobody's navigation, so comparing hrefs would send
+  // every role away and quietly delete §6.2 from the product.
+  const canSeeSnapshot = can(me.role, "job:read", undefined, me.level);
 
   useEffect(() => {
+    if (!canSeeSnapshot) {
+      router.replace(home);
+      return;
+    }
     let cancelled = false;
     getHomeSnapshot().then((result) => {
       if (!cancelled) setQuery(result);
@@ -49,7 +75,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canSeeSnapshot, home, router]);
 
   const today = new Date();
 
