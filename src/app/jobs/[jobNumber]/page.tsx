@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CircleCheck, Clock, Flag, MapPin, Package, Phone, ReceiptIndianRupee } from "lucide-react";
@@ -8,7 +8,9 @@ import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { Button } from "@/components/ui/button";
 import { AssetBody, CollapsedSection, DecisionBand, PartsBody, Section, SignOffBody, TimelineBody, WhereBody, type Tone } from "@/components/job/sections";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { assignJob, createInvoice, rescheduleJob, type Slot } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 import { getState } from "@/lib/data/store";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyText } from "@/components/shared/money-text";
@@ -62,23 +64,47 @@ export default function JobDetailPage({
   params: Promise<{ jobNumber: string }>;
 }) {
   const { jobNumber } = use(params);
-  const dispatch = useDispatch();
   const router = useRouter();
-  const storeState = useStoreState();
   const [query, setQuery] = useState<Query<JobDetail>>(loading());
   const [hideAmounts, setHideAmounts] = useState(false);
   /** Which inline picker is open — assignment, slot, or none. */
   const [picker, setPicker] = useState<"technician" | "slot" | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    getJobDetail(decodeURIComponent(jobNumber)).then((result) => {
-      if (!cancelled) setQuery(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [jobNumber, storeState]);
+  const reload = useCallback(() => {
+    void getJobDetail(decodeURIComponent(jobNumber)).then(setQuery);
+  }, [jobNumber]);
+  useEffect(reload, [reload]);
+
+  /*
+    Three writes, three in-flight states. Assigning must not disable the
+    Reschedule control, and neither should grey out Bill — they are separate
+    decisions a coordinator makes in any order.
+  */
+  const assign = useMutation(
+    useCallback(
+      async (id: string, technicianId: string) => {
+        const result = await assignJob(id, { primaryTechnicianId: technicianId });
+        if (result.ok) reload();
+        return result;
+      },
+      [reload],
+    ),
+  );
+  const move = useMutation(
+    useCallback(
+      async (id: string, body: { scheduledDate: string; slot: Slot; reason: string }) => {
+        const result = await rescheduleJob(id, body);
+        if (result.ok) reload();
+        return result;
+      },
+      [reload],
+    ),
+  );
+  const raise = useMutation(createInvoice);
+
+  /** Why the visit moved — FR-203. Required, so it is asked for, not invented. */
+  const [pendingSlot, setPendingSlot] = useState<Slot | null>(null);
+  const [reason, setReason] = useState("");
 
   const today = new Date();
   const showValue = can(CURRENT_USER.role, "price:view_selling");
@@ -86,21 +112,26 @@ export default function JobDetailPage({
     allowBillingWithoutSignoff: SEED_TENANT.toggles.allowBillingWithoutSignoff,
   };
 
-  function move(jobNumber: string, action: (id: string) => void) {
-    const match = getState().board.jobs.find(
-      (candidate) => candidate.jobNumber === jobNumber,
-    );
-    if (match) action(match.id);
-    setPicker(null);
-  }
-
-  function bill(job: JobDetail) {
-    const match = getState().board.jobs.find(
-      (candidate) => candidate.jobNumber === job.jobNumber,
-    );
-    if (!match) return;
-    dispatch({ type: "CREATE_INVOICE_FROM_JOB", jobId: match.id });
-    router.push("/money/invoice");
+  /*
+    The job carries its own id now. This used to look it up in the browser
+    store by number — which meant the page could only act on a job the store
+    happened to hold, and silently did nothing when it did not.
+  */
+  async function bill(job: JobDetail) {
+    const result = await raise.run({
+      jobId: job.id,
+      lines: [
+        {
+          description: `${job.serviceType} — ${job.jobNumber}`,
+          code: "9987",
+          kind: "service",
+          qty: 1,
+          ratePaise: job.valuePaise ?? 4_500_00,
+          ratePercent: 18,
+        },
+      ],
+    });
+    if (result?.ok) router.push("/money/invoice");
   }
 
   return (
@@ -110,6 +141,14 @@ export default function JobDetailPage({
       hideAmounts={hideAmounts}
       onToggleAmounts={() => setHideAmounts((v) => !v)}
     >
+      {[assign.error, move.error, raise.error].filter(Boolean).length > 0 ? (
+        <div className="space-y-2 p-4 pb-0 md:p-6 md:pb-0">
+          {assign.error ? <ErrorState error={assign.error} onRetry={assign.reset} /> : null}
+          {move.error ? <ErrorState error={move.error} onRetry={move.reset} /> : null}
+          {raise.error ? <ErrorState error={raise.error} onRetry={raise.reset} /> : null}
+        </div>
+      ) : null}
+
       {/*
         The container wraps the boundary, not the other way round, so a partial
         notice or an error aligns with the content it refers to instead of
@@ -414,16 +453,10 @@ export default function JobDetailPage({
                         }
                         selectedId={job.technician?.id ?? null}
                         onCancel={() => setPicker(null)}
-                        onPick={(person) =>
-                          move(job.jobNumber, (id) =>
-                            dispatch({
-                              type: "ASSIGN_JOB",
-                              jobId: id,
-                              technicianId: person.id,
-                              technicianName: person.name,
-                            }),
-                          )
-                        }
+                        onPick={async (person) => {
+                          await assign.run(job.id, person.id);
+                          setPicker(null);
+                        }}
                       />
                     ) : picker === "slot" ? (
                       <div className="mt-1 flex w-full flex-wrap items-center gap-1.5 rounded-xl bg-muted p-2">
@@ -434,18 +467,48 @@ export default function JobDetailPage({
                           <Chip
                             key={slot}
                             label={slot}
-                            selected={false}
-                            onClick={() =>
-                              move(job.jobNumber, (id) =>
-                                dispatch({
-                                  type: "RESCHEDULE_JOB",
-                                  jobId: id,
-                                  slot,
-                                }),
-                              )
-                            }
+                            selected={pendingSlot === slot}
+                            onClick={() => setPendingSlot(slot as Slot)}
                           />
                         ))}
+
+                        {/*
+                          FR-203: a moved visit needs a reason. The customer was
+                          told something, and a slot that changes with nothing
+                          recorded is the call nobody can account for later. The
+                          register requires it, so the screen asks rather than
+                          inventing one.
+                        */}
+                        {pendingSlot ? (
+                          <div className="mt-2 flex w-full flex-wrap items-center gap-2">
+                            <input
+                              autoFocus
+                              value={reason}
+                              onChange={(event) => setReason(event.target.value)}
+                              placeholder={`Why is it moving to ${pendingSlot}?`}
+                              aria-label="Reason for moving the visit"
+                              className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs"
+                            />
+                            <Button
+                              size="sm"
+                              disabled={reason.trim().length < 3 || move.pending}
+                              onClick={async () => {
+                                const result = await move.run(job.id, {
+                                  scheduledDate: new Date().toISOString().slice(0, 10),
+                                  slot: pendingSlot,
+                                  reason: reason.trim(),
+                                });
+                                if (result?.ok) {
+                                  setPendingSlot(null);
+                                  setReason("");
+                                  setPicker(null);
+                                }
+                              }}
+                            >
+                              Move
+                            </Button>
+                          </div>
+                        ) : null}
                         <Button
                           variant="ghost"
                           size="sm"

@@ -143,8 +143,14 @@ export const assignJob = (
   body: { primaryTechnicianId: string | null; helperIds?: string[] },
 ) => attempt(() => post<{ id: string }>(`/api/jobs/${id}/assign`, body));
 
-/** The slot is a closed list — a service day runs in three windows, not any string. */
-export type Slot = "9-1" | "1-5" | "5-8";
+/**
+ * A window, or an exact time.
+ *
+ * The day runs in three windows and most visits sit in one. An exact time is
+ * the one a customer was actually promised, and the board sorts it among the
+ * windows by its own hour — so `11:30` is as valid as `9-1`.
+ */
+export type Slot = "9-1" | "1-5" | "5-8" | `${number}:${number}`;
 
 export const rescheduleJob = (
   id: string,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -13,10 +13,13 @@ import { Input } from "@/components/ui/input";
 import { Field, WhyDisabled } from "@/components/shared/field";
 import { requiredName, validate } from "@/lib/validate";
 import { z } from "zod";
-import { SEED_TENANT, SEED_USERS } from "@/lib/data/fixtures/tenant";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
+import { getCustomers, type Customer } from "@/lib/data/customers";
+import { getBoard } from "@/lib/data/board";
+import { createJob } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 import { cn } from "@/lib/utils";
-import { peek } from "@/lib/data/series";
 
 /**
  * New job / work order — FR-106, FR-201, FR-203, FR-205, FR-207.
@@ -86,8 +89,30 @@ const JOB_FORM = z.object({
 
 export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
   const { fromLead } = prefill;
-  const dispatch = useDispatch();
-  const storeState = useStoreState();
+  const create = useMutation(createJob);
+
+  /*
+    Customers and technicians from the register.
+
+    The technician list came from `SEED_USERS` — a hardcoded fixture, so the
+    picker offered the same four names to every tenant and could never reflect
+    somebody joining or leaving. There is no people endpoint yet, so the board
+    supplies them: it already returns exactly the active technicians, which is
+    what this picker wants.
+  */
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [technicians, setTechnicians] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([getCustomers(), getBoard()]).then(([customerQuery, boardQuery]) => {
+      if (cancelled) return;
+      if (customerQuery.status === "ready") setCustomers([...customerQuery.data.customers]);
+      if (boardQuery.status === "ready") setTechnicians([...boardQuery.data.technicians]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const router = useRouter();
 
   /*
@@ -113,11 +138,10 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
     touched as ReadonlySet<"customer" | "site" | "service">,
   );
 
-  const technicians = SEED_USERS.filter(
-    (u) => u.role === "technician" && u.active,
-  );
-  const customers = storeState.customers;
   const sites = customers.find((entry) => entry.name === customer)?.sites ?? [];
+  const chosenCustomer = customers.find((entry) => entry.name === customer) ?? null;
+  const chosenSite =
+    sites.find((entry) => entry.locality === site) ?? (sites.length === 1 ? sites[0] : null);
   const today = new Date();
 
   function toggleHelper(id: string) {
@@ -377,26 +401,29 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
           </Card>
         </div>
 
+        {create.error ? (
+          <div className="mt-4 max-w-4xl">
+            <ErrorState error={create.error} onRetry={create.reset} />
+          </div>
+        ) : null}
+
         <div className="mt-4 flex max-w-4xl flex-wrap items-center gap-2">
           <Button
-            disabled={!check.ok}
-            onClick={() => {
-              const primary = technicians.find((t) => t.id === technician);
-              dispatch({
-                type: "CREATE_JOB",
-                customer,
-                locality: site,
+            disabled={!check.ok || !chosenCustomer || !chosenSite || create.pending}
+            onClick={async () => {
+              if (!chosenCustomer || !chosenSite) return;
+              const result = await create.run({
+                customerId: chosenCustomer.id,
+                // The site, not its locality — two sites can share one.
+                siteId: chosenSite.id,
                 serviceType: service,
+                scheduledDate: new Date().toISOString().slice(0, 10),
                 // The board's token, not the picker's label.
-                slot:
-                  SLOTS.find((option) => option.label === slot)?.token ??
-                  exactTime,
+                slot: SLOTS.find((option) => option.label === slot)?.token ?? exactTime,
                 priority: priority as "normal" | "urgent" | "breakdown",
-                technicianId: primary?.id ?? null,
-                technicianName: primary?.name ?? null,
-                fromLeadReference: fromLead,
+                primaryTechnicianId: technician || null,
               });
-              router.push("/today");
+              if (result?.ok) router.push("/today");
             }}
           >
             Create work order
@@ -414,10 +441,16 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
             its own row on a narrow screen — as an `ml-auto` span it could not
             shrink and pushed the form two pixels off a 360px display.
           */}
-          <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto sm:self-center tnum-id">
-            Will be numbered{" "}
-            {peek(storeState.series, SEED_TENANT.branches[0], "job", today)} ·{" "}
-            {SEED_TENANT.branches[0].name}
+          {/*
+            The number is issued on save, by the register.
+
+            This used to peek a browser counter to show it in advance. Two
+            coordinators raising a job at once would both be shown the same
+            number and only one would get it (FR-811), so the screen now says
+            where the number comes from instead of predicting it.
+          */}
+          <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto sm:self-center">
+            Numbered on save · {SEED_TENANT.branches[0].name}
           </span>
         </div>
       </div>
