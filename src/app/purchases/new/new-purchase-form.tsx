@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Info, ShieldAlert } from "lucide-react";
@@ -18,15 +18,11 @@ import { cn } from "@/lib/utils";
 import { requiredName, rupees, validate } from "@/lib/validate";
 import { SLABS } from "@/lib/data/rates";
 import { msmedApplies } from "@/lib/data/vendors";
-import {
-  TDS_SECTIONS,
-  TDS_SECTION_LABEL,
-  adviseTds,
-  billTotals,
-  reverseChargeFor,
-  suggestSection,
-} from "@/lib/data/purchases";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { TDS_SECTIONS, TDS_SECTION_LABEL, adviseTds, billTotals, getVendorBills, reverseChargeFor, suggestSection, type PurchaseBill } from "@/lib/data/purchases";
+import { getVendors, type Vendor } from "@/lib/data/vendors";
+import { recordPurchaseBill } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * Record a vendor bill — FR-705, FR-807, FR-906, and the start of FR-905's clock.
@@ -50,8 +46,27 @@ const PURCHASE_FORM = z.object({
 });
 
 export function NewPurchaseForm() {
-  const state = useStoreState();
-  const dispatch = useDispatch();
+  const record = useMutation(recordPurchaseBill);
+
+  /*
+    From the register, not the browser. Reverse charge and the 43B(h) limit are
+    properties of the vendor — their GSTIN decides whether §9(4) applies, and a
+    written agreement decides 15 days or 45. A stale local copy tells somebody
+    the wrong date to pay by.
+  */
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [bills, setBills] = useState<PurchaseBill[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([getVendors(), getVendorBills()]).then(([vendorQuery, billQuery]) => {
+      if (cancelled) return;
+      if (vendorQuery.status === "ready") setVendors([...vendorQuery.data.vendors]);
+      if (billQuery.status === "ready") setBills(billQuery.data.bills);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const router = useRouter();
 
   const [vendorId, setVendorId] = useState("");
@@ -84,7 +99,7 @@ export function NewPurchaseForm() {
     >,
   );
 
-  const vendor = state.vendors.find((entry) => entry.id === vendorId) ?? null;
+  const vendor = vendors.find((entry) => entry.id === vendorId) ?? null;
   const taxablePaise = Math.round(Number(taxable.replace(/,/g, "")) * 100) || 0;
 
   /* Proposed, never applied — the reader confirms both. */
@@ -92,7 +107,15 @@ export function NewPurchaseForm() {
   const reverseCharge = reverseChargeConfirmed ?? rcAdvice?.applies ?? false;
   const section = tdsSection ?? suggestSection(description);
 
-  const paidThisYear = state.purchases
+  /*
+    What this vendor has already been paid, from the register.
+
+    §194C's ₹1,00,000 annual threshold is cumulative, so the answer to "does
+    TDS apply to this bill" depends on every earlier bill. Reading a local
+    array meant a second machine's entries were invisible and the form advised
+    "no TDS" on a bill that crossed the limit.
+  */
+  const paidThisYear = bills
     .filter((bill) => bill.vendorId === vendorId)
     .reduce((sum, bill) => sum + bill.taxablePaise, 0);
 
@@ -166,7 +189,7 @@ export function NewPurchaseForm() {
                     )}
                   >
                     <option value="">Pick a vendor</option>
-                    {state.vendors.map((entry) => (
+                    {vendors.map((entry) => (
                       <option key={entry.id} value={entry.id}>
                         {entry.name}
                       </option>
@@ -355,13 +378,24 @@ export function NewPurchaseForm() {
                 </p>
               ) : null}
 
+              {record.error ? (
+                <div className="pb-2">
+                  <ErrorState error={record.error} onRetry={record.reset} />
+                </div>
+              ) : null}
+
               <div className="space-y-2 pt-1">
                 <Button
                   className="w-full"
-                  disabled={!check.ok}
-                  onClick={() => {
-                    dispatch({
-                      type: "RECORD_PURCHASE",
+                  disabled={!check.ok || record.pending}
+                  onClick={async () => {
+                    /*
+                      `tdsPaise` is not sent. The register recomputes the
+                      deduction from the section, the amount and the vendor —
+                      a screen that posts its own figure is a second opinion on
+                      a statutory number, and the two would eventually differ.
+                    */
+                    const result = await record.run({
                       vendorId,
                       vendorBillNumber: vendorBillNumber.trim(),
                       billDate,
@@ -370,9 +404,8 @@ export function NewPurchaseForm() {
                       gstPercent,
                       reverseCharge,
                       tdsSection: section,
-                      tdsPaise,
                     });
-                    router.push("/money");
+                    if (result?.ok) router.push("/money");
                   }}
                 >
                   Record the bill

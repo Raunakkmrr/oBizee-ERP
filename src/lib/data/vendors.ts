@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { apiFetch } from "../api/client";
+import { defineQuery } from "./source";
 import { MSME_CLASSES } from "./money";
 
 /**
@@ -61,7 +63,25 @@ export const vendorSchema = z.object({
 });
 
 export type Vendor = z.infer<typeof vendorSchema>;
-export const vendorsSchema = z.array(vendorSchema);
+
+export const vendorsSchema = z.object({ vendors: z.array(vendorSchema) });
+export type VendorsData = z.infer<typeof vendorsSchema>;
+
+/**
+ * The vendor register.
+ *
+ * Needed by every screen that records a bill, because reverse charge and the
+ * MSMED clock are properties of the *vendor*, not of the bill: whether §9(4)
+ * applies is decided by their GSTIN, and 15 days or 45 by whether there is a
+ * written agreement. A form that guesses either has told somebody the wrong
+ * date to pay by.
+ */
+export const getVendors = defineQuery<void, VendorsData>({
+  key: "vendors.list",
+  schema: vendorsSchema,
+  api: async () => apiFetch<VendorsData>("/api/vendors"),
+  fixture: async () => ({ raw: { vendors: (await import("./store")).getState().vendors } }),
+});
 
 /** A vendor with no GSTIN is unregistered — the reverse-charge trigger. */
 export function isUnregistered(vendor: Vendor): boolean {
