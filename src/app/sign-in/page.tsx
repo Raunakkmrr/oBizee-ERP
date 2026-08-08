@@ -38,9 +38,21 @@ export default function SignInPage() {
   async function send() {
     setBusy(true);
     setProblem(null);
-    await requestOtp(phone);
-    // Always advances, whatever the number. The API deliberately does not say
-    // whether it exists, and neither does this.
+    const result = await requestOtp(phone);
+    /*
+      Advances whatever the *number* is — the API deliberately does not say
+      whether it exists, and neither does this.
+
+      A refusal is a different thing and stops here. Being rate limited or
+      typing something that is not a number says nothing about who works here,
+      and advancing anyway would leave the reader watching a phone for a
+      message that was never sent.
+    */
+    if (!result.ok) {
+      setProblem(result.message);
+      setBusy(false);
+      return;
+    }
     setSent(true);
     setBusy(false);
   }

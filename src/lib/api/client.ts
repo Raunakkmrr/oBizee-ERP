@@ -151,12 +151,34 @@ export async function signInWithPassword(
   return { ok: true };
 }
 
-export async function requestOtp(phone: string): Promise<void> {
-  await fetch(`${BASE}/auth/otp/request`, {
+/**
+ * Ask for a code.
+ *
+ * The success answer is deliberately the same whether or not the number is on
+ * file — that is what stops the endpoint being a directory of who works here,
+ * and the screen advances either way.
+ *
+ * A refusal is different and must be shown. This used to return `void` and
+ * ignore the response entirely, so once the endpoint gained a rate limit a
+ * blocked request advanced to the code box and left somebody waiting for an
+ * SMS that was never sent. Neither a 429 nor a malformed-number 400 says
+ * anything about whether the account exists, so both are safe to surface.
+ */
+export async function requestOtp(
+  phone: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const response = await fetch(`${BASE}/auth/otp/request`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ phone }),
   });
+  if (response.ok) return { ok: true };
+
+  const body = (await response.json().catch(() => null)) as ApiFailure | null;
+  return {
+    ok: false,
+    message: body?.error ?? "Could not send a code just now",
+  };
 }
 
 export async function signInWithOtp(
