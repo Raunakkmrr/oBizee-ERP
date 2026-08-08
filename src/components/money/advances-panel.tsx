@@ -8,15 +8,12 @@ import { MoneyText } from "@/components/shared/money-text";
 import { ROW_TR } from "@/components/shared/controls";
 import { asPaise } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import {
-  advanceTax,
-  openAdvances,
-  receivedWord,
-  unadjustedTaxPaise,
-  type Advance,
-} from "@/lib/data/advances";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
-import { latestInvoice } from "@/lib/data/store";
+import { advanceTax, getAdvances, getSettlementTargets, openAdvances, receivedWord, type AdvanceRow, type AdvancesData, type SettlementTarget } from "@/lib/data/advances";
+import { useCallback, useEffect, useState } from "react";
+import { loading, type Query } from "@/lib/data/result";
+import { adjustAdvance } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * Advances received - FR-810.
@@ -32,18 +29,50 @@ import { latestInvoice } from "@/lib/data/store";
  * s.31(3)(d) failure this exists to prevent.
  */
 export function AdvancesPanel() {
-  const state = useStoreState();
-  const dispatch = useDispatch();
+  const [query, setQuery] = useState<Query<AdvancesData>>(loading());
+  const [targets, setTargets] = useState<SettlementTarget[]>([]);
 
-  const advances = state.advances;
+  const reload = useCallback(() => {
+    void getAdvances().then(setQuery);
+    void getSettlementTargets().then((result) => {
+      if (result.status === "ready") setTargets(result.data.invoices);
+    });
+  }, []);
+  useEffect(reload, [reload]);
+
+  const settle = useMutation(
+    useCallback(
+      async (id: string, invoiceId: string) => {
+        const result = await adjustAdvance(id, invoiceId);
+        // The voucher moves from open to closed and the tax-out figure with it.
+        if (result.ok) reload();
+        return result;
+      },
+      [reload],
+    ),
+  );
+
+  const advances = query.status === "ready" ? query.data.advances : [];
   const open = openAdvances(advances);
   const closed = advances.filter((advance) => advance.status === "ADJUSTED");
-  const taxOut = unadjustedTaxPaise(advances);
+  const taxOut = query.status === "ready" ? query.data.unadjustedTaxPaise : 0;
 
-  /** The most recent invoice - the only thing an advance can be adjusted into. */
-  const newestInvoice = latestInvoice(state);
+  /*
+    The invoices *this customer* has. The panel used to offer whichever
+    invoice was newest in the whole register, which is how an advance could be
+    closed against a different customer's bill entirely — the register now
+    refuses that, and this stops it being offered in the first place.
+  */
+  const targetsFor = (customerId: string) =>
+    targets.filter((invoice) => invoice.customerId === customerId);
 
   return (
+    <>
+      {settle.error ? (
+        <div className="mb-3">
+          <ErrorState error={settle.error} onRetry={settle.reset} />
+        </div>
+      ) : null}
     <Panel
       title="Advances received"
       icon={HandCoins}
@@ -92,34 +121,38 @@ export function AdvancesPanel() {
             <AdvanceRow
               key={advance.id}
               advance={advance}
-              invoiceNumber={newestInvoice?.number ?? null}
-              onAdjust={() => {
-                if (!newestInvoice) return;
-                dispatch({
-                  type: "ADJUST_ADVANCE",
-                  voucherNumber: advance.voucherNumber,
-                  invoiceNumber: newestInvoice.number,
-                });
-              }}
+              targets={targetsFor(advance.customerId)}
+              busy={settle.pending}
+              onAdjust={(invoiceId) => void settle.run(advance.id, invoiceId)}
             />
           ))}
         </>
       )}
     </Panel>
+    </>
   );
 }
 
 function AdvanceRow({
   advance,
-  invoiceNumber,
+  targets,
+  busy,
   onAdjust,
 }: {
-  advance: Advance;
-  invoiceNumber: string | null;
-  onAdjust: () => void;
+  advance: AdvanceRow;
+  /** This customer's own invoices — never the register's newest. */
+  targets: SettlementTarget[];
+  busy: boolean;
+  onAdjust: (invoiceId: string) => void;
 }) {
   const tax = advanceTax(advance.receiptPaise, advance.ratePercent, advance.head);
   const adjusted = advance.status === "ADJUSTED";
+  // Defaults to the customer's newest bill, which is usually the right one.
+  const [chosen, setChosen] = useState("");
+  const picked = targets.some((invoice) => invoice.id === chosen)
+    ? chosen
+    : (targets[targets.length - 1]?.id ?? "");
+  const setPicked = setChosen;
 
   return (
     <div
@@ -157,14 +190,39 @@ function AdvanceRow({
         <span className="shrink-0 rounded-md bg-success-bg px-2 py-0.5 text-xs font-medium text-success">
           Adjusted &middot; {advance.adjustedByInvoice}
         </span>
-      ) : invoiceNumber ? (
-        <Button size="sm" variant="outline" onClick={onAdjust}>
-          Adjust into {invoiceNumber}
-        </Button>
+      ) : targets.length > 0 ? (
+        /*
+          Which invoice, chosen rather than assumed. One is preselected because
+          that is the common case, but the list is this customer's own bills —
+          the panel used to adjust into whichever invoice was newest anywhere
+          in the register.
+        */
+        <div className="flex shrink-0 items-center gap-2">
+          <select
+            aria-label={`Invoice to settle ${advance.voucherNumber} into`}
+            value={picked}
+            onChange={(event) => setPicked(event.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          >
+            {targets.map((invoice) => (
+              <option key={invoice.id} value={invoice.id}>
+                {invoice.number}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || !picked}
+            onClick={() => onAdjust(picked)}
+          >
+            Adjust
+          </Button>
+        </div>
       ) : (
         // Never a dead control: the reason it cannot be adjusted is stated.
         <span className="shrink-0 text-xs text-muted-foreground">
-          Nothing to adjust into yet - raise an invoice first
+          Nothing to adjust into yet — raise an invoice for {advance.customer} first
         </span>
       )}
     </div>

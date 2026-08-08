@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { apiFetch } from "../api/client";
+import { defineQuery } from "./source";
 
 /**
  * Advances received, and the Receipt Voucher that has to accompany them —
@@ -41,6 +43,60 @@ export const advanceSchema = z.object({
 });
 
 export type Advance = z.infer<typeof advanceSchema>;
+
+/** Just enough of an invoice to offer it as the one an advance settles into. */
+const settlementTargetSchema = z.object({
+  id: z.string(),
+  number: z.string(),
+  customerId: z.string(),
+  grandTotalPaise: z.number().int(),
+});
+
+export type SettlementTarget = z.infer<typeof settlementTargetSchema>;
+
+/** The register's row: the voucher, plus who it came from. */
+export const advanceRowSchema = advanceSchema.extend({ customerId: z.string() });
+export type AdvanceRow = z.infer<typeof advanceRowSchema>;
+
+export const advancesSchema = z.object({
+  advances: z.array(advanceRowSchema),
+  /**
+   * Tax already paid on work not yet done — real money out of the bank against
+   * a service still owed. Nobody reading "who owes us" would otherwise see it,
+   * which is what makes a cash position flattering rather than true.
+   */
+  unadjustedTaxPaise: z.number().int().nonnegative(),
+});
+
+export type AdvancesData = z.infer<typeof advancesSchema>;
+
+export const getAdvances = defineQuery<void, AdvancesData>({
+  key: "advances.list",
+  schema: advancesSchema,
+  api: async () => apiFetch<AdvancesData>("/api/advances"),
+  fixture: async () => {
+    const state = (await import("./store")).getState();
+    return { raw: { advances: state.advances, unadjustedTaxPaise: 0 } };
+  },
+});
+
+export const settlementTargetsSchema = z.object({
+  invoices: z.array(settlementTargetSchema),
+});
+
+/**
+ * The invoices an advance could be settled into.
+ *
+ * Fetched so the panel can offer **that customer's own** bills. It used to
+ * offer whichever invoice was newest in the register, which is how an advance
+ * came to be closable against a different customer entirely.
+ */
+export const getSettlementTargets = defineQuery<void, { invoices: SettlementTarget[] }>({
+  key: "invoices.settlement-targets",
+  schema: settlementTargetsSchema,
+  api: async () => apiFetch<{ invoices: SettlementTarget[] }>("/api/invoices"),
+  fixture: async () => ({ raw: { invoices: (await import("./store")).getState().invoices } }),
+});
 
 export type AdvanceTax = {
   /** The taxable value hiding inside the receipt. */
@@ -117,7 +173,7 @@ export function receiptVoucherNumber(seq: number, now: Date): string {
  * carrying tax already paid against a service still owed — the position an
  * auditor asks about.
  */
-export function openAdvances(advances: readonly Advance[]): Advance[] {
+export function openAdvances<T extends Advance>(advances: readonly T[]): T[] {
   return advances
     .filter((advance) => advance.status === "OPEN")
     .slice()
