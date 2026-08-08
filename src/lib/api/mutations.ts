@@ -212,8 +212,20 @@ export const recordAdvance = (body: {
   receivedOn: string;
 }) => attempt(() => post<{ id: string; number?: string }>("/api/advances", body));
 
-export const adjustAdvance = (id: string, body: Record<string, unknown>) =>
-  attempt(() => post<{ id: string }>(`/api/advances/${id}/adjust`, body));
+/**
+ * Close an advance into the invoice it was taken for.
+ *
+ * By id, not by voucher and invoice *number*. Numbers are what people read;
+ * matching on them here would make a renumbering — or a second branch's
+ * identical-looking series — settle the wrong voucher against the wrong bill,
+ * and the route refuses anything already adjusted rather than double-counting
+ * the credit.
+ */
+export const adjustAdvance = (id: string, invoiceId: string) =>
+  attempt(() => post<{ id: string; voucherNumber: string }>(
+    `/api/advances/${id}/adjust`,
+    { invoiceId },
+  ));
 
 /** FR-904 — what was said, and any date that was promised. */
 export const logCollectionContact = (

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { apiFetch } from "../api/client";
+import { defineQuery } from "./source";
 import { isUnregistered, msmedApplies, type Vendor } from "./vendors";
 
 /**
@@ -179,10 +181,63 @@ export const purchaseBillSchema = z.object({
   /** What the vendor is actually paid: bill total, less TDS. */
   payablePaise: z.number().int(),
   status: z.enum(["UNPAID", "PAID"]),
+  /**
+   * The §43B(h) countdown, computed by the register.
+   *
+   * Sent rather than derived here: the clock depends on the vendor's Udyam
+   * activity and written-agreement status, and a screen that recomputes it
+   * needs the whole vendor list to render one row — which is how the panel
+   * ended up reading the browser store while writing to the API.
+   *
+   * Optional so the fixture rows, which carry no clock, still parse.
+   */
+  clock: z
+    .union([
+      z.object({ kind: z.literal("counting"), day: z.number(), limit: z.union([z.literal(15), z.literal(45)]), daysLeft: z.number() }),
+      z.object({ kind: z.literal("lapsed"), day: z.number(), limit: z.union([z.literal(15), z.literal(45)]) }),
+      z.object({ kind: z.literal("not_applicable"), reason: z.string() }),
+      z.object({ kind: z.literal("paid") }),
+    ])
+    .nullable()
+    .optional(),
 });
 
 export type PurchaseBill = z.infer<typeof purchaseBillSchema>;
 export const purchaseBillsSchema = z.array(purchaseBillSchema);
+
+/**
+ * Every vendor bill the office has entered, with the §43B(h) clock on each.
+ *
+ * The two money figures are computed by the register rather than here. They are
+ * **never summed**: money on day 38 of 45 is saved by paying today, money past
+ * the limit is not and no payment brings the deduction back. Adding them
+ * understates the loss and overstates what can still be rescued, on the one
+ * screen where that distinction is the whole point — so the API returns them
+ * apart and they stay apart.
+ */
+export const vendorBillsSchema = z.object({
+  bills: z.array(purchaseBillSchema),
+  atRiskPaise: z.number().int().nonnegative(),
+  lostPaise: z.number().int().nonnegative(),
+});
+
+export type VendorBills = z.infer<typeof vendorBillsSchema>;
+
+export const getVendorBills = defineQuery<void, VendorBills>({
+  key: "vendors.bills",
+  schema: vendorBillsSchema,
+  api: async () => apiFetch<VendorBills>("/api/vendors/bills"),
+  fixture: async () => {
+    const state = (await import("./store")).getState();
+    return {
+      raw: {
+        bills: state.purchases,
+        atRiskPaise: 0,
+        lostPaise: 0,
+      },
+    };
+  },
+});
 
 /**
  * The arithmetic of one bill, in one place.

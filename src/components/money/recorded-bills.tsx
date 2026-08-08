@@ -8,12 +8,13 @@ import { MoneyText } from "@/components/shared/money-text";
 import { ROW_TR } from "@/components/shared/controls";
 import { asPaise } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import {
-  clockFor,
-  deductionAtRiskPaise,
-  deductionLostPaise,
-} from "@/lib/data/purchases";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+
+import { useCallback, useEffect, useState } from "react";
+import { getVendorBills, type VendorBills } from "@/lib/data/purchases";
+import { loading, type Query } from "@/lib/data/result";
+import { payPurchaseBill } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * Vendor bills recorded in this build — FR-705, and FR-905 on real data.
@@ -27,13 +28,39 @@ import { useDispatch, useStoreState } from "@/lib/data/use-store";
  * the ageing view, these are what the office actually entered.
  */
 export function RecordedBills() {
-  const state = useStoreState();
-  const dispatch = useDispatch();
-  const now = new Date();
+  /*
+    Read from the register, not the browser.
 
-  const bills = state.purchases;
-  const atRisk = deductionAtRiskPaise(bills, state.vendors, now);
-  const lost = deductionLostPaise(bills, state.vendors, now);
+    Marking a bill paid now goes to the API, and a panel still reading a local
+    array would leave the row on screen with its §43B(h) clock running against
+    a bill that was settled — the exact contradiction this panel exists to
+    prevent.
+
+    The two deduction figures come from the API for the same reason: they are
+    computed from the vendors' Udyam activity, and computing them twice is two
+    chances to disagree about how much is already lost.
+  */
+  const [query, setQuery] = useState<Query<VendorBills>>(loading());
+  const reload = useCallback(() => {
+    void getVendorBills().then(setQuery);
+  }, []);
+  useEffect(reload, [reload]);
+
+  // Refetch after settling: the row moves to PAID and both totals change.
+  const pay = useMutation(
+    useCallback(
+      async (id: string, body: { paidOn: string }) => {
+        const result = await payPurchaseBill(id, body);
+        if (result.ok) reload();
+        return result;
+      },
+      [reload],
+    ),
+  );
+
+  const bills = query.status === "ready" ? query.data.bills : [];
+  const atRisk = query.status === "ready" ? query.data.atRiskPaise : 0;
+  const lost = query.status === "ready" ? query.data.lostPaise : 0;
 
   return (
     <Panel
@@ -53,6 +80,11 @@ export function RecordedBills() {
       }
       flush
     >
+      {pay.error ? (
+        <div className="p-4">
+          <ErrorState error={pay.error} onRetry={pay.reset} />
+        </div>
+      ) : null}
       {bills.length === 0 ? (
         <p className="p-4 text-sm text-muted-foreground">
           Nothing recorded yet. A bill entered here starts its own §43B(h) clock.
@@ -83,8 +115,8 @@ export function RecordedBills() {
           ) : null}
 
           {bills.map((bill) => {
-            const vendor = state.vendors.find((entry) => entry.id === bill.vendorId);
-            const clock = vendor ? clockFor(bill, vendor, now) : null;
+            // Computed by the register — see `purchaseBillSchema.clock`.
+            const clock = bill.clock ?? null;
 
             return (
               <div
@@ -147,8 +179,14 @@ export function RecordedBills() {
                     size="sm"
                     variant="outline"
                     className="shrink-0"
+                    disabled={pay.pending}
                     onClick={() =>
-                      dispatch({ type: "MARK_PURCHASE_PAID", billId: bill.id })
+                      void pay.run(bill.id, {
+                        // TODO(FR-905): ask when it was paid. The API takes the
+                        // real date and against a 15-day MSMED clock the
+                        // difference between Friday and Monday is the answer.
+                        paidOn: new Date().toISOString().slice(0, 10),
+                      })
                     }
                   >
                     Mark paid
