@@ -15,7 +15,10 @@ import { cn } from "@/lib/utils";
 import { loading, type Query } from "@/lib/data/result";
 import { getBoard, restOfDay, triageJobs, type Board, type JobRow, type Technician } from "@/lib/data/board";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
-import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
+import { useCurrentUser, useStoreState } from "@/lib/data/use-store";
+import { assignJob } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 import { can } from "@/lib/roles";
 
 /**
@@ -53,7 +56,7 @@ const VIEWS = ["Today", "Tomorrow", "This week"] as const;
 
 export default function TodayBoardPage() {
   const [query, setQuery] = useState<Query<Board>>(loading());
-  const dispatch = useDispatch();
+  const assign = useMutation(assignJob);
   // Subscribing keeps this screen live when another surface writes.
   const storeState = useStoreState();
   const [view, setView] = useState<(typeof VIEWS)[number]>("Today");
@@ -87,14 +90,15 @@ export default function TodayBoardPage() {
   const triage = useMemo(() => (board ? triageJobs(board.jobs) : []), [board]);
   const rest = useMemo(() => (board ? restOfDay(board.jobs) : []), [board]);
 
-  function handleAssign(job: JobRow, technician: Technician) {
-    dispatch({
-      type: "ASSIGN_JOB",
-      jobId: job.id,
-      technicianId: technician.id,
-      technicianName: technician.name,
-    });
-    void getBoard().then(setQuery);
+  /*
+    Refetch rather than patch the row in place. Assigning changes more than the
+    name on one card — the unassigned counter, the technician's job count and
+    his localities all move with it, and a locally patched row would leave the
+    counters describing a board that no longer exists.
+  */
+  async function handleAssign(job: JobRow, technician: Technician) {
+    const result = await assign.run(job.id, { primaryTechnicianId: technician.id });
+    if (result?.ok) setQuery(await getBoard());
   }
 
   return (
@@ -105,6 +109,11 @@ export default function TodayBoardPage() {
       hideAmounts={hideAmounts}
       onToggleAmounts={() => setHideAmounts((v) => !v)}
     >
+      {assign.error ? (
+        <div className="px-3 pt-3 lg:px-4">
+          <ErrorState error={assign.error} onRetry={assign.reset} />
+        </div>
+      ) : null}
       {/* Date + view bar, 48px (§6.4.1). */}
       <div className="flex h-12 shrink-0 items-center gap-2 px-3 lg:px-4">
         {/*
@@ -228,6 +237,7 @@ export default function TodayBoardPage() {
                       technicians={data.technicians}
                       canAssign={canAssign}
                       onAssign={handleAssign}
+                      busy={assign.pending}
                     />
                   ))}
                 </div>

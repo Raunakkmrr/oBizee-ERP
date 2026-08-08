@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Info } from "lucide-react";
@@ -16,9 +16,11 @@ import { MoneyText } from "@/components/shared/money-text";
 import { requiredName, rupees, validate } from "@/lib/validate";
 import { asPaise } from "@/lib/money";
 import { advanceTax } from "@/lib/data/advances";
-import { peek } from "@/lib/data/series";
-import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { getCustomers, type Customer } from "@/lib/data/customers";
+import { recordAdvance } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
+import { cn } from "@/lib/utils";
 
 /**
  * Record an advance - FR-810.
@@ -38,9 +40,28 @@ const ADVANCE_FORM = z.object({
 });
 
 export function RecordAdvanceForm() {
-  const dispatch = useDispatch();
   const router = useRouter();
-  const state = useStoreState();
+  const record = useMutation(recordAdvance);
+
+  /*
+    The picker is loaded from the register, not typed.
+
+    This field used to be free text, which meant an advance could be recorded
+    against a name that matched no customer — and an advance that cannot be
+    adjusted against that customer's invoice is money the ledger cannot
+    explain. §31(3)(d) makes the receipt a document in its own right; it has
+    to point at somebody real.
+  */
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getCustomers().then((query) => {
+      if (!cancelled && query.status === "ready") setCustomers(query.data.customers);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [customer, setCustomer] = useState("");
   const [amount, setAmount] = useState("");
@@ -61,16 +82,14 @@ export function RecordAdvanceForm() {
 
   const today = new Date();
   /*
-    Peeked from the same series the reducer will issue from, rather than
-    formatted independently. Showing one number and taking another is how a
-    statutory series grows a hole (FR-811).
+    The voucher number is no longer previewed.
+
+    It used to be peeked from a browser counter so the screen could show it
+    before saving. The number is issued by `next_in_series()` on the server —
+    showing one and taking another is exactly how a statutory series grows a
+    hole (FR-811), and a preview that two laptops disagree about is worse than
+    no preview at all.
   */
-  const nextVoucher = peek(
-    state.series,
-    SEED_TENANT.branches[0],
-    "receipt_voucher",
-    today,
-  );
 
   return (
     <AppShell today={today} freshness={{ kind: "fresh", at: today }}>
@@ -93,19 +112,44 @@ export function RecordAdvanceForm() {
           description="Money in before the work. GST falls due on receipt, so this issues a Receipt Voucher."
         />
 
+        {record.error ? (
+          <div className="mb-4 max-w-4xl">
+            <ErrorState error={record.error} onRetry={record.reset} />
+          </div>
+        ) : null}
+
         <div className="grid max-w-4xl gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">What came in</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field
-                label="Customer"
-                value={customer}
-                onChange={setCustomer}
-                onBlur={() => touch("customer")}
-                error={check.errors.customer}
-              />
+              <div className="space-y-1.5">
+                <label htmlFor="advance-customer" className="text-sm font-medium">
+                  Customer
+                </label>
+                <select
+                  id="advance-customer"
+                  value={customer}
+                  onChange={(event) => setCustomer(event.target.value)}
+                  onBlur={() => touch("customer")}
+                  aria-invalid={check.errors.customer !== undefined}
+                  className={cn(
+                    "h-9 w-full rounded-md border border-input bg-background px-2 text-sm",
+                    check.errors.customer && "border-destructive",
+                  )}
+                >
+                  <option value="">Pick a customer</option>
+                  {customers.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+                {check.errors.customer ? (
+                  <p className="text-xs text-destructive">{check.errors.customer}</p>
+                ) : null}
+              </div>
               <Field
                 label="Amount received (INR)"
                 inputMode="numeric"
@@ -152,8 +196,10 @@ export function RecordAdvanceForm() {
                   found at filing.
                 */}
                 <span>
-                  Receipt Voucher <strong className="tnum-id">{nextVoucher}</strong>{" "}
-                  - a separate series from your invoices
+                  A <strong>Receipt Voucher</strong> is issued on save, from a
+                  series separate from your invoices. The number comes from the
+                  register itself, so two people recording at once cannot both
+                  take it.
                 </span>
               </p>
 
@@ -202,19 +248,22 @@ export function RecordAdvanceForm() {
 
         <div className="mt-4 flex max-w-4xl flex-wrap items-center gap-2">
           <Button
-            disabled={!check.ok}
-            onClick={() => {
-              dispatch({
-                type: "RECORD_ADVANCE",
-                customer,
+            disabled={!check.ok || record.pending}
+            onClick={async () => {
+              const result = await record.run({
+                customerId: customer,
                 receiptPaise,
-                head,
+                // The service rate. The head (CGST+SGST or IGST) is derived
+                // server-side from place of supply rather than sent, so the
+                // screen cannot disagree with the register about it.
+                ratePercent: 18,
+                receivedOn: today.toISOString().slice(0, 10),
                 contractId: null,
               });
-              router.push("/money");
+              if (result?.ok) router.push("/money");
             }}
           >
-            Record advance &amp; issue voucher
+            {record.pending ? "Recording…" : "Record advance & issue voucher"}
           </Button>
           <Button variant="outline" render={<Link href="/money" />} nativeButton={false}>
             Cancel

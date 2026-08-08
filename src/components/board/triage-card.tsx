@@ -48,12 +48,15 @@ export function TriageCard({
   reason,
   technicians,
   canAssign,
+  busy,
   onAssign,
 }: {
   job: JobRow;
   reason: TriageReason;
   technicians: readonly Technician[];
   canAssign: boolean;
+  /** A write is in flight; a second click would assign twice. */
+  busy: boolean;
   onAssign: (job: JobRow, tech: Technician) => void;
 }) {
   // The technician's number lives on the user record, not the board row —
@@ -126,6 +129,7 @@ export function TriageCard({
             candidates={candidates}
             recommendedId={recommendedId}
             canAssign={canAssign}
+            busy={busy}
             onAssign={onAssign}
           />
         ) : null}
@@ -193,12 +197,15 @@ function AssignRow({
   candidates,
   recommendedId,
   canAssign,
+  busy,
   onAssign,
 }: {
   job: JobRow;
   candidates: ReturnType<typeof assignCandidates>;
   recommendedId: string | null;
   canAssign: boolean;
+  /** A write is in flight; a second click would assign twice. */
+  busy: boolean;
   onAssign: (job: JobRow, tech: Technician) => void;
 }) {
   if (!canAssign) {
@@ -256,7 +263,9 @@ function AssignRow({
               key={tech.id}
               type="button"
               onClick={() => onAssign(job, tech)}
+              disabled={busy}
               className={cn(
+                busy && "pointer-events-none opacity-60",
                 "rounded-full px-2.5 py-1 text-xs transition-all duration-200",
                 "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
                 recommended
