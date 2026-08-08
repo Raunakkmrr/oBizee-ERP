@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Info, Plus, Trash2 } from "lucide-react";
@@ -22,7 +22,10 @@ import { STATE_BY_CODE } from "@/lib/data/pincode";
 import { computeTotals, derivePlaceOfSupply, type InvoiceLine } from "@/lib/tax";
 import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { billingIdentityFor } from "@/lib/data/customers";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { getCustomers, type Customer } from "@/lib/data/customers";
+import { createInvoice } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * An invoice typed by hand — the third way in, and deliberately the least
@@ -72,16 +75,57 @@ const ADHOC_FORM = z.object({
 });
 
 export function AdhocInvoiceForm() {
-  const state = useStoreState();
-  const dispatch = useDispatch();
   const router = useRouter();
+  const raise = useMutation(createInvoice);
 
-  const [customer, setCustomer] = useState("");
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getCustomers().then((query) => {
+      if (!cancelled && query.status === "ready") setCustomers(query.data.customers);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /*
+    A customer id and a site id, not a name.
+
+    The picker used to carry `entry.name` and the billing identity was looked
+    up by matching it — two customers with the same name settle on whichever
+    the list found first, which is the name-join the schema replaced with a
+    foreign key.
+
+    The **site** matters more here than anywhere else on this screen. Place of
+    supply comes from the site's state (FR-802), so a customer with a plant in
+    Delhi and one in Nagpur has two different tax heads, and an invoice raised
+    without saying which one is a guess at whether this is CGST+SGST or IGST.
+  */
+  const [customerId, setCustomerId] = useState("");
+  const [pickedSiteId, setPickedSiteId] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([emptyLine(1)]);
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
 
   const branch = SEED_TENANT.branches[0];
-  const billTo = customer ? billingIdentityFor(state.customers, customer) : null;
+  const chosen = customers.find((entry) => entry.id === customerId) ?? null;
+  const sites = chosen?.sites ?? [];
+
+  /*
+    One site is not a choice; more than one is, and it has to be made.
+
+    Derived rather than pushed into state by an effect — an effect would render
+    once with the wrong site and correct itself, and on this screen the wrong
+    site is the wrong tax head.
+  */
+  const siteId =
+    sites.length === 1
+      ? sites[0]!.id
+      : sites.some((entry) => entry.id === pickedSiteId)
+        ? pickedSiteId
+        : "";
+  const site = sites.find((entry) => entry.id === siteId) ?? null;
+  const billTo = chosen ? billingIdentityFor(customers, chosen.name, site?.label ?? null) : null;
 
   /* Only lines that are actually filled in count toward the total. */
   const usable: InvoiceLine[] = lines
@@ -101,7 +145,8 @@ export function AdhocInvoiceForm() {
   const check = validate(
     ADHOC_FORM,
     {
-      customer,
+      // The validator asks "has one been chosen"; the id answers that.
+      customer: customerId,
       lines: usable.map((line) => ({
         description: line.description,
         code: line.code,
@@ -161,8 +206,8 @@ export function AdhocInvoiceForm() {
                 </label>
                 <select
                   id="adhoc-customer"
-                  value={customer}
-                  onChange={(event) => setCustomer(event.target.value)}
+                  value={customerId}
+                  onChange={(event) => setCustomerId(event.target.value)}
                   onBlur={() => setTouched((was) => new Set(was).add("customer"))}
                   aria-invalid={check.errors.customer !== undefined}
                   className={cn(
@@ -171,12 +216,37 @@ export function AdhocInvoiceForm() {
                   )}
                 >
                   <option value="">Pick a customer</option>
-                  {state.customers.map((entry) => (
-                    <option key={entry.id} value={entry.name}>
+                  {customers.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
                       {entry.name}
                     </option>
                   ))}
                 </select>
+
+                {sites.length > 1 ? (
+                  <div className="mt-2 space-y-1.5">
+                    <label htmlFor="adhoc-site" className="text-sm font-medium">
+                      Which site
+                    </label>
+                    <select
+                      id="adhoc-site"
+                      value={siteId}
+                      onChange={(event) => setPickedSiteId(event.target.value)}
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    >
+                      <option value="">Pick a site</option>
+                      {sites.map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.label} — {entry.locality}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      This decides the place of supply, and so whether the
+                      invoice is CGST+SGST or IGST.
+                    </p>
+                  </div>
+                ) : null}
 
                 {check.errors.customer ? (
                   <p role="alert" className="text-xs text-destructive">
@@ -372,20 +442,26 @@ export function AdhocInvoiceForm() {
                 <MoneyText amount={asPaise(totals.grandTotalPaise)} />
               </div>
 
+              {raise.error ? (
+                <div className="pb-2">
+                  <ErrorState error={raise.error} onRetry={raise.reset} />
+                </div>
+              ) : null}
+
               <div className="space-y-2 pt-1">
                 <Button
                   className="w-full"
-                  disabled={!check.ok}
-                  onClick={() => {
-                    dispatch({
-                      type: "CREATE_ADHOC_INVOICE",
-                      customer,
+                  disabled={!check.ok || !siteId || raise.pending}
+                  onClick={async () => {
+                    const result = await raise.run({
+                      customerId,
+                      siteId,
                       lines: usable,
                     });
-                    router.push("/money/invoice");
+                    if (result?.ok) router.push("/money/invoice");
                   }}
                 >
-                  Create invoice
+                  {raise.pending ? "Creating…" : "Create invoice"}
                 </Button>
                 <WhyDisabled reasons={check.summary} />
               </div>
