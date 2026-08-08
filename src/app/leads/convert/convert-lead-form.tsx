@@ -7,7 +7,9 @@ import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useDispatch } from "@/lib/data/use-store";
+import { logLeadOutcome } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * Convert a won lead — FR-106, as a page.
@@ -40,7 +42,7 @@ export function ConvertLeadForm({
   site: string | null;
   value: string | null;
 }) {
-  const dispatch = useDispatch();
+  const won = useMutation(logLeadOutcome);
   const router = useRouter();
 
   const carry = new URLSearchParams({
@@ -50,17 +52,24 @@ export function ConvertLeadForm({
     ...(value ? { value } : {}),
   }).toString();
 
-  function convertTo(href: string) {
-    // Conversion implies the lead is won, so it is recorded here rather than
-    // asked for again on the next screen.
+  async function convertTo(href: string) {
+    /*
+      Conversion implies the lead is won, so it is recorded here rather than
+      asked for again on the next screen.
+
+      The navigation waits for it. Pushing first and writing after meant a
+      refusal — a lead already converted, or a role without `lead:write` —
+      landed on a screen the reader had already left, and the lead stayed open
+      in the queue with nobody aware.
+    */
     if (leadId) {
-      dispatch({
-        type: "LOG_LEAD_OUTCOME",
-        leadId,
+      const result = await won.run(leadId, {
         outcome: "Won",
         note: "Won — converted",
-        followUp: null,
+        stage: "WON",
+        nextFollowUpAt: null,
       });
+      if (!result?.ok) return;
     }
     router.push(`${href}?${carry}`);
   }
@@ -70,6 +79,11 @@ export function ConvertLeadForm({
   return (
     <AppShell today={today} freshness={{ kind: "fresh", at: today }}>
       <div className="p-4 md:p-6">
+        {won.error ? (
+          <div className="mb-4">
+            <ErrorState error={won.error} onRetry={won.reset} />
+          </div>
+        ) : null}
         <Button
           variant="ghost"
           size="sm"
@@ -105,7 +119,8 @@ export function ConvertLeadForm({
                   <li>A renewal reaches you 45 days before it lapses</li>
                 </ul>
               </div>
-              <Button className="mt-2" onClick={() => convertTo("/contracts/new")}>
+              <Button className="mt-2" disabled={won.pending}
+                onClick={() => void convertTo("/contracts/new")}>
                 Set up the contract
                 <ArrowRight className="size-4" />
               </Button>
@@ -131,7 +146,8 @@ export function ConvertLeadForm({
               <Button
                 variant="outline"
                 className="mt-2"
-                onClick={() => convertTo("/jobs/new")}
+                disabled={won.pending}
+                onClick={() => void convertTo("/jobs/new")}
               >
                 Raise the work order
                 <ArrowRight className="size-4" />

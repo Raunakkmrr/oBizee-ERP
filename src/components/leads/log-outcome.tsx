@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { OUTCOMES, isTerminalOutcome, type Lead } from "@/lib/data/leads";
-import { useDispatch } from "@/lib/data/use-store";
+import { logLeadOutcome } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
 
 /**
  * Log outcome — PRD §6.6.3.
@@ -51,7 +52,7 @@ export function LogOutcome({
   lead: Lead;
   onSaved: () => void;
 }) {
-  const dispatch = useDispatch();
+  const log = useMutation(logLeadOutcome);
   const [open, setOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   // Pre-filled +2 days (§6.6.3) — a default she can change, never a blank she
@@ -63,16 +64,27 @@ export function LogOutcome({
   const terminal = outcome !== null && isTerminalOutcome(outcome);
   const won = outcome === "Won";
 
-  function save() {
+  async function save() {
     if (!outcome) return;
-    // The write. Previously this closed the popover and changed nothing.
-    dispatch({
-      type: "LOG_LEAD_OUTCOME",
-      leadId: lead.id,
+
+    /*
+      Won and Lost are stage changes as well as outcomes — they take the lead
+      out of the queue, and the register is the only place that can clear the
+      next date without breaking FR-104's "a lead with no date gets forgotten".
+
+      The date goes up as an instant. A follow-up is a moment, not a day: "call
+      after lunch" and "call first thing" are different promises, and the queue
+      sorts on it.
+    */
+    const result = await log.run(lead.id, {
       outcome,
-      note,
-      followUp: terminal ? null : followUp,
+      note: note.trim() || undefined,
+      ...(terminal
+        ? { stage: outcome === "Won" ? "WON" : "LOST", nextFollowUpAt: null }
+        : { nextFollowUpAt: new Date(`${followUp}T09:00:00`).toISOString() }),
     });
+    if (!result?.ok) return;
+
     setOpen(false);
     setOutcome(null);
     setNote("");
@@ -174,8 +186,8 @@ export function LogOutcome({
             </Button>
             <Button
               size="sm"
-              onClick={save}
-              disabled={!outcome || (!terminal && !followUp)}
+              onClick={() => void save()}
+              disabled={!outcome || (!terminal && !followUp) || log.pending}
             >
               {won ? "Save without converting" : "Save"}
             </Button>

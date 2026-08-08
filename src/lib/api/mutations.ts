@@ -96,6 +96,19 @@ export const logLeadOutcome = (
 ) => attempt(() => patch<{ id: string }>(`/api/leads/${id}`, body));
 
 /**
+ * Move a lead between stages, without claiming a conversation happened.
+ *
+ * Separate from `logLeadOutcome` on purpose. Dragging a card on the pipeline
+ * board is a stage change and nothing else; recording an outcome for it would
+ * put a call on the lead's history that nobody made, and that history is what
+ * the next person to ring reads. The date the lead already had is kept — a
+ * lead with no next date gets forgotten (FR-104), and a drag is not a reason
+ * to lose one.
+ */
+export const moveLeadStage = (id: string, stage: string) =>
+  attempt(() => patch<{ id: string }>(`/api/leads/${id}`, { stage }));
+
+/**
  * FR-106 — convert, with nothing retyped.
  *
  * `to: "customer"` stops at the customer and site; `to: "job"` also raises the

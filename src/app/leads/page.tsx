@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, MessageCircle, Phone, PhoneCall, Plus, TrendingUp } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
@@ -19,8 +19,8 @@ import { asPaise } from "@/lib/money";
 import { telHref, whatsappHref } from "@/lib/contact";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import { COLLAPSED_BY_DEFAULT, GROUP_LABEL, STALL_DAYS, pipelineColumns, getLeads, groupLeads, type Lead, type LeadGroup, type LeadsData } from "@/lib/data/leads";
-import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { moveLeadStage } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
 
 /**
  * Leads — PRD §6.6. **The one decision:** *who do I call right now?*
@@ -49,18 +49,27 @@ export default function LeadsPage() {
   const [savedRef, setSavedRef] = useState<string | null>(null);
 
   // Re-reads whenever any surface writes to the store.
-  const storeState = useStoreState();
-  const dispatch = useDispatch();
+  const reload = useCallback(() => {
+    void getLeads().then(setQuery);
+  }, []);
+  useEffect(reload, [reload]);
 
-  useEffect(() => {
-    let cancelled = false;
-    getLeads().then((result) => {
-      if (!cancelled) setQuery(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [storeState]);
+  /*
+    Dragging a card is a stage change and nothing else — no outcome, no date.
+    The register keeps whatever follow-up the lead already had, because moving
+    a card is not the same act as making a call, and clearing the date here
+    would lose the lead (FR-104).
+  */
+  const moveStage = useMutation(
+    useCallback(
+      async (leadId: string, stage: string) => {
+        const result = await moveLeadStage(leadId, stage);
+        if (result.ok) reload();
+        return result;
+      },
+      [reload],
+    ),
+  );
 
   /**
    * §6.6.5: `[+ New lead]` carries the keyboard shortcut `N`. This is "the one
@@ -210,14 +219,7 @@ export default function LeadsPage() {
                   <PipelineBoard
                     columns={columns}
                     today={today}
-                    onMove={(leadId, stage) =>
-                      dispatch({
-                        type: "MOVE_LEAD_STAGE",
-                        leadId,
-                        stage,
-                        actor: CURRENT_USER.name.split(" ")[0],
-                      })
-                    }
+                    onMove={(leadId, stage) => void moveStage.run(leadId, stage)}
                   />
                 </div>
               );
