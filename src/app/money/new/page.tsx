@@ -20,6 +20,10 @@ import {
   nothingToBillReason,
 } from "@/lib/data/billable";
 import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { createInvoice } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
+import { resolveDataSourceKind } from "@/lib/data/source";
 
 /**
  * New invoice — the chooser.
@@ -42,6 +46,16 @@ export default function NewInvoicePage() {
   const state = useStoreState();
   const dispatch = useDispatch();
   const router = useRouter();
+  const throughApi = resolveDataSourceKind() === "api";
+
+  /*
+    The number is issued by the database, not chosen here — GST §31 wants one
+    consecutive series, and a browser counter cannot give it one across two
+    laptops. So this awaits the server and navigates only on success: an
+    invoice screen showing a number that was never persisted is worse than a
+    moment of latency.
+  */
+  const raise = useMutation(createInvoice);
 
   const jobs = billableJobs(state.board.jobs, state.invoices);
   // Grouped, so a contract eight months unbilled is one row and not eight.
@@ -49,24 +63,66 @@ export default function NewInvoicePage() {
   const billed = alreadyBilled(state.board.jobs, state.invoices);
   const today = new Date();
 
-  function raiseFromJob(jobId: string) {
-    dispatch({ type: "CREATE_INVOICE_FROM_JOB", jobId });
-    router.push("/money/invoice");
+  async function raiseFromJob(jobId: string) {
+    if (!throughApi) {
+      dispatch({ type: "CREATE_INVOICE_FROM_JOB", jobId });
+      router.push("/money/invoice");
+      return;
+    }
+    const job = state.board.jobs.find((candidate) => candidate.id === jobId);
+    const result = await raise.run({
+      jobId,
+      lines: [
+        {
+          description: `${job?.serviceType ?? "Service"} — ${job?.jobNumber ?? ""}`.trim(),
+          // SAC 9987: maintenance, repair and installation services.
+          code: "9987",
+          kind: "service",
+          qty: 1,
+          ratePaise: job?.valuePaise ?? 4_500_00,
+          ratePercent: 18,
+        },
+      ],
+    });
+    if (result?.ok) router.push("/money/invoice");
   }
 
-  function raiseFromContract(contractId: string, point: number, amountPaise: number) {
-    dispatch({
-      type: "CREATE_INVOICE_FROM_CONTRACT",
+  async function raiseFromContract(contractId: string, point: number, amountPaise: number) {
+    if (!throughApi) {
+      dispatch({
+        type: "CREATE_INVOICE_FROM_CONTRACT",
+        contractId,
+        pointNumber: point,
+        amountPaise,
+      });
+      router.push("/money/invoice");
+      return;
+    }
+    const result = await raise.run({
       contractId,
-      pointNumber: point,
-      amountPaise,
+      contractPoint: point,
+      lines: [
+        {
+          description: `AMC instalment ${point}`,
+          code: "9987",
+          kind: "service",
+          qty: 1,
+          ratePaise: amountPaise,
+          ratePercent: 18,
+        },
+      ],
     });
-    router.push("/money/invoice");
+    if (result?.ok) router.push("/money/invoice");
   }
 
   return (
     <AppShell today={today} freshness={{ kind: "fresh", at: today }}>
       <div className="p-4 md:p-6">
+        {raise.error ? (
+          <div className="mb-4">
+            <ErrorState error={raise.error} onRetry={raise.reset} />
+          </div>
+        ) : null}
         <Button
           variant="ghost"
           size="sm"
@@ -139,8 +195,9 @@ export default function NewInvoicePage() {
                     size="sm"
                     variant={row.daysLate >= 0 ? "default" : "outline"}
                     className="shrink-0"
-                    onClick={() =>
-                      raiseFromContract(
+                    disabled={raise.pending}
+                      onClick={() =>
+                        void raiseFromContract(
                         row.contract.id,
                         row.point.number,
                         row.point.amountPaise,
@@ -203,7 +260,8 @@ export default function NewInvoicePage() {
                     size="sm"
                     variant="outline"
                     className="shrink-0"
-                    onClick={() => raiseFromJob(job.id)}
+                    onClick={() => void raiseFromJob(job.id)}
+                    disabled={raise.pending}
                   >
                     Bill this
                   </Button>
