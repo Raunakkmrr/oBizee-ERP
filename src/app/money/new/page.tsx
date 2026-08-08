@@ -19,11 +19,10 @@ import {
   groupByContract,
   nothingToBillReason,
 } from "@/lib/data/billable";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { useStoreState } from "@/lib/data/use-store";
 import { createInvoice } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
-import { resolveDataSourceKind } from "@/lib/data/source";
 
 /**
  * New invoice — the chooser.
@@ -44,10 +43,7 @@ import { resolveDataSourceKind } from "@/lib/data/source";
  */
 export default function NewInvoicePage() {
   const state = useStoreState();
-  const dispatch = useDispatch();
   const router = useRouter();
-  const throughApi = resolveDataSourceKind() === "api";
-
   /*
     The number is issued by the database, not chosen here — GST §31 wants one
     consecutive series, and a browser counter cannot give it one across two
@@ -64,11 +60,6 @@ export default function NewInvoicePage() {
   const today = new Date();
 
   async function raiseFromJob(jobId: string) {
-    if (!throughApi) {
-      dispatch({ type: "CREATE_INVOICE_FROM_JOB", jobId });
-      router.push("/money/invoice");
-      return;
-    }
     const job = state.board.jobs.find((candidate) => candidate.id === jobId);
     const result = await raise.run({
       jobId,
@@ -88,16 +79,6 @@ export default function NewInvoicePage() {
   }
 
   async function raiseFromContract(contractId: string, point: number, amountPaise: number) {
-    if (!throughApi) {
-      dispatch({
-        type: "CREATE_INVOICE_FROM_CONTRACT",
-        contractId,
-        pointNumber: point,
-        amountPaise,
-      });
-      router.push("/money/invoice");
-      return;
-    }
     const result = await raise.run({
       contractId,
       contractPoint: point,

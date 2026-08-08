@@ -21,7 +21,10 @@ import { AGEING_BUCKETS, MSME_LABEL, ageingTotals, bucketFor, countdownFor, dedu
 import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
 import { useRouter } from "next/navigation";
-import { useDispatch, useStoreState } from "@/lib/data/use-store";
+import { useStoreState } from "@/lib/data/use-store";
+import { createInvoice, payPurchaseBill } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 import {
   BILLING_LABEL,
   billingDue,
@@ -65,9 +68,11 @@ import {
 function AlarmRow({
   alarm,
   onPaid,
+  busy,
 }: {
   alarm: MoneyAlarm;
   onPaid: (billId: string) => void;
+  busy: boolean;
 }) {
   const tone =
     alarm.kind === "deduction_lost"
@@ -128,7 +133,7 @@ function AlarmRow({
         ) : alarm.kind === "deduction_due" ? (
           <>
             {/* The one action that still saves the money. */}
-            <Button size="sm" onClick={() => onPaid(alarm.bill.id)}>
+            <Button size="sm" disabled={busy} onClick={() => onPaid(alarm.bill.id)}>
               Mark paid
             </Button>
             {!alarm.bill.hasWrittenAgreement ? (
@@ -137,7 +142,7 @@ function AlarmRow({
           </>
         ) : (
           // Nothing here saves the deduction; paying is still owed.
-          <Button size="sm" variant="outline" onClick={() => onPaid(alarm.bill.id)}>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => onPaid(alarm.bill.id)}>
             Mark paid
           </Button>
         )}
@@ -149,9 +154,11 @@ function AlarmRow({
 function AlarmBand({
   data,
   onPaid,
+  busy,
 }: {
   data: MoneyData;
   onPaid: (billId: string) => void;
+  busy: boolean;
 }) {
   const alarms = moneyAlarms(data.payables);
   if (alarms.length === 0) return null;
@@ -195,7 +202,7 @@ function AlarmBand({
 
       <div className="mt-3 grid gap-2">
         {alarms.map((alarm) => (
-          <AlarmRow key={alarm.bill.id} alarm={alarm} onPaid={onPaid} />
+          <AlarmRow key={alarm.bill.id} alarm={alarm} onPaid={onPaid} busy={busy} />
         ))}
       </div>
 
@@ -223,7 +230,7 @@ function AlarmBand({
  * come into existence unseen — so this is a worklist, and the invoice it makes
  * is a draft that opens for review.
  */
-function BillingDue({ onRaise }: { onRaise: (row: DueRow) => void }) {
+function BillingDue({ onRaise, busy }: { onRaise: (row: DueRow) => void; busy: boolean }) {
   const state = useStoreState();
   const today = new Date();
 
@@ -325,6 +332,7 @@ function BillingDue({ onRaise }: { onRaise: (row: DueRow) => void }) {
                 size="sm"
                 variant={late ? "default" : "outline"}
                 onClick={() => onRaise(row)}
+                disabled={busy}
               >
                 Raise invoice
               </Button>
@@ -587,9 +595,11 @@ function Receivables({ data }: { data: MoneyData }) {
 function PayableRow({
   bill,
   onPaid,
+  busy,
 }: {
   bill: Payable;
   onPaid: (billId: string) => void;
+  busy: boolean;
 }) {
   const countdown = countdownFor(bill);
   const running = countdown.kind === "counting" || countdown.kind === "lapsed";
@@ -622,7 +632,7 @@ function PayableRow({
           {countdown.kind === "unknown" ? (
             <Unavailable label="Verify Udyam status" reason={NEEDS_BACKEND} />
           ) : (
-            <Button variant="outline" size="sm" onClick={() => onPaid(bill.id)}>
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => onPaid(bill.id)}>
               Mark paid
             </Button>
           )}
@@ -680,9 +690,11 @@ function PayableRow({
 function Payables({
   data,
   onPaid,
+  busy,
 }: {
   data: MoneyData;
   onPaid: (billId: string) => void;
+  busy: boolean;
 }) {
   const total = data.payables.reduce((sum, b) => sum + b.amountPaise, 0);
   // Closest to its limit first; the ones the timeline never touches sink.
@@ -720,7 +732,7 @@ function Payables({
         flush
       >
         {ordered.map((bill) => (
-          <PayableRow key={bill.id} bill={bill} onPaid={onPaid} />
+          <PayableRow key={bill.id} bill={bill} onPaid={onPaid} busy={busy} />
         ))}
       </Panel>
     </div>
@@ -731,7 +743,10 @@ function Payables({
 
 export default function MoneyPage() {
   const [query, setQuery] = useState<Query<MoneyData>>(loading());
-  const dispatch = useDispatch();
+  // Two writes on this screen, each with its own in-flight state: settling a
+  // bill must not disable the button that raises an invoice.
+  const pay = useMutation(payPurchaseBill);
+  const raiseInvoice = useMutation(createInvoice);
   const storeState = useStoreState();
   const router = useRouter();
 
@@ -747,19 +762,33 @@ export default function MoneyPage() {
     // recompute from the same facts rather than drifting from the list.
   }, [storeState]);
 
-  function markPaid(billId: string) {
-    dispatch({ type: "MARK_PAYABLE_PAID", billId });
+  /*
+    TODO(FR-905): the screen should ask *when* it was paid rather than assume
+    today. A bill settled on Friday and recorded on Monday is three days of a
+    fifteen-day clock, and the API already takes the real date — this is the
+    only place still supplying a default.
+  */
+  async function markPaid(billId: string) {
+    await pay.run(billId, { paidOn: new Date().toISOString().slice(0, 10) });
   }
 
   /** Raises the draft and opens it — never files anything unseen. */
-  function raise(row: DueRow) {
-    dispatch({
-      type: "CREATE_INVOICE_FROM_CONTRACT",
+  async function raise(row: DueRow) {
+    const result = await raiseInvoice.run({
       contractId: row.contract.id,
-      pointNumber: row.point.number,
-      amountPaise: row.point.amountPaise,
+      contractPoint: row.point.number,
+      lines: [
+        {
+          description: `AMC instalment ${row.point.number}`,
+          code: "9987",
+          kind: "service",
+          qty: 1,
+          ratePaise: row.point.amountPaise,
+          ratePercent: 18,
+        },
+      ],
     });
-    router.push("/money/invoice");
+    if (result?.ok) router.push("/money/invoice");
   }
 
   const today = new Date();
@@ -770,6 +799,22 @@ export default function MoneyPage() {
       freshness={{ kind: "fresh", at: today }}
     >
       <div className="p-3 lg:p-4">
+        {/*
+          A refused write has to land where the eye already is. Settling a bill
+          and raising an invoice fail for different reasons — a 409 on an
+          already-paid bill is not the same conversation as a 403 on billing —
+          so each keeps its own message rather than sharing one slot.
+        */}
+        {pay.error ? (
+          <div className="mb-4">
+            <ErrorState error={pay.error} onRetry={pay.reset} />
+          </div>
+        ) : null}
+        {raiseInvoice.error ? (
+          <div className="mb-4">
+            <ErrorState error={raiseInvoice.error} onRetry={raiseInvoice.reset} />
+          </div>
+        ) : null}
         <PageHeader
           breadcrumb={[{ label: "Money" }]}
           className="mb-4"
@@ -786,8 +831,8 @@ export default function MoneyPage() {
         <QueryBoundary query={query} label="the money screen" loadingRows={8}>
           {(data) => (
             <div className="space-y-5">
-              <AlarmBand data={data} onPaid={markPaid} />
-              <BillingDue onRaise={raise} />
+              <AlarmBand data={data} onPaid={markPaid} busy={pay.pending} />
+              <BillingDue onRaise={raise} busy={raiseInvoice.pending} />
               {/*
                 FR-810 sits between the billing worklist and the two ledgers:
                 it is neither owed to us nor owed by us, it is money we hold
@@ -798,7 +843,7 @@ export default function MoneyPage() {
               <RecordedBills />
               <div className="grid gap-5 xl:grid-cols-2">
                 <Receivables data={data} />
-                <Payables data={data} onPaid={markPaid} />
+                <Payables data={data} onPaid={markPaid} busy={pay.pending} />
               </div>
             </div>
           )}

@@ -229,6 +229,18 @@ export const createVendor = (body: Record<string, unknown>) =>
 export const recordPurchaseBill = (body: Record<string, unknown>) =>
   attempt(() => post<{ id: string }>("/api/vendors/bills", body));
 
+/**
+ * Settle a purchase bill — the §43B(h) clock stops on `paidOn`.
+ *
+ * The date is a parameter and not the server's clock: a bill paid on the 14th
+ * and recorded on the 16th was paid on the 14th, and against a 15-day MSMED
+ * limit those two days decide whether the deduction survives.
+ */
+export const payPurchaseBill = (
+  id: string,
+  body: { paidOn: string; reference?: string },
+) => attempt(() => post<{ id: string; status: string }>(`/api/vendors/bills/${id}/pay`, body));
+
 /** Advisory only — reverse charge and TDS explained before the bill is saved. */
 export const advisePurchase = (body: Record<string, unknown>) =>
   attempt(() => post<Record<string, unknown>>("/api/vendors/advise", body));
