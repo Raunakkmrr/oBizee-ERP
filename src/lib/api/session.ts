@@ -3,22 +3,22 @@
 /**
  * The signed-in session.
  *
- * **Where the tokens live, and the honest trade-off.** The access token is held
- * in memory only, so a cross-site script cannot read it from storage and it
- * dies with the tab. The refresh token is in `localStorage`, because a
- * coordinator closing her laptop at six and opening it at nine should not have
- * to sign in again — and a technician on a phone certainly should not.
+ * **Where the tokens live.** The access token is held in memory only, so it
+ * dies with the tab and no script can read it out of storage. The refresh token
+ * is not here at all — it is an httpOnly cookie set by the API, which script
+ * cannot read even in principle. It used to sit in `localStorage`, where a
+ * single injected script could lift a working thirty-day session.
  *
- * That means a successful XSS could lift the refresh token. The better answer
- * is an httpOnly cookie set by the API, which needs the API on the same site or
- * a CORS credential setup. **Recorded as a known limitation rather than
- * pretended away**: it is on the B5 list, and refresh rotation already makes a
- * stolen token visible the moment the real one is used.
+ * What remains in `localStorage` is one boolean. It is not a credential and
+ * proves nothing; it exists so that a visitor who has never signed in is not
+ * made to wait for a pointless refresh attempt on every cold load. Forged, it
+ * buys an attacker one 401.
  */
 import type { Role } from "../roles";
 import { apiFetch } from "./client";
 
-const REFRESH_KEY = "obizee.refresh";
+/** A hint, not a key. See the note above — the credential is a cookie. */
+const SESSION_HINT = "obizee.session";
 
 /**
  * Who is signed in — the whole of it, from `/api/me`.
@@ -73,7 +73,7 @@ export function callerResolved(): boolean {
  * and the switcher it replaces.
  */
 export async function loadCaller(): Promise<Caller | null> {
-  if (!accessToken && !getRefreshToken()) {
+  if (!accessToken && !hasSessionHint()) {
     resolved = true;
     announce();
     return null;
@@ -91,15 +91,19 @@ export async function loadCaller(): Promise<Caller | null> {
   return caller;
 }
 
-export function getRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(REFRESH_KEY);
+/**
+ * Whether this browser believes it has a session to resume.
+ *
+ * It cannot know for certain: the refresh cookie is httpOnly and invisible from
+ * here. Only the API can settle it, by being asked. This decides whether asking
+ * is worth a round trip.
+ */
+export function hasSessionHint(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(SESSION_HINT) === "1";
 }
 
-export function startSession(tokens: {
-  accessToken: string;
-  refreshToken: string;
-}): void {
+export function startSession(tokens: { accessToken: string }): void {
   accessToken = tokens.accessToken;
   /*
     The identity is not taken from the sign-in response. That reply carries a
@@ -108,7 +112,7 @@ export function startSession(tokens: {
     somebody. `loadCaller()` asks `/api/me` for all of it.
   */
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+    window.localStorage.setItem(SESSION_HINT, "1");
   }
   announce();
 }
@@ -119,11 +123,11 @@ export function endSession(): void {
   accessToken = null;
   caller = null;
   if (typeof window !== "undefined") {
-    window.localStorage.removeItem(REFRESH_KEY);
+    window.localStorage.removeItem(SESSION_HINT);
   }
   announce();
 }
 
 export function isSignedIn(): boolean {
-  return accessToken !== null || getRefreshToken() !== null;
+  return accessToken !== null || hasSessionHint();
 }

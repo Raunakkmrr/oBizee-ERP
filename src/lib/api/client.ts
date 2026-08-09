@@ -5,7 +5,7 @@ import { rolesWith, type Permission } from "@/lib/roles";
 import {
   endSession,
   getAccessToken,
-  getRefreshToken,
+  hasSessionHint,
   loadCaller,
   startSession,
 } from "./session";
@@ -25,19 +25,33 @@ import {
  */
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
+/**
+ * Every call that must carry or receive the refresh cookie.
+ *
+ * The app and the API are different origins even on one domain, and a browser
+ * will neither store nor send a cookie across that boundary unless the request
+ * asks. Omitting it on sign-in is the quiet failure: the response arrives with
+ * a `Set-Cookie` the browser throws away, and the session lasts fifteen minutes
+ * and then ends. Ordinary API calls deliberately go without — the cookie is
+ * scoped to `/auth` and has no business on four hundred other requests.
+ */
+const WITH_COOKIE = "include" as const;
+
 /** In flight, so ten simultaneous 401s cause one refresh rather than ten. */
 let refreshing: Promise<boolean> | null = null;
 
 async function refresh(): Promise<boolean> {
-  const token = getRefreshToken();
-  if (!token) return false;
+  // Nothing to send: the token is a cookie this code cannot read. The hint only
+  // saves a round trip for a visitor who has never signed in.
+  if (!hasSessionHint()) return false;
 
   refreshing ??= (async () => {
     try {
       const response = await fetch(`${BASE}/auth/refresh`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ refreshToken: token }),
+        credentials: WITH_COOKIE,
+        body: "{}",
       });
       if (!response.ok) return false;
       startSession(await response.json());
@@ -144,6 +158,7 @@ export async function signInWithPassword(
   const response = await fetch(`${BASE}/auth/password`, {
     method: "POST",
     headers: { "content-type": "application/json" },
+    credentials: WITH_COOKIE,
     body: JSON.stringify({ email, password }),
   });
   const body = await response.json();
@@ -198,6 +213,7 @@ export async function signInWithOtp(
   const response = await fetch(`${BASE}/auth/otp/verify`, {
     method: "POST",
     headers: { "content-type": "application/json" },
+    credentials: WITH_COOKIE,
     body: JSON.stringify({ phone, code }),
   });
   const body = await response.json();
@@ -214,16 +230,16 @@ export async function signInWithOtp(
  * on a shared machine, closing the door and leaving the key in it.
  */
 export async function signOut(): Promise<void> {
-  const refreshToken = getRefreshToken();
-  if (refreshToken) {
-    // Best effort: a network failure must not trap somebody in a session they
-    // are trying to leave. The local tokens go either way.
-    await fetch(`${BASE}/auth/sign-out`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    }).catch(() => undefined);
-  }
+  // Best effort: a network failure must not trap somebody in a session they are
+  // trying to leave. The local state goes either way. Sent unconditionally now
+  // — this code cannot see the cookie, so it cannot know there is nothing to
+  // revoke, and the endpoint answers the same either way by design.
+  await fetch(`${BASE}/auth/sign-out`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: WITH_COOKIE,
+    body: "{}",
+  }).catch(() => undefined);
   endSession();
 }
 
@@ -240,6 +256,9 @@ export async function changePassword(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const response = await fetch(`${BASE}/api/me/password`, {
     method: "POST",
+    // Changing a password reissues the refresh cookie and revokes every other
+    // session; without this the browser discards the replacement.
+    credentials: WITH_COOKIE,
     headers: {
       "content-type": "application/json",
       ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
@@ -247,14 +266,14 @@ export async function changePassword(
     body: JSON.stringify({ currentPassword, newPassword }),
   });
   const body = (await response.json().catch(() => null)) as
-    | (ApiFailure & { accessToken?: string; refreshToken?: string })
+    | (ApiFailure & { accessToken?: string })
     | null;
 
-  if (!response.ok || !body?.accessToken || !body?.refreshToken) {
+  if (!response.ok || !body?.accessToken) {
     return { ok: false, message: body?.error ?? "Could not change that password" };
   }
 
-  startSession({ accessToken: body.accessToken, refreshToken: body.refreshToken });
+  startSession({ accessToken: body.accessToken });
   await loadCaller();
   return { ok: true };
 }
