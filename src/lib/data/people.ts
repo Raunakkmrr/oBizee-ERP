@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { apiFetch } from "../api/client";
+import { defineQuery } from "./source";
 import { LEVELS_BY_ROLE, ROLES, type Role } from "@/lib/roles";
 
 /**
@@ -65,11 +67,18 @@ export const personSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
   /**
-   * Phone is the primary credential — §9.4 makes phone + OTP the main method,
-   * because this market's users do not reliably have or remember email.
+   * Phone is the primary credential for **field** staff — §9.4 makes phone +
+   * OTP the main method, because this market's users do not reliably have or
+   * remember email.
+   *
+   * Nullable because the office signs in the other way. This was required, and
+   * every office user the register holds — the seeded owner among them — has
+   * no phone at all, so the team screen could not parse its own people. One of
+   * the two must be present; that rule lives in the register, where it can be
+   * enforced rather than assumed.
    */
-  phone: z.string().min(1),
-  /** Optional: only desktop roles reliably have one (§9.4). */
+  phone: z.string().nullable(),
+  /** Null for field staff, who sign in by phone (§9.4). */
   email: z.string().nullable(),
   role: z.enum(ROLES),
   /** Per-user override on the role default (FR-1304). Null = role default. */
@@ -88,6 +97,24 @@ export const personSchema = z.object({
 });
 
 export type Person = z.infer<typeof personSchema>;
+
+export const peopleSchema = z.object({ people: z.array(personSchema) });
+export type PeopleData = z.infer<typeof peopleSchema>;
+
+/**
+ * The team, from the register — owner only.
+ *
+ * `people:manage` is granted to the owner and nobody else, so this refuses for
+ * every other role. That is the point: a coordinator who could read the team
+ * list could not add to it, but a coordinator who could *write* one could add
+ * themselves an owner account.
+ */
+export const getPeople = defineQuery<void, PeopleData>({
+  key: "people.list",
+  schema: peopleSchema,
+  api: async () => apiFetch<PeopleData>("/api/people"),
+  fixture: async () => ({ raw: { people: (await import("./store")).getState().people } }),
+});
 
 export function isTechnician(person: Person): boolean {
   return person.role === "technician";
@@ -111,7 +138,9 @@ export function matchesQuery(person: Person, query: string): boolean {
   const digits = needle.replace(/\D/g, "");
   return (
     person.name.toLowerCase().includes(needle) ||
-    (digits.length >= 3 && person.phone.replace(/\D/g, "").includes(digits)) ||
+    // Office staff have no phone, so searching by number simply skips them.
+    (digits.length >= 3 &&
+      (person.phone ?? "").replace(/\D/g, "").includes(digits)) ||
     person.skills.some((skill) => skill.toLowerCase().includes(needle)) ||
     person.localities.some((place) => place.toLowerCase().includes(needle))
   );

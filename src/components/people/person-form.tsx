@@ -18,7 +18,10 @@ import { z } from "zod";
 import { Chip } from "@/components/shared/controls";
 import { Section } from "@/components/job/sections";
 import { cn } from "@/lib/utils";
-import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
+import { useCurrentUser, useStoreState } from "@/lib/data/use-store";
+import { addPerson, setPersonActive, updatePerson, type MutationResult } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 import {
   SKILLS,
   guardDeactivate,
@@ -98,7 +101,14 @@ function GuardNotice({ guard }: { guard: Guard }) {
 }
 
 export function PersonForm({ existing }: { existing?: Person }) {
-  const dispatch = useDispatch();
+  /*
+    One in-flight state for all three writes. Unlike the money screen, these
+    are alternatives rather than parallel decisions — you are saving, or you
+    are changing access, never both at once.
+  */
+  const write = useMutation(
+    async (run: () => Promise<MutationResult<{ id: string }>>) => run(),
+  );
   const router = useRouter();
   const me = useCurrentUser();
   const state = useStoreState();
@@ -158,14 +168,12 @@ export function PersonForm({ existing }: { existing?: Person }) {
     );
   }
 
-  function save() {
+  async function save() {
     const fields = {
       name: name.trim(),
-      phone: phone.trim(),
+      phone: phone.trim() === "" ? null : phone.trim(),
       email: email.trim() === "" ? null : email.trim(),
       role,
-      languageOverride: existing?.languageOverride ?? null,
-      active: existing?.active ?? true,
       // Only a technician can be sent anywhere, so office roles never carry
       // skills — storing them would put an accountant in the assign picker.
       skills: role === "technician" ? skills : [],
@@ -175,12 +183,10 @@ export function PersonForm({ existing }: { existing?: Person }) {
       level: levelsFor(role).includes(level ?? "") ? level : null,
     };
 
-    if (existing) {
-      dispatch({ type: "UPDATE_PERSON", id: existing.id, changes: fields });
-    } else {
-      dispatch({ type: "ADD_PERSON", person: fields });
-    }
-    router.push("/team");
+    const result = existing
+      ? await write.run(() => updatePerson(existing.id, fields))
+      : await write.run(() => addPerson(fields));
+    if (result?.ok) router.push("/team");
   }
 
   return (
@@ -189,6 +195,16 @@ export function PersonForm({ existing }: { existing?: Person }) {
       freshness={{ kind: "fresh", at: today }}
     >
       <div className="p-4 md:p-6">
+        {/*
+          The register enforces the two refusals this screen cannot: you may
+          not deactivate yourself, and the last active owner may not be
+          removed. Both come back as sentences.
+        */}
+        {write.error ? (
+          <div className="mb-4">
+            <ErrorState error={write.error} onRetry={write.reset} />
+          </div>
+        ) : null}
         <Button
           variant="ghost"
           size="sm"
@@ -365,8 +381,8 @@ export function PersonForm({ existing }: { existing?: Person }) {
 
         <div className="mt-4 flex max-w-4xl flex-wrap items-center gap-2">
           <Button
-            disabled={!check.ok || roleBlocked || needsAck}
-            onClick={save}
+            disabled={!check.ok || roleBlocked || needsAck || write.pending}
+            onClick={() => void save()}
           >
             {existing ? "Save changes" : "Add person"}
           </Button>
@@ -386,14 +402,12 @@ export function PersonForm({ existing }: { existing?: Person }) {
             <Button
               variant="outline"
               className="ml-auto"
-              disabled={existing.active && deactivateGuard.kind === "block"}
-              onClick={() => {
-                dispatch({
-                  type: "SET_PERSON_ACTIVE",
-                  id: existing.id,
-                  active: !existing.active,
-                });
-                router.push("/team");
+              disabled={(existing.active && deactivateGuard.kind === "block") || write.pending}
+              onClick={async () => {
+                const result = await write.run(() =>
+                  setPersonActive(existing.id, !existing.active),
+                );
+                if (result?.ok) router.push("/team");
               }}
             >
               <UserMinus className="size-4" />

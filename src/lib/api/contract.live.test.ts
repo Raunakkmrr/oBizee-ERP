@@ -9,6 +9,7 @@ import { jobDetailSchema } from "../data/job-detail";
 import { leadsSchema } from "../data/leads";
 import { moneySchema } from "../data/money";
 import { ownerHomeSchema } from "../data/owner-home";
+import { peopleSchema } from "../data/people";
 import { reportsSchema } from "../data/reports";
 
 /**
@@ -74,6 +75,12 @@ describe.skipIf(!reachable)("live API satisfies the web app's schemas", () => {
     parseOrExplain(ownerHomeSchema, await get("/api/home/owner"), "owner home");
     parseOrExplain(reportsSchema, await get("/api/reports/weekly"), "reports");
     parseOrExplain(gstPeriodSchema, await get(`/api/gst/${periodToFile()}`), "gst period");
+    /*
+      Owner only, and the seeded sign-in is the owner. This one caught a real
+      mismatch: `phone` was required while every office user has none.
+    */
+    const team = parseOrExplain(peopleSchema, await get("/api/people"), "people");
+    expect(team.people.length).toBeGreaterThan(0);
 
     /*
       A schema check on an empty array passes and proves nothing — which is how

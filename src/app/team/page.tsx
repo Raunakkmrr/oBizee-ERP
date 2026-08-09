@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { UserPlus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
@@ -9,9 +9,7 @@ import { Requires } from "@/components/shared/requires";
 import { Input } from "@/components/ui/input";
 import { Chip as FilterChip } from "@/components/shared/controls";
 import { cn } from "@/lib/utils";
-import { useStoreState } from "@/lib/data/use-store";
-import { getState } from "@/lib/data/store";
-import { matchesQuery } from "@/lib/data/people";
+import { getPeople, matchesQuery, type Person } from "@/lib/data/people";
 import { levelLabel, ROLES, ROLE_LABELS, type Role } from "@/lib/roles";
 
 /**
@@ -46,9 +44,22 @@ const SURFACE =
 function Team() {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<Role | null>(null);
-  // Subscribing re-renders when someone is added, edited or deactivated.
-  useStoreState();
-  const people = getState().people;
+  /*
+    From the register. This screen decides who can sign in, so reading a local
+    copy would show one machine's idea of the team while another had already
+    changed it — and the person missing from the list is the one whose access
+    somebody meant to remove.
+  */
+  const [people, setPeople] = useState<Person[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getPeople().then((result) => {
+      if (!cancelled && result.status === "ready") setPeople([...result.data.people]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const visible = people.filter(
     (person) =>

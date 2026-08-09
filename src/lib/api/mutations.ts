@@ -265,6 +265,41 @@ export const logCollectionContact = (
   body: { note: string; promisedFor?: string | null },
 ) => attempt(() => post<{ id: string }>(`/api/money/collections/${invoiceId}/contact`, body));
 
+/* ------------------------------------------------------------------ team */
+
+/**
+ * Who works here — owner only.
+ *
+ * A password never travels through here. An office user sets their own via
+ * the reset flow, so the person who knows it is the person who chose it.
+ */
+export type PersonInput = {
+  name: string;
+  role: string;
+  level?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  skills?: string[];
+  localities?: string[];
+};
+
+export const addPerson = (body: PersonInput) =>
+  attempt(() => post<{ id: string; name: string; role: string }>("/api/people", body));
+
+export const updatePerson = (id: string, body: Partial<PersonInput>) =>
+  attempt(() => patch<{ id: string; name: string; role: string }>(`/api/people/${id}`, body));
+
+/**
+ * Turn access on or off — never a delete.
+ *
+ * Its own call because it is a different act from an edit: one corrects a
+ * record, the other decides whether somebody can open the product tomorrow.
+ * The register refuses the two that lock a firm out — deactivating yourself,
+ * and removing the last active owner.
+ */
+export const setPersonActive = (id: string, active: boolean) =>
+  attempt(() => post<{ id: string; active: boolean }>(`/api/people/${id}/active`, { active }));
+
 /* ---------------------------------------------------------------- vendors */
 
 export const createVendor = (body: Record<string, unknown>) =>
