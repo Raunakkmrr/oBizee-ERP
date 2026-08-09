@@ -80,4 +80,11 @@ export default function globalSetup(): void {
   seed("seed.ts");
   seed("seed-day.ts");
   clearSignInBudgets();
+  /*
+    Drafts from the last run. `billing.spec.ts` presses "Bill this" and the
+    draft stays — forty-nine had piled up on the money screen before anybody
+    looked. A draft holds no number, so clearing them costs the series nothing;
+    leaving them turns the screen into a record of how often the tests ran.
+  */
+  seed("clear-drafts.ts");
 }
