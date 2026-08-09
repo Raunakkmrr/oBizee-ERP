@@ -68,11 +68,21 @@ export function AppShell({
   }, []);
 
   useEffect(() => {
-    if (resolved && !me) router.replace("/sign-in");
+    if (resolved && !me) {
+      router.replace("/sign-in");
+      return;
+    }
+    /*
+      A password an owner chose is a shared secret, and the register refuses
+      every other request until it is replaced. Sending them there is the only
+      way a screen can do anything useful — every link in this shell would
+      answer 403.
+    */
+    if (me?.mustChangePassword) router.replace("/change-password");
   }, [resolved, me, router]);
 
   // "Not yet" is not "nobody": one waits, the other is already on its way out.
-  if (!me) return null;
+  if (!me || me.mustChangePassword) return null;
 
   return (
     <SidebarProvider>

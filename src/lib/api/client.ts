@@ -6,6 +6,7 @@ import {
   endSession,
   getAccessToken,
   getRefreshToken,
+  loadCaller,
   startSession,
 } from "./session";
 
@@ -193,5 +194,57 @@ export async function signInWithOtp(
   const body = await response.json();
   if (!response.ok) return { ok: false, message: body.error ?? "That code is not right" };
   startSession(body);
+  return { ok: true };
+}
+
+/**
+ * End the session at the register, not just in this tab.
+ *
+ * Clearing local state alone left the refresh token valid for thirty days —
+ * on a shared machine, closing the door and leaving the key in it.
+ */
+export async function signOut(): Promise<void> {
+  const refreshToken = getRefreshToken();
+  if (refreshToken) {
+    // Best effort: a network failure must not trap somebody in a session they
+    // are trying to leave. The local tokens go either way.
+    await fetch(`${BASE}/auth/sign-out`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    }).catch(() => undefined);
+  }
+  endSession();
+}
+
+/**
+ * Replace a password an owner chose.
+ *
+ * Returns the new tokens, because the old access token still carries the
+ * must-change claim — without swapping them the caller stays locked out
+ * having just done what was asked.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const response = await fetch(`${BASE}/api/me/password`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+    },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const body = (await response.json().catch(() => null)) as
+    | (ApiFailure & { accessToken?: string; refreshToken?: string })
+    | null;
+
+  if (!response.ok || !body?.accessToken || !body?.refreshToken) {
+    return { ok: false, message: body?.error ?? "Could not change that password" };
+  }
+
+  startSession({ accessToken: body.accessToken, refreshToken: body.refreshToken });
+  await loadCaller();
   return { ok: true };
 }

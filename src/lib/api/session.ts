@@ -34,6 +34,8 @@ export type Caller = {
   role: Role;
   level: string | null;
   tenantId: string;
+  /** True while the password in use was chosen by somebody else. */
+  mustChangePassword: boolean;
 };
 
 let accessToken: string | null = null;

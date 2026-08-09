@@ -126,6 +126,8 @@ export function PersonForm({ existing }: { existing?: Person }) {
   const [acknowledged, setAcknowledged] = useState(false);
 
   /** Fields the reader has left, so a blank form is not a wall of red. */
+  /** Office staff only; blank means they cannot sign in with a password yet. */
+  const [initialPassword, setInitialPassword] = useState("");
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const touch = (field: string) =>
     setTouched((prev) => new Set(prev).add(field));
@@ -176,6 +178,9 @@ export function PersonForm({ existing }: { existing?: Person }) {
       role,
       // Only a technician can be sent anywhere, so office roles never carry
       // skills — storing them would put an accountant in the assign picker.
+      ...(existing || initialPassword.trim() === ""
+        ? {}
+        : { initialPassword: initialPassword.trim() }),
       skills: role === "technician" ? skills : [],
       localities: role === "technician" ? localities : [],
       // Kept where the role has a ladder; cleared where it does not, so a
@@ -262,6 +267,29 @@ export function PersonForm({ existing }: { existing?: Person }) {
                 error={check.errors.email}
                 placeholder="Leave blank for field staff"
               />
+
+              {/*
+                Only for office staff, and only when adding.
+
+                Field staff sign in with a one-time code and never have a
+                password at all. The person receiving this is made to replace
+                it before they can do anything — a password you typed for
+                somebody else is a shared secret until they change it.
+              */}
+              {!existing && email.trim() !== "" ? (
+                <Field
+                  label="Password to give them"
+                  type="password"
+                  value={initialPassword}
+                  onChange={setInitialPassword}
+                  hint="At least ten characters. Tell them in person; they must replace it at first sign-in."
+                  error={
+                    initialPassword.length > 0 && initialPassword.length < 10
+                      ? "Ten characters or more"
+                      : undefined
+                  }
+                />
+              ) : null}
 
               <div>
                 <p className="mb-1.5 font-medium">Role</p>

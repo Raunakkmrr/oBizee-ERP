@@ -276,6 +276,14 @@ export const logCollectionContact = (
 export type PersonInput = {
   name: string;
   role: string;
+  /**
+   * Chosen by the owner, replaced by the holder at first sign-in.
+   *
+   * Only meaningful with an email; field staff sign in with a one-time code.
+   * Omitted on an edit — changing somebody else's password is not an edit, and
+   * there is no route for it.
+   */
+  initialPassword?: string;
   level?: string | null;
   email?: string | null;
   phone?: string | null;

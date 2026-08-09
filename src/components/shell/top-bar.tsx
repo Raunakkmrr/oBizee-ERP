@@ -11,7 +11,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/data/use-store";
-import { endSession, type Caller } from "@/lib/api/session";
+import { type Caller } from "@/lib/api/session";
+import { signOut } from "@/lib/api/client";
 import { formatDateLong, formatTime } from "@/lib/datetime";
 import { ROLE_LABELS } from "@/lib/roles";
 import { homeHrefFor } from "@/lib/navigation";
@@ -204,8 +205,9 @@ function SignedIn({ me }: { me: Caller }) {
           Signed in as {me.name}
         </p>
         <DropdownMenuItem
-          onClick={() => {
-            endSession();
+          onClick={async () => {
+            // Revokes at the register, not just in this tab.
+            await signOut();
             router.replace("/sign-in");
           }}
         >
