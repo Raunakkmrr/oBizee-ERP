@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import { MSME_LABEL } from "@/lib/data/money";
 import { STATE_BY_CODE } from "@/lib/data/pincode";
 import { isUnregistered, msmedApplies, PAN_TYPE_LABEL } from "@/lib/data/vendors";
-import { useStoreState } from "@/lib/data/use-store";
+import { useEffect, useState } from "react";
+import { getVendors, type Vendor } from "@/lib/data/vendors";
 
 /**
  * Vendors — FR-705.
@@ -22,7 +23,16 @@ import { useStoreState } from "@/lib/data/use-store";
  * with real money on it). Everything else is reference.
  */
 export default function VendorsPage() {
-  const state = useStoreState();
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getVendors().then((result) => {
+      if (!cancelled && result.status === "ready") setVendors([...result.data.vendors]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const today = new Date();
 
   return (
@@ -41,8 +51,8 @@ export default function VendorsPage() {
           }
         />
 
-        <Panel title="All vendors" icon={Store} count={state.vendors.length} flush>
-          {state.vendors.map((vendor) => {
+        <Panel title="All vendors" icon={Store} count={vendors.length} flush>
+          {vendors.map((vendor) => {
             const msmed = msmedApplies(vendor);
             const unregistered = isUnregistered(vendor);
             return (

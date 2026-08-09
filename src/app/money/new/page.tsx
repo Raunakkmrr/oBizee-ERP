@@ -19,7 +19,10 @@ import {
   groupByContract,
   nothingToBillReason,
 } from "@/lib/data/billable";
-import { useStoreState } from "@/lib/data/use-store";
+import { useEffect, useState } from "react";
+import { getBoard, type JobRow } from "@/lib/data/board";
+import { getContracts, type Contract } from "@/lib/data/contracts";
+import { getSettlementTargets, type SettlementTarget } from "@/lib/data/advances";
 import { createInvoice } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
@@ -42,7 +45,6 @@ import { ErrorState } from "@/components/data-states/error-state";
  * which kind of nothing — no work done, or all of it already billed.
  */
 export default function NewInvoicePage() {
-  const state = useStoreState();
   const router = useRouter();
   /*
     The number is issued by the database, not chosen here — GST §31 wants one
@@ -53,14 +55,39 @@ export default function NewInvoicePage() {
   */
   const raise = useMutation(createInvoice);
 
-  const jobs = billableJobs(state.board.jobs, state.invoices);
+  /*
+    Three reads, from the register.
+
+    What is billable is the intersection of what has been done and what has
+    already been billed — and getting either from a browser copy means offering
+    to raise an invoice a colleague raised an hour ago.
+  */
+  const [boardJobs, setBoardJobs] = useState<JobRow[]>([]);
+  const [invoices, setInvoices] = useState<SettlementTarget[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([getBoard(), getSettlementTargets(), getContracts()]).then(
+      ([board, register, amcs]) => {
+        if (cancelled) return;
+        if (board.status === "ready") setBoardJobs([...board.data.jobs]);
+        if (register.status === "ready") setInvoices([...register.data.invoices]);
+        if (amcs.status === "ready") setContracts([...amcs.data.contracts]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const jobs = billableJobs(boardJobs, invoices);
   // Grouped, so a contract eight months unbilled is one row and not eight.
-  const points = groupByContract(billableContractPoints(state));
-  const billed = alreadyBilled(state.board.jobs, state.invoices);
+  const points = groupByContract(billableContractPoints(contracts, invoices));
+  const billed = alreadyBilled(boardJobs, invoices);
   const today = new Date();
 
   async function raiseFromJob(jobId: string) {
-    const job = state.board.jobs.find((candidate) => candidate.id === jobId);
+    const job = boardJobs.find((candidate) => candidate.id === jobId);
     const result = await raise.run({
       jobId,
       lines: [
@@ -75,7 +102,8 @@ export default function NewInvoicePage() {
         },
       ],
     });
-    if (result?.ok) router.push("/money/invoice");
+    // The review screen is told which document to show, not left to guess.
+    if (result?.ok) router.push(`/money/invoice?id=${result.data.id}`);
   }
 
   async function raiseFromContract(contractId: string, point: number, amountPaise: number) {
@@ -93,7 +121,8 @@ export default function NewInvoicePage() {
         },
       ],
     });
-    if (result?.ok) router.push("/money/invoice");
+    // The review screen is told which document to show, not left to guess.
+    if (result?.ok) router.push(`/money/invoice?id=${result.data.id}`);
   }
 
   return (

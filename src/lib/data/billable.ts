@@ -1,5 +1,5 @@
+import type { Contract } from "./contracts";
 import type { JobRow } from "./board";
-import type { Invoice, StoreState } from "./store";
 import { billingDue, type BillingDue } from "./contracts";
 
 /**
@@ -30,9 +30,10 @@ export type BillableJob = {
   reason: string;
 };
 
+/** Only `jobId` is read, so only `jobId` is asked for. */
 export function billableJobs(
   jobs: readonly JobRow[],
-  invoices: readonly Invoice[],
+  invoices: readonly { jobId: string | null }[],
 ): BillableJob[] {
   const billed = new Set(
     invoices.map((invoice) => invoice.jobId).filter((id): id is string => id !== null),
@@ -52,7 +53,7 @@ export function billableJobs(
 /** Jobs that are finished *and* already billed — stated, never silently hidden. */
 export function alreadyBilled(
   jobs: readonly JobRow[],
-  invoices: readonly Invoice[],
+  invoices: readonly { jobId: string | null }[],
 ): number {
   const billed = new Set(
     invoices.map((invoice) => invoice.jobId).filter((id): id is string => id !== null),
@@ -68,15 +69,26 @@ export function alreadyBilled(
  * exists so the chooser has one function to call for both halves rather than
  * assembling the second one itself.
  */
-export function billableContractPoints(state: StoreState): BillingDue[] {
+/**
+ * Which contract instalments are due but unraised.
+ *
+ * Takes the two lists rather than the whole store, so it can be fed from the
+ * register as easily as from a fixture — the screen that uses it reads both
+ * from the API now, and a helper that insists on a `StoreState` is a helper
+ * that keeps the store alive.
+ */
+export function billableContractPoints(
+  contracts: readonly Contract[],
+  invoices: readonly { contractId: string | null }[],
+): BillingDue[] {
   const raisedByContract: Record<string, number> = {};
-  for (const invoice of state.invoices) {
+  for (const invoice of invoices) {
     if (invoice.contractId) {
       raisedByContract[invoice.contractId] =
         (raisedByContract[invoice.contractId] ?? 0) + 1;
     }
   }
-  return billingDue(state.contracts, raisedByContract, new Date());
+  return billingDue(contracts, raisedByContract, new Date());
 }
 
 /** Nothing to bill is a real answer, and the screen says which kind of nothing. */

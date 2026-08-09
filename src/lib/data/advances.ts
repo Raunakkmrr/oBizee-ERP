@@ -50,6 +50,14 @@ const settlementTargetSchema = z.object({
   number: z.string(),
   customerId: z.string(),
   grandTotalPaise: z.number().int(),
+  /*
+    What each invoice settles. The billing chooser reads these to work out
+    which completed jobs and which contract instalments are still unraised —
+    an invoice register that cannot say what it billed cannot answer that.
+  */
+  jobId: z.string().nullable(),
+  contractId: z.string().nullable(),
+  contractPoint: z.number().int().nullable(),
 });
 
 export type SettlementTarget = z.infer<typeof settlementTargetSchema>;

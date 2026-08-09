@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Info, Star, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
@@ -17,9 +17,8 @@ import { STATE_NAMES, codeForAato, computeTotals, derivePlaceOfSupply, type Invo
 import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { Panel } from "@/components/shared/panel";
 import { Briefcase, Send, ShieldCheck } from "lucide-react";
-import { useStoreState } from "@/lib/data/use-store";
-import { latestInvoice } from "@/lib/data/store";
-import { billingIdentityFor } from "@/lib/data/customers";
+import { useSearchParams } from "next/navigation";
+import { getInvoice, type Invoice } from "@/lib/data/money";
 import { EM_DASH } from "@/lib/data/result";
 import { cn } from "@/lib/utils";
 import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
@@ -104,7 +103,20 @@ const OVERRIDE_FORM = z.object({
     .min(10, "Say why in a sentence — this is the audit trail for the override"),
 });
 
+/*
+  Suspense, because `useSearchParams` opts a page out of static prerendering
+  unless the read is inside a boundary. Without it the build fails — the same
+  way /settings did, and for the same reason.
+*/
 export default function ReviewInvoicePage() {
+  return (
+    <Suspense fallback={null}>
+      <ReviewInvoice />
+    </Suspense>
+  );
+}
+
+function ReviewInvoice() {
   /**
    * The most recently created invoice, if there is one.
    *
@@ -114,8 +126,26 @@ export default function ReviewInvoicePage() {
    * worked example from §6.11.1 when nothing has been billed yet, so the screen
    * still demonstrates the tax engine on a cold start.
    */
-  const storeState = useStoreState();
-  const created = latestInvoice(storeState);
+  /*
+    The document this screen was sent to show, by id.
+
+    It used to read "the latest invoice in the browser store" — fine while the
+    store held every invoice the app had made, and wrong the moment the
+    register started issuing them: the store stopped receiving any, so a
+    freshly raised bill showed the cold-start example instead of itself.
+  */
+  const invoiceId = useSearchParams().get("id");
+  const [created, setCreated] = useState<Invoice | null>(null);
+  useEffect(() => {
+    if (!invoiceId) return;
+    let cancelled = false;
+    void getInvoice(invoiceId).then((result) => {
+      if (!cancelled && result.status === "ready") setCreated(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [invoiceId]);
   /*
     The fixture identity belongs to the cold-start example and to nothing else.
 
@@ -124,9 +154,14 @@ export default function ReviewInvoicePage() {
     print it on somebody else's bill. A real invoice answers for itself or says
     it cannot.
   */
-  const billTo = created
-    ? created.billTo
-    : billingIdentityFor(storeState.customers, "Shakti Industries", "Okhla Phase II");
+  /*
+    The invoice's own identity, or nothing.
+
+    The cold-start fallback is gone with the fixture it demonstrated: this
+    screen now shows a real document from the register, and an invoice that
+    carries no identity must say so rather than borrow one.
+  */
+  const billTo = created?.billTo ?? null;
 
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");

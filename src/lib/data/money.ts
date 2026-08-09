@@ -450,3 +450,80 @@ export const getMoney = defineQuery<void, MoneyData>({
     return { raw: getState().money };
   },
 });
+
+/**
+ * An invoice as a screen renders it.
+ *
+ * The type existed in `store.ts` and was never a schema, because nothing
+ * crossed a boundary to reach it. Now one does, and a document with a wrong
+ * total is not something to find out about at print time.
+ */
+const invoiceLineSchema = z.object({
+  description: z.string(),
+  /** SAC for services, HSN for goods — one column, labelled `SAC/HSN`. */
+  code: z.string(),
+  kind: z.enum(["service", "goods"]),
+  qty: z.number(),
+  ratePaise: z.number().int(),
+  /** Slab in whole percent: 0, 5, 18 or 40 (FR-804, GST 2.0). */
+  ratePercent: z.number(),
+});
+
+export const invoiceSchema = z.object({
+  id: z.string(),
+  number: z.string(),
+  jobId: z.string().nullable(),
+  jobNumber: z.string().nullable(),
+  contractId: z.string().nullable(),
+  contractPoint: z.number().int().nullable(),
+  customer: z.string(),
+  /**
+   * Who the bill is addressed to, as it stood when it was issued.
+   *
+   * Null when the customer is not on file — the screen says so rather than
+   * printing somebody else's GSTIN, which is the defect this replaced.
+   */
+  billTo: z
+    .object({
+      gstin: z.string().nullable(),
+      billingStateCode: z.string(),
+      siteAddress: z.string(),
+      siteLocality: z.string(),
+      siteStateCode: z.string(),
+      sitePincode: z.string(),
+    })
+    .nullable(),
+  dateWord: z.string(),
+  head: z.enum(["CGST_SGST", "IGST"]),
+  explanation: z.string(),
+  lines: z.array(invoiceLineSchema),
+  taxablePaise: z.number().int(),
+  totalTaxPaise: z.number().int(),
+  roundOffPaise: z.number().int(),
+  grandTotalPaise: z.number().int(),
+  status: z.enum(["DRAFT", "ISSUED"]),
+});
+
+export type Invoice = z.infer<typeof invoiceSchema>;
+
+/**
+ * One invoice, by id — the document a screen was sent to show.
+ *
+ * The review screen used to read "the latest invoice in the browser store".
+ * That was fine while the store held every invoice the app had made; once the
+ * register started issuing them the store stopped receiving any, and the
+ * screen showed the cold-start example instead of the bill just raised. A
+ * screen that was sent somewhere to show a specific document should be told
+ * which one.
+ */
+export const getInvoice = defineQuery<string, Invoice>({
+  key: "invoice.one",
+  schema: invoiceSchema,
+  api: async (id) => apiFetch<Invoice>(`/api/invoices/${id}`),
+  fixture: async () => {
+    const state = (await import("./store")).getState();
+    const latest = state.invoices[state.invoices.length - 1];
+    if (!latest) throw new Error("no invoice on file");
+    return { raw: latest };
+  },
+});

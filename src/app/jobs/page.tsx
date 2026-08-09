@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils";
 import { EM_DASH, loading, renderComputed, type Query } from "@/lib/data/result";
 import { formatMoney } from "@/lib/money";
 import { BOARD_FILTERS, FILTER_LABEL, getBoard, jobValue, matchesFilter, type Board, type BoardFilter } from "@/lib/data/board";
-import { useStoreState } from "@/lib/data/use-store";
 
 /**
  * Jobs — the searchable record of every work order, as distinct from `/today`.
@@ -37,7 +36,6 @@ export default function JobsPage() {
   const [filter, setFilter] = useState<BoardFilter | null>(null);
 
   // Re-reads whenever any surface writes to the store.
-  const storeState = useStoreState();
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +45,9 @@ export default function JobsPage() {
     return () => {
       cancelled = true;
     };
-  }, [storeState]);
+    // No store dependency: nothing writes to it, so nothing here would change
+    // because of it. The register is re-read when the screen mounts.
+  }, []);
 
   const today = new Date();
 

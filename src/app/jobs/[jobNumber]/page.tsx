@@ -131,7 +131,8 @@ export default function JobDetailPage({
         },
       ],
     });
-    if (result?.ok) router.push("/money/invoice");
+    // The review screen is told which document to show, not left to guess.
+    if (result?.ok) router.push(`/money/invoice?id=${result.data.id}`);
   }
 
   return (
