@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
-import { useCurrentUser } from "@/lib/data/use-store";
+import { useCurrentUser } from "@/lib/data/use-session";
 import { type Caller } from "@/lib/api/session";
 import { signOut } from "@/lib/api/client";
 import { formatDateLong, formatTime } from "@/lib/datetime";

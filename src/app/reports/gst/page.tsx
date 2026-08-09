@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { downloadCsv, downloadJson, downloadXlsx, stampFor } from "@/lib/export";
 import { ZOHO_COLUMNS, zohoRows } from "@/lib/zoho";
 import { tallyXml, type TallyInvoice } from "@/lib/tally";
-import { useCurrentUser } from "@/lib/data/use-store";
+import { useCurrentUser } from "@/lib/data/use-session";
 import { getInvoiceRegister, isIssued, type IssuedInvoice } from "@/lib/data/advances";
 
 /** Writes the Tally envelope as a file, since `lib/export` only knows CSV/JSON. */

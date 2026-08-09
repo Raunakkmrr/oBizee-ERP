@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useCurrentUser, useSessionResolved } from "@/lib/data/use-store";
+import { useCurrentUser, useSessionResolved } from "@/lib/data/use-session";
 import { AppSidebar, type BadgeCounts } from "./app-sidebar";
 import { TopBar, type Freshness } from "./top-bar";
 

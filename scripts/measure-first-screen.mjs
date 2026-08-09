@@ -9,13 +9,16 @@
  * the decoded body, so it is gzipped here to get what actually crosses the
  * network.
  *
- * **Two numbers, because they answer different questions.** The budget is on
- * *the first screen*, and the board is a different screen from the sign-in
- * form — counting them together charged the board for chunks only the sign-in
- * page loads. That is what it did, which is part of why the first run read 393
- * KB. The cold journey is reported alongside, unbudgeted, because it is what a
- * coordinator actually waits through on a Monday morning and somebody should
- * be looking at it.
+ * **Two numbers.** The budgeted one is sign-in through to a rendered board:
+ * everything a coordinator waits for before she can do anything, which is what
+ * §9.1 is protecting. As it turns out the sign-in form loads nothing of its
+ * own, so this is also the board's own weight.
+ *
+ * The second is unbudgeted and was a surprise. Next prefetches every `<Link>`
+ * in the viewport, and the sidebar holds twelve of them — so a board left open
+ * quietly pulls every screen in the product. It happens at idle and blocks
+ * nothing, which is why it is not the budget; it is still about a megabyte on
+ * a connection that may be a phone hotspot, and nobody had looked at it.
  *
  * Needs a production server: `next build && next start --port 3200`, with the
  * API allowing that origin. Development bundles are unminified and measure
@@ -49,11 +52,12 @@ await page.waitForURL(/\/today/);
 await page.waitForLoadState("networkidle");
 
 const journeyKb = Math.round([...scripts.values()].reduce((sum, n) => sum + n, 0) / 1024);
+const heaviest = [...scripts.entries()].sort((a, b) => b[1] - a[1]);
 
 /*
-  Now the board on its own, from a cold cache but a warm session. The refresh
-  cookie survives a new context, so this is the page a coordinator opens every
-  morning after the first — and it is the screen the budget is written about.
+  What the same page goes on to pull once it is idle: the prefetch of every
+  navigation target. Measured from a fresh context with the session's cookie,
+  so it is a genuine cold open rather than a warmed cache.
 */
 const cookies = await page.context().cookies();
 const second = await browser.newContext();
@@ -71,13 +75,19 @@ board.on("response", async (response) => {
 });
 
 await board.goto(`${ORIGIN}/today`, { waitUntil: "networkidle" });
-const kb = Math.round([...scripts.values()].reduce((sum, n) => sum + n, 0) / 1024);
+const idleKb = Math.round([...scripts.values()].reduce((sum, n) => sum + n, 0) / 1024);
 
-console.log(`first screen (/today): ${kb} KB gzipped across ${scripts.size} files (budget ${BUDGET_KB})`);
-for (const [url, size] of [...scripts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)) {
+console.log(
+  `first screen (sign-in → board): ${journeyKb} KB gzipped ` +
+    `(budget ${BUDGET_KB}) — ${journeyKb <= BUDGET_KB ? "pass" : "OVER"}`,
+);
+for (const [url, size] of [...heaviest].slice(0, 5)) {
   console.log(`   ${String(Math.round(size / 1024)).padStart(4)} KB  ${url.split("/").pop()}`);
 }
-console.log(`cold journey (sign-in → board): ${journeyKb} KB — not budgeted, but what a first visit costs`);
+console.log(
+  `\nafter idle, with the sidebar's links prefetched: ${idleKb} KB across ${scripts.size} files.` +
+    `\nNot budgeted — it blocks nothing — but it is what a board left open costs a hotspot.`,
+);
 
 await browser.close();
-process.exit(kb <= BUDGET_KB ? 0 : 1);
+process.exit(journeyKb <= BUDGET_KB ? 0 : 1);

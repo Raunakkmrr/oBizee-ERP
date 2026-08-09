@@ -1,16 +1,20 @@
 "use client";
 
-import {
-  callerResolved,
-  getCaller,
-  subscribeToSession,
-  type Caller,
-} from "../api/session";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { dispatch, getState, getStatus, hydrate, seedState, subscribe, type Action, type HydrationStatus, type StoreState } from "./store";
 
 /**
  * React binding for the local store.
+ *
+ * **Nothing in the running product imports this file.** The store was retired
+ * when the screens moved onto the API; the two session hooks that used to live
+ * here — and that every screen did import — are in `use-session.ts`, because an
+ * import is of a module rather than of a symbol, and pulling `useCurrentUser`
+ * from here pulled the store, the crypto module, the tax engine and every seed
+ * fixture into the bundle of every page.
+ *
+ * Kept for the tests that still exercise the store. Deleting it and `store.ts`
+ * is a separate, mechanical change.
  *
  * `useSyncExternalStore` rather than an effect that calls `setState`: the store
  * is genuinely external, and the effect version renders the seed once and then
@@ -51,26 +55,4 @@ export function useHydrationStatus(): HydrationStatus {
 
 export function useDispatch(): (action: Action) => void {
   return useCallback((action: Action) => dispatch(action), []);
-}
-
-/**
- * The person whose session this is — from the token, never from a menu.
- *
- * This used to read `actingAs` out of the browser store and fall back to the
- * first owner, which meant the answer to "who am I" was a value the browser
- * held and anybody could change. Beside a real sign-in that is not a fallback,
- * it is a way for a technician to see every price in the firm.
- *
- * `null` while the identity is still being fetched, and `null` when nobody is
- * signed in. The shell tells those two apart with `useSessionResolved` and
- * sends the second case to the sign-in screen rather than rendering a page
- * with no user.
- */
-export function useCurrentUser(): Caller | null {
-  return useSyncExternalStore(subscribeToSession, getCaller, () => null);
-}
-
-/** False until `/api/me` has answered — "not yet" is not "nobody". */
-export function useSessionResolved(): boolean {
-  return useSyncExternalStore(subscribeToSession, callerResolved, () => false);
 }

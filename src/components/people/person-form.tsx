@@ -18,7 +18,7 @@ import { z } from "zod";
 import { Chip } from "@/components/shared/controls";
 import { Section } from "@/components/job/sections";
 import { cn } from "@/lib/utils";
-import { useCurrentUser } from "@/lib/data/use-store";
+import { useCurrentUser } from "@/lib/data/use-session";
 import { getBoard, type JobRow } from "@/lib/data/board";
 import { addPerson, setPersonActive, updatePerson, type MutationResult } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";

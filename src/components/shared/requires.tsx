@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ShieldAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
-import { useCurrentUser } from "@/lib/data/use-store";
+import { useCurrentUser } from "@/lib/data/use-session";
 import { can, ROLE_LABELS, type Permission } from "@/lib/roles";
 
 /**

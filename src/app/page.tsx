@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { getHomeSnapshot, type HomeSnapshot } from "@/lib/data/home";
 import { homeHrefFor } from "@/lib/navigation";
 import { can } from "@/lib/roles";
-import { useCurrentUser } from "@/lib/data/use-store";
+import { useCurrentUser } from "@/lib/data/use-session";
 import { loading, type Query } from "@/lib/data/result";
 import { CURRENT_USER, SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { formatDateLong, greetingFor } from "@/lib/datetime";

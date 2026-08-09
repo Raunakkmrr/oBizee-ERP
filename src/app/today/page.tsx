@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { loading, type Query } from "@/lib/data/result";
 import { getBoard, restOfDay, triageJobs, type Board, type JobRow, type Technician } from "@/lib/data/board";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
-import { useCurrentUser } from "@/lib/data/use-store";
+import { useCurrentUser } from "@/lib/data/use-session";
 import { assignJob } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
