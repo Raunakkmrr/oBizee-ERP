@@ -5,7 +5,6 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser, useSessionResolved } from "@/lib/data/use-store";
-import { loadCaller } from "@/lib/api/session";
 import { AppSidebar, type BadgeCounts } from "./app-sidebar";
 import { TopBar, type Freshness } from "./top-bar";
 
@@ -62,10 +61,6 @@ export function AppShell({
   const me = useCurrentUser();
   const resolved = useSessionResolved();
   const router = useRouter();
-
-  useEffect(() => {
-    void loadCaller();
-  }, []);
 
   useEffect(() => {
     if (resolved && !me) {

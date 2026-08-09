@@ -337,7 +337,7 @@ export default function JobDetailPage({
                   {job.technician ? ` · ${job.technician.name}` : null}
                 </p>
 
-                {showValue && job.valuePaise !== null ? (
+                {showValue && job.valuePaise !== null && job.valuePaise !== undefined ? (
                   <p className="mt-1 text-xl font-semibold">
                     <MoneyText
                       amount={asPaise(job.valuePaise)}

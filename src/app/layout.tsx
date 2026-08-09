@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "next-themes";
 import { fontClassNamesFor, type Locale } from "@/lib/fonts";
+import { SessionBoundary } from "@/components/shell/session-boundary";
 import "./globals.css";
 
 /**
@@ -51,7 +52,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <SessionBoundary>{children}</SessionBoundary>
         </ThemeProvider>
       </body>
     </html>

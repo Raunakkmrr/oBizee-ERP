@@ -60,7 +60,17 @@ export const jobDetailSchema = z.object({
    * is the second thing anyone asks about a job.
    */
   technician: z.object({ id: z.string(), name: z.string() }).nullable(),
-  valuePaise: z.number().int().nullable(),
+  /**
+   * Absent — not null — for a role that may not see prices.
+   *
+   * FR-1302 strips the field rather than blanking it, deliberately: a `null`
+   * price is a price somebody could not compute, and "you may not see this" is
+   * a different fact. The schema has to say `optional` as well as `nullable`
+   * or the protection makes the payload unparseable for exactly the role it
+   * protects — which is what happened, and what a technician saw instead of
+   * their board.
+   */
+  valuePaise: z.number().int().nullable().optional(),
 
   site: z.object({
     addressLine: z.string(),

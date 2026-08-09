@@ -84,7 +84,17 @@ const jobRowSchema = z.object({
   /** `Visit 2` — a second attempt is a customer already let down once. */
   visitAttempt: z.number().int().positive(),
   /** Only sent when the role permits it (§6.4.2, FR-1302). */
-  valuePaise: z.number().int().nullable(),
+  /**
+   * Absent — not null — for a role that may not see prices.
+   *
+   * FR-1302 strips the field rather than blanking it, deliberately: a `null`
+   * price is a price somebody could not compute, and "you may not see this" is
+   * a different fact. The schema has to say `optional` as well as `nullable`
+   * or the protection makes the payload unparseable for exactly the role it
+   * protects — which is what happened, and what a technician saw instead of
+   * their board.
+   */
+  valuePaise: z.number().int().nullable().optional(),
   /**
    * FR-502's idempotency key — `ctr_1:sch_1:3`.
    *
@@ -149,7 +159,14 @@ export function matchesFilter(job: JobRow, filter: BoardFilter): boolean {
 }
 
 export function jobValue(job: JobRow): Computed<Paise> | null {
-  if (job.valuePaise === null) return null;
+  /*
+    Two different absences, one answer here.
+
+    `null` is "not quoted yet"; missing entirely is FR-1302 stripping it for a
+    role that may not see prices. Neither is a number, and neither is zero —
+    the screen shows nothing rather than inventing a figure.
+  */
+  if (job.valuePaise === null || job.valuePaise === undefined) return null;
   return computed(asPaise(job.valuePaise));
 }
 

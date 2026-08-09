@@ -255,7 +255,7 @@ export default function NewInvoicePage() {
                       {job.serviceType} · {job.locality} · {reason}
                     </p>
                   </div>
-                  {job.valuePaise !== null ? (
+                  {job.valuePaise !== null && job.valuePaise !== undefined ? (
                     <MoneyText
                       amount={asPaise(job.valuePaise)}
                       className="shrink-0 text-sm font-medium"

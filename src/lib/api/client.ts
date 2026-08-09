@@ -149,6 +149,15 @@ export async function signInWithPassword(
   const body = await response.json();
   if (!response.ok) return { ok: false, message: body.error ?? "Could not sign in" };
   startSession(body);
+  /*
+    Fetch the identity as part of signing in, not afterwards.
+
+    The tokens alone are not a session the app can render: the shell reads
+    `useCurrentUser`, and a caller that is still null when the board mounts
+    gets redirected straight back to this screen. Whoever starts the session
+    is responsible for completing it.
+  */
+  await loadCaller();
   return { ok: true };
 }
 
@@ -194,6 +203,7 @@ export async function signInWithOtp(
   const body = await response.json();
   if (!response.ok) return { ok: false, message: body.error ?? "That code is not right" };
   startSession(body);
+  await loadCaller();
   return { ok: true };
 }
 
