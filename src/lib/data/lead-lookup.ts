@@ -13,13 +13,14 @@
  * - an existing open **lead** → she must not create a second lead for the same
  *   caller, so the primary becomes "Open existing lead".
  *
- * ⚠️ **The requirement this cannot satisfy under DR-9.** FR-102 is a *latency*
- * requirement — the panel must appear within 500ms of the 10th digit, on a
- * p95 ≤250ms lookup, because Priya is mid-call. A fixture returns instantly and
- * always succeeds, so the behaviour is built and the budget is unproven.
- * Recorded in the registry rather than counted as met.
+ * FR-102 is also a *latency* requirement — the panel must appear within 500ms
+ * of the 10th digit, on a p95 ≤250ms lookup, because Priya is mid-call. That
+ * is now measurable: the fixture below still exists for offline work, but the
+ * screen calls the API, and the API composes the three history facts in one
+ * request rather than letting the browser fan out for them.
  */
 import { z } from "zod";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 const customerMatchSchema = z.object({
@@ -81,6 +82,8 @@ const MATCHES: Record<string, Lookup["match"]> = {
 export const lookupPhone = defineQuery<string, Lookup>({
   key: "lead.lookup",
   schema: lookupSchema,
+  api: async (phone) =>
+    apiFetch<Lookup>(`/api/leads/lookup?phone=${encodeURIComponent(phone)}`),
   fixture: (phone): Fetched<unknown> => ({
     raw: { match: MATCHES[phone.replace(/\D/g, "")] ?? null },
   }),

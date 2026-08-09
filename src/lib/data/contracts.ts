@@ -19,6 +19,7 @@
  */
 import { z } from "zod";
 import { asPaise, type Paise } from "@/lib/money";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 /** FR-501's recurrence list — validated by the design-partner research. */
@@ -705,6 +706,7 @@ export const SEED_CONTRACTS = {
 export const getContracts = defineQuery<void, z.infer<typeof contractsSchema>>({
   key: "contracts.list",
   schema: contractsSchema,
+  api: async () => apiFetch<z.infer<typeof contractsSchema>>("/api/contracts"),
   fixture: async (): Promise<Fetched<unknown>> => ({
     raw: { contracts: (await import("./store")).getState().contracts },
   }),
