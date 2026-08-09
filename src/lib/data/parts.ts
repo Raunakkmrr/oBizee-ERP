@@ -13,6 +13,7 @@
  * If it ever creeps upward, the product has drifted off its thesis."
  */
 import { z } from "zod";
+import { apiFetch } from "../api/client";
 import { defineQuery, type Fetched } from "./source";
 
 export const PARTS_TABS = ["reorder", "locations", "exceptions"] as const;
@@ -254,5 +255,6 @@ const FIXTURE = {
 export const getParts = defineQuery<void, PartsData>({
   key: "parts.overview",
   schema: partsSchema,
+  api: async () => apiFetch<PartsData>("/api/parts"),
   fixture: (): Fetched<unknown> => ({ raw: FIXTURE }),
 });

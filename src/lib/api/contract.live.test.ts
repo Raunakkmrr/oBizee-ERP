@@ -10,6 +10,7 @@ import { leadsSchema } from "../data/leads";
 import { moneySchema } from "../data/money";
 import { ownerHomeSchema } from "../data/owner-home";
 import { peopleSchema } from "../data/people";
+import { partsSchema } from "../data/parts";
 import { reportsSchema } from "../data/reports";
 
 /**
@@ -81,6 +82,16 @@ describe.skipIf(!reachable)("live API satisfies the web app's schemas", () => {
     */
     const team = parseOrExplain(peopleSchema, await get("/api/people"), "people");
     expect(team.people.length).toBeGreaterThan(0);
+
+    /*
+      Stock. All four sections asserted non-empty: a reorder list with nothing
+      on it and an exception list that is always clear are what a stock screen
+      looks like when nobody has pointed it at real movements.
+    */
+    const stock = parseOrExplain(partsSchema, await get("/api/parts"), "parts");
+    expect(stock.reorder.length, "nothing below its reorder level").toBeGreaterThan(0);
+    expect(stock.locations.length, "no store or van").toBeGreaterThan(0);
+    expect(new Set(stock.exceptions.map((e) => e.kind)).size, "not every exception kind is exercised").toBe(3);
 
     /*
       A schema check on an empty array passes and proves nothing — which is how
