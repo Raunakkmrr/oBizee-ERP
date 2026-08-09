@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 
 import { boardSchema } from "../data/board";
+import { contractsSchema } from "../data/contracts";
 import { customersSchema } from "../data/customers";
 import { gstPeriodSchema, periodToFile } from "../data/gst";
 import { homeSnapshotSchema } from "../data/home";
 import { jobDetailSchema } from "../data/job-detail";
+import { lookupSchema } from "../data/lead-lookup";
 import { leadsSchema } from "../data/leads";
 import { moneySchema } from "../data/money";
 import { ownerHomeSchema } from "../data/owner-home";
@@ -107,6 +109,55 @@ describe.skipIf(!reachable)("live API satisfies the web app's schemas", () => {
     expect(board.technicians.length).toBeGreaterThan(0);
     expect(leads.leads.length, "no open leads — run seed-day").toBeGreaterThan(0);
     expect(money.receivables.length).toBeGreaterThan(0);
+
+    /*
+      Contracts. This endpoint returned database rows for weeks and the screen
+      never called it — it rendered "not wired to the backend yet" over two
+      live AMCs, because this test covered nine composed reads and contracts
+      was the tenth. Asserted non-empty for the same reason as everything else
+      here: a schema check on an empty array proves nothing.
+    */
+    const contracts = parseOrExplain(contractsSchema, await get("/api/contracts"), "contracts");
+    expect(contracts.contracts.length, "no contracts seeded").toBeGreaterThan(0);
+    expect(
+      contracts.contracts.flatMap((c) => c.schedules).length,
+      "no schedules — FR-1406's matrix is unproven",
+    ).toBeGreaterThan(0);
+    // Composed, not raw: a uuid here means the join was dropped.
+    expect(contracts.contracts[0]!.customer).not.toMatch(/^[0-9a-f-]{36}$/);
+    expect(contracts.contracts[0]!.termDays).toBeGreaterThan(0);
+
+    /*
+      FR-102's lookup, in all three of its states. The panel is the thing a
+      coordinator reads mid-call, and each branch renders differently — a
+      no-match must render nothing at all, which is why null is asserted rather
+      than assumed.
+    */
+    const known = customers.customers.find((c) => c.sites.some((s) => s.contacts.length > 0));
+    const contact = known?.sites.flatMap((s) => s.contacts)[0];
+    if (contact?.phone) {
+      const hit = parseOrExplain(
+        lookupSchema,
+        await get(`/api/leads/lookup?phone=${encodeURIComponent(contact.phone)}`),
+        "lead lookup (known number)",
+      );
+      expect(hit.match, `${contact.phone} is on a site contact and did not match`).not.toBeNull();
+    }
+    const leadPhone = leads.leads.find((l) => l.phone)?.phone;
+    if (leadPhone) {
+      const hit = parseOrExplain(
+        lookupSchema,
+        await get(`/api/leads/lookup?phone=${encodeURIComponent(leadPhone)}`),
+        "lead lookup (open lead)",
+      );
+      expect(hit.match?.kind, "an open lead should win over a customer").toBe("lead");
+    }
+    const miss = parseOrExplain(
+      lookupSchema,
+      await get("/api/leads/lookup?phone=9999900000"),
+      "lead lookup (no match)",
+    );
+    expect(miss.match, "an unknown number must match nothing").toBeNull();
 
     // The board's counters must describe the rows it actually sent.
     expect(board.counters.unassigned).toBe(board.jobs.filter((j) => j.technician === null).length);
