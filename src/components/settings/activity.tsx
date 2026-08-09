@@ -2,7 +2,8 @@
 
 import { ScrollText, WifiOff } from "lucide-react";
 import { AUDIT_LIMIT, whenWords } from "@/lib/data/audit";
-import { useStoreState } from "@/lib/data/use-store";
+import { useEffect, useState } from "react";
+import { getAuditTrail, type AuditEntry } from "@/lib/data/audit";
 
 /**
  * The audit trail — FR-1305.
@@ -20,8 +21,20 @@ import { useStoreState } from "@/lib/data/use-store";
  * assumes this is everything that ever happened would be wrong.
  */
 export function Activity() {
-  const state = useStoreState();
-  const trail = state.audit;
+  const [trail, setTrail] = useState<AuditEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    void getAuditTrail().then((result) => {
+      if (!cancelled && result.status === "ready") {
+        setTrail([...result.data.entries]);
+        setTotal(result.data.total);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="rounded-2xl bg-card p-5 shadow-[var(--shadow-card)]">
@@ -30,8 +43,17 @@ export function Activity() {
         Activity
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Every change made in this browser, newest first. Entries are only ever
+        {/*
+          It said "in this browser", which was true of a local trail and is a
+          lie about a shared one — the wrong half of the firm's history to
+          claim. And a list capped at fifty must say so, or "nothing after
+          this" is read into a page break.
+        */}
+        Every change made in the firm, newest first. Entries are only ever
         added — nothing here can be edited or removed.
+        {total > trail.length
+          ? ` Showing the most recent ${trail.length} of ${total}.`
+          : ""}
       </p>
 
       {trail.length === 0 ? (

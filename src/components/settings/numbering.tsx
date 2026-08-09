@@ -3,17 +3,10 @@
 import { CircleCheck, Hash, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Unavailable } from "@/components/shared/unavailable";
-import {
-  SERIES_NEEDS_BACKEND,
-  financialYear,
-  gapsIn,
-  peek,
-  sequenceOf,
-  seriesKey,
-  type DocType,
-} from "@/lib/data/series";
+import { SERIES_NEEDS_BACKEND, financialYear, type DocType } from "@/lib/data/series";
 import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
-import { useStoreState } from "@/lib/data/use-store";
+import { useEffect, useState } from "react";
+import { getNumbering, type Numbering } from "@/lib/data/series";
 
 /**
  * Document numbering — FR-811 made checkable.
@@ -58,23 +51,28 @@ const CHECKABLE: Record<DocType, boolean> = {
 };
 
 export function Numbering() {
-  const state = useStoreState();
-  const branch = SEED_TENANT.branches[0];
+  /*
+    Counters and gaps from the register.
+
+    Gap detection used to compare the counter against the documents this
+    browser had loaded, which reports an absence as a gap — the screen would
+    have claimed hundreds of missing invoice numbers on any machine that had
+    not opened the register. The comparison belongs where every document is.
+  */
+  const [data, setData] = useState<Numbering | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void getNumbering().then((result) => {
+      if (!cancelled && result.status === "ready") setData(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const branch = data?.branches[0] ?? SEED_TENANT.branches[0];
   const today = new Date();
   const fy = financialYear(today);
-
-  /* The numbers on documents that exist — never what the counter believes. */
-  const issued: Record<DocType, number[]> = {
-    job: state.board.jobs
-      .map((job) => sequenceOf(job.jobNumber))
-      .filter((n): n is number => n !== null),
-    invoice: state.invoices
-      .map((invoice) => sequenceOf(invoice.number))
-      .filter((n): n is number => n !== null),
-    receipt_voucher: state.advances
-      .map((advance) => sequenceOf(advance.voucherNumber))
-      .filter((n): n is number => n !== null),
-  };
 
   return (
     <div className="space-y-4">
@@ -90,10 +88,9 @@ export function Numbering() {
 
         <div className="mt-4 grid gap-2">
           {(Object.keys(LABELS) as DocType[]).map((docType) => {
-            const counter = state.series[seriesKey(branch.id, docType, today)] ?? 0;
-            const present = issued[docType].filter((n) => n <= counter);
-            const from = present.length > 0 ? Math.min(...present) : counter + 1;
-            const gaps = gapsIn(present, from, counter);
+            const row = data?.counters.find((entry) => entry.docType === docType);
+            const counter = row?.lastIssued ?? 0;
+            const gaps = row?.gaps ?? [];
 
             return (
               <div
@@ -108,7 +105,7 @@ export function Numbering() {
 
                 <div className="shrink-0 text-right">
                   <p className="text-sm font-medium tnum-id">
-                    {peek(state.series, branch, docType, today)}
+                    {row ? row.next : "—"}
                   </p>
                   <p className="text-xs text-muted-foreground tabular-nums">
                     next &middot; {counter} issued this year

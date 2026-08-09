@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { apiFetch } from "../api/client";
+import { defineQuery } from "./source";
 
 /**
  * The audit trail — FR-1305.
@@ -42,6 +44,31 @@ export const auditEntrySchema = z.object({
 
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
 export const auditSchema = z.array(auditEntrySchema);
+
+export const auditTrailSchema = z.object({
+  entries: z.array(auditEntrySchema),
+  /** Everything on file, not just this page — so the count is not a lie. */
+  total: z.number().int().nonnegative(),
+});
+
+export type AuditTrail = z.infer<typeof auditTrailSchema>;
+
+/**
+ * The audit trail — FR-1305.
+ *
+ * Newest first and paged, because it only grows. Read from the register: a
+ * trail assembled in the browser records what this browser did, which is not
+ * an audit trail at all.
+ */
+export const getAuditTrail = defineQuery<void, AuditTrail>({
+  key: "settings.audit",
+  schema: auditTrailSchema,
+  api: async () => apiFetch<AuditTrail>("/api/settings/audit?limit=50"),
+  fixture: async () => {
+    const trail = (await import("./store")).getState().audit;
+    return { raw: { entries: trail, total: trail.length } };
+  },
+});
 
 /** Actions that change nothing worth recording. */
 const NOT_A_MUTATION = new Set(["ACT_AS"]);

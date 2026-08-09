@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { apiFetch } from "../api/client";
+import { defineQuery } from "./source";
 
 /**
  * Document numbering — FR-811.
@@ -153,3 +155,43 @@ export function sequenceOf(number: string): number | null {
   const parsed = Number(match[1]);
   return Number.isInteger(parsed) ? parsed : null;
 }
+
+export const numberingSchema = z.object({
+  financialYear: z.number().int(),
+  branches: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      jobSeriesPrefix: z.string(),
+      invoiceSeriesPrefix: z.string(),
+    }),
+  ),
+  counters: z.array(
+    z.object({
+      branchId: z.string(),
+      docType: z.enum(["job", "invoice", "receipt_voucher"]),
+      lastIssued: z.number().int().nonnegative(),
+      next: z.number().int().positive(),
+      issuedCount: z.number().int().nonnegative(),
+      /** Numbers drawn and never used — the §31 question, found before an auditor does. */
+      gaps: z.array(z.number().int()),
+    }),
+  ),
+});
+
+export type Numbering = z.infer<typeof numberingSchema>;
+
+/**
+ * The series, as the register holds them.
+ *
+ * Gap detection moved to the API with the data: comparing a counter against
+ * whatever a browser happened to have loaded reports absences as gaps.
+ */
+export const getNumbering = defineQuery<void, Numbering>({
+  key: "settings.numbering",
+  schema: numberingSchema,
+  api: async () => apiFetch<Numbering>("/api/settings/numbering"),
+  fixture: async () => ({
+    raw: { financialYear: new Date().getFullYear(), branches: [], counters: [] },
+  }),
+});
