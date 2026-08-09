@@ -69,10 +69,24 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: "npm run dev -- --port 3100",
+      /*
+        A production build, not `next dev`, and the reason is the twelve-route
+        sweep in `wired.spec.ts`.
+
+        Turbopack compiles a route the first time it is requested, so a spec
+        that visits a dozen pages nobody has opened yet spends ten to fifteen
+        seconds per page compiling — and every assertion times out. Warm, the
+        same spec passes; cold, one test in fifteen does. A suite whose result
+        depends on whether somebody ran it recently is not a suite.
+
+        Building is cheap here — under five seconds — and the run is honest in
+        two further ways: it exercises the bundle a user is actually served,
+        and the JS-weight figure stops being the meaningless dev number.
+      */
+      command: "npm run build && npx next start --port 3100",
       url: WEB,
       reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
+      timeout: 180_000,
       env: {
         NEXT_PUBLIC_DATA_SOURCE: "api",
         NEXT_PUBLIC_API_URL: API,

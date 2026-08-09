@@ -50,6 +50,15 @@ function clearSignInBudgets(): void {
     "otp:req:ip:127.0.0.1",
     "otp:req:ip:::1",
     "otp:verify:phone:919820012345",
+    /*
+      The refresh budget, which this suite spends faster than any human could:
+      every `page.goto` is a cold document, and a cold document exchanges the
+      cookie for an access token. It is refunded on success now, so this is
+      belt-and-braces for the failures the suite causes on purpose.
+    */
+    "refresh:ip:unknown",
+    "refresh:ip:127.0.0.1",
+    "refresh:ip:::1",
   ];
 
   const script = keys
