@@ -383,8 +383,16 @@ export function AssetBody({ job }: { job: JobDetail }) {
             Last 3 services
           </p>
           <ul className="space-y-1 text-muted-foreground">
-            {job.asset.lastServices.map((service) => (
-              <li key={service.date} className="truncate">
+            {/*
+              Keyed by position, not by the date.
+
+              Two visits to one site on the same day are ordinary — a morning
+              call that needed a part and an afternoon return — and React
+              silently duplicated or dropped one of them because the key
+              collided. The date is a label here, never an identity.
+            */}
+            {job.asset.lastServices.map((service, index) => (
+              <li key={`${service.date}:${index}`} className="truncate">
                 <span className="tabular-nums">{service.date}</span> ·{" "}
                 {service.technician} · {service.summary}
               </li>
