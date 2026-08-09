@@ -8,10 +8,11 @@ import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { Button } from "@/components/ui/button";
 import { AssetBody, CollapsedSection, DecisionBand, PartsBody, Section, SignOffBody, TimelineBody, WhereBody, type Tone } from "@/components/job/sections";
+import { getPeople, type Person } from "@/lib/data/people";
+import { getBoard, type JobRow } from "@/lib/data/board";
 import { assignJob, createInvoice, rescheduleJob, type Slot } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
-import { getState } from "@/lib/data/store";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
@@ -69,6 +70,27 @@ export default function JobDetailPage({
   const [hideAmounts, setHideAmounts] = useState(false);
   /** Which inline picker is open — assignment, slot, or none. */
   const [picker, setPicker] = useState<"technician" | "slot" | null>(null);
+
+  /*
+    The team and the day's board, for the assignment picker.
+
+    It ranks by who is free, who is nearby and who has the skill — all facts
+    about the whole board, and all wrong if read from one browser while a
+    colleague is dispatching from another.
+  */
+  const [people, setPeople] = useState<Person[]>([]);
+  const [boardJobs, setBoardJobs] = useState<JobRow[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([getPeople(), getBoard()]).then(([team, board]) => {
+      if (cancelled) return;
+      if (team.status === "ready") setPeople([...team.data.people]);
+      if (board.status === "ready") setBoardJobs([...board.data.jobs]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const reload = useCallback(() => {
     void getJobDetail(decodeURIComponent(jobNumber)).then(setQuery);
@@ -437,7 +459,7 @@ export default function JobDetailPage({
                     </Button>
                     {picker === "technician" ? (
                       <PersonPicker
-                        people={getState().people}
+                        people={people}
                         job={{
                           serviceType: job.serviceType,
                           locality: job.site.locality,
@@ -448,7 +470,7 @@ export default function JobDetailPage({
                           priority: job.priority,
                         }}
                         loadFor={(id) =>
-                          getState().board.jobs.filter(
+                          boardJobs.filter(
                             (candidate) => candidate.technician?.id === id,
                           ).length
                         }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ShieldAlert, TriangleAlert, UserMinus, UserPlus } from "lucide-react";
@@ -18,12 +18,14 @@ import { z } from "zod";
 import { Chip } from "@/components/shared/controls";
 import { Section } from "@/components/job/sections";
 import { cn } from "@/lib/utils";
-import { useCurrentUser, useStoreState } from "@/lib/data/use-store";
+import { useCurrentUser } from "@/lib/data/use-store";
+import { getBoard, type JobRow } from "@/lib/data/board";
 import { addPerson, setPersonActive, updatePerson, type MutationResult } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
 import {
   SKILLS,
+  getPeople,
   guardDeactivate,
   guardRoleChange,
   levelsFor,
@@ -111,7 +113,27 @@ export function PersonForm({ existing }: { existing?: Person }) {
   );
   const router = useRouter();
   const me = useCurrentUser();
-  const state = useStoreState();
+  /*
+    Both guards read the register.
+
+    They answer "would this change leave the firm without an owner" and "is
+    this person out on jobs right now" — questions about the whole team and
+    the whole board, which a browser copy cannot answer once two people are
+    using the product.
+  */
+  const [people, setPeople] = useState<Person[]>([]);
+  const [boardJobs, setBoardJobs] = useState<JobRow[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([getPeople(), getBoard()]).then(([team, board]) => {
+      if (cancelled) return;
+      if (team.status === "ready") setPeople([...team.data.people]);
+      if (board.status === "ready") setBoardJobs([...board.data.jobs]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [name, setName] = useState(existing?.name ?? "");
   const [phone, setPhone] = useState(existing?.phone ?? "");
@@ -144,17 +166,17 @@ export function PersonForm({ existing }: { existing?: Person }) {
     is choosing rather than after they commit.
   */
   const roleGuard: Guard = existing
-    ? guardRoleChange(state.people, existing.id, role, me?.id ?? "")
+    ? guardRoleChange(people, existing.id, role, me?.id ?? "")
     : { kind: "allow" };
 
   const openJobsToday = existing
-    ? state.board.jobs.filter(
+    ? boardJobs.filter(
         (job) => job.technician?.id === existing.id,
       ).length
     : 0;
 
   const deactivateGuard: Guard = existing
-    ? guardDeactivate(state.people, existing.id, openJobsToday)
+    ? guardDeactivate(people, existing.id, openJobsToday)
     : { kind: "allow" };
 
   const roleBlocked = roleGuard.kind === "block";

@@ -8,7 +8,7 @@ import { MoneyText } from "@/components/shared/money-text";
 import { ROW_TR } from "@/components/shared/controls";
 import { asPaise } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import { advanceTax, getAdvances, getSettlementTargets, openAdvances, receivedWord, type AdvanceRow, type AdvancesData, type SettlementTarget } from "@/lib/data/advances";
+import { advanceTax, getAdvances, getInvoiceRegister, openAdvances, receivedWord, type AdvanceRow, type AdvancesData, type SettlementTarget } from "@/lib/data/advances";
 import { useCallback, useEffect, useState } from "react";
 import { loading, type Query } from "@/lib/data/result";
 import { adjustAdvance } from "@/lib/api/mutations";
@@ -34,7 +34,7 @@ export function AdvancesPanel() {
 
   const reload = useCallback(() => {
     void getAdvances().then(setQuery);
-    void getSettlementTargets().then((result) => {
+    void getInvoiceRegister().then((result) => {
       if (result.status === "ready") setTargets(result.data.invoices);
     });
   }, []);

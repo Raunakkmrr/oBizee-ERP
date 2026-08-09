@@ -22,7 +22,7 @@ import {
 import { useEffect, useState } from "react";
 import { getBoard, type JobRow } from "@/lib/data/board";
 import { getContracts, type Contract } from "@/lib/data/contracts";
-import { getSettlementTargets, type SettlementTarget } from "@/lib/data/advances";
+import { getInvoiceRegister, type SettlementTarget } from "@/lib/data/advances";
 import { createInvoice } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
@@ -67,7 +67,7 @@ export default function NewInvoicePage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getBoard(), getSettlementTargets(), getContracts()]).then(
+    void Promise.all([getBoard(), getInvoiceRegister(), getContracts()]).then(
       ([board, register, amcs]) => {
         if (cancelled) return;
         if (board.status === "ready") setBoardJobs([...board.data.jobs]);

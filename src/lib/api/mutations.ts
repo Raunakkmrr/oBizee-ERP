@@ -220,6 +220,18 @@ export const workRenewalAsLead = (contractId: string) =>
 export const createInvoice = (body: Record<string, unknown>) =>
   attempt(() => post<{ id: string; number: string }>("/api/invoices", body));
 
+/**
+ * FR-806 — issue a draft.
+ *
+ * Until this existed an invoice raised through the product stayed a draft for
+ * ever: absent from receivables, absent from GSTR-1, never billed to anybody.
+ */
+export const issueInvoice = (id: string) =>
+  attempt(() => post<{ id: string; number: string; status: string }>(
+    `/api/invoices/${id}/issue`,
+    {},
+  ));
+
 /* --------------------------------------------------------------- payments */
 
 export const recordPayment = (body: {

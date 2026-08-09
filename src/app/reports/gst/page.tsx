@@ -15,7 +15,8 @@ import { cn } from "@/lib/utils";
 import { downloadCsv, downloadJson, downloadXlsx, stampFor } from "@/lib/export";
 import { ZOHO_COLUMNS, zohoRows } from "@/lib/zoho";
 import { tallyXml, type TallyInvoice } from "@/lib/tally";
-import { useCurrentUser, useStoreState } from "@/lib/data/use-store";
+import { useCurrentUser } from "@/lib/data/use-store";
+import { getInvoiceRegister, type SettlementTarget } from "@/lib/data/advances";
 
 /** Writes the Tally envelope as a file, since `lib/export` only knows CSV/JSON. */
 function downloadTally(
@@ -61,7 +62,21 @@ export default function GstWorkspacePage() {
   const me = useCurrentUser();
   // The invoices the Tally envelope carries — the register's own rows, not a
   // second copy that could disagree with the working paper beside it.
-  const invoices = useStoreState().invoices;
+  /*
+    The register's own rows — not a second copy that could disagree with the
+    working paper printed beside them. The envelope is the evidence for the
+    numbers on this screen, so both must come from one place.
+  */
+  const [invoices, setInvoices] = useState<SettlementTarget[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getInvoiceRegister().then((result) => {
+      if (!cancelled && result.status === "ready") setInvoices([...result.data.invoices]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // The month being filed is the one just past, not the one in progress.
   const [period] = useState(() => periodToFile());
   const [query, setQuery] = useState<Query<GstPeriod>>(loading());

@@ -1,4 +1,3 @@
-import type { Invoice } from "@/lib/data/store";
 
 /**
  * Zoho Books invoice import — FR-1001's second half.
@@ -45,8 +44,28 @@ export function zohoDate(on: Date): string {
   ).padStart(2, "0")}`;
 }
 
+/**
+ * The columns this reads, and nothing more.
+ *
+ * It asked for a whole `Invoice` and used six fields of it, which forced the
+ * caller to fetch a full document per row to build a spreadsheet.
+ */
+type ZohoSource = {
+  number: string;
+  customer: string;
+  head: "CGST_SGST" | "IGST";
+  explanation: string;
+  lines: readonly {
+    description: string;
+    code: string;
+    qty: number;
+    ratePaise: number;
+    ratePercent: number;
+  }[];
+};
+
 export function zohoRows(
-  invoices: readonly Invoice[],
+  invoices: readonly ZohoSource[],
   on: Date,
   placeOfSupply: string,
 ): (string | number)[][] {

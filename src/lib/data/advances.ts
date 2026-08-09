@@ -58,6 +58,24 @@ const settlementTargetSchema = z.object({
   jobId: z.string().nullable(),
   contractId: z.string().nullable(),
   contractPoint: z.number().int().nullable(),
+  /* Enough to build the Tally envelope without a second read. */
+  customer: z.string(),
+  issueDate: z.string(),
+  head: z.enum(["CGST_SGST", "IGST"]),
+  explanation: z.string(),
+  taxablePaise: z.number().int(),
+  totalTaxPaise: z.number().int(),
+  /* Per-line, because the Tally and Zoho envelopes are per-line documents. */
+  lines: z.array(
+    z.object({
+      description: z.string(),
+      code: z.string(),
+      kind: z.enum(["service", "goods"]),
+      qty: z.number(),
+      ratePaise: z.number().int(),
+      ratePercent: z.number(),
+    }),
+  ),
 });
 
 export type SettlementTarget = z.infer<typeof settlementTargetSchema>;
@@ -93,14 +111,18 @@ export const settlementTargetsSchema = z.object({
 });
 
 /**
- * The invoices an advance could be settled into.
+ * The invoice register.
+ *
+ * Named for what it is rather than for the first screen that wanted it: the
+ * billing chooser asks what has been billed, the GST workspace builds an
+ * export from it, and the advances panel picks a settlement target out of it.
  *
  * Fetched so the panel can offer **that customer's own** bills. It used to
  * offer whichever invoice was newest in the register, which is how an advance
  * came to be closable against a different customer entirely.
  */
-export const getSettlementTargets = defineQuery<void, { invoices: SettlementTarget[] }>({
-  key: "invoices.settlement-targets",
+export const getInvoiceRegister = defineQuery<void, { invoices: SettlementTarget[] }>({
+  key: "invoices.register",
   schema: settlementTargetsSchema,
   api: async () => apiFetch<{ invoices: SettlementTarget[] }>("/api/invoices"),
   fixture: async () => ({ raw: { invoices: (await import("./store")).getState().invoices } }),

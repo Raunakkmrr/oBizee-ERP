@@ -21,7 +21,8 @@ import { AGEING_BUCKETS, MSME_LABEL, ageingTotals, bucketFor, countdownFor, dedu
 import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
 import { useRouter } from "next/navigation";
-import { useStoreState } from "@/lib/data/use-store";
+import { getContracts, type Contract } from "@/lib/data/contracts";
+import { getInvoiceRegister, type SettlementTarget } from "@/lib/data/advances";
 import { createInvoice, payPurchaseBill } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
@@ -231,11 +232,30 @@ function AlarmBand({
  * is a draft that opens for review.
  */
 function BillingDue({ onRaise, busy }: { onRaise: (row: DueRow) => void; busy: boolean }) {
-  const state = useStoreState();
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [invoices, setInvoices] = useState<SettlementTarget[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([getContracts(), getInvoiceRegister()]).then(([amcs, register]) => {
+      if (cancelled) return;
+      if (amcs.status === "ready") setContracts([...amcs.data.contracts]);
+      if (register.status === "ready") setInvoices([...register.data.invoices]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const today = new Date();
 
+  /*
+    The furthest instalment already raised per contract, from the register.
+
+    Read from a browser copy this misses a colleague's invoice and offers to
+    raise the same instalment twice — which the unique constraint would refuse,
+    but only after somebody had tried.
+  */
   const raised: Record<string, number> = {};
-  for (const invoice of state.invoices) {
+  for (const invoice of invoices) {
     if (invoice.contractId) {
       raised[invoice.contractId] = Math.max(
         raised[invoice.contractId] ?? 0,
@@ -244,7 +264,7 @@ function BillingDue({ onRaise, busy }: { onRaise: (row: DueRow) => void; busy: b
     }
   }
 
-  const rows = billingDue(state.contracts, raised, today);
+  const rows = billingDue(contracts, raised, today);
   if (rows.length === 0) return null;
 
   /*
@@ -747,7 +767,6 @@ export default function MoneyPage() {
   // bill must not disable the button that raises an invoice.
   const pay = useMutation(payPurchaseBill);
   const raiseInvoice = useMutation(createInvoice);
-  const storeState = useStoreState();
   const router = useRouter();
 
   useEffect(() => {
@@ -760,7 +779,8 @@ export default function MoneyPage() {
     };
     // Re-reads after a bill is paid, so the alarm band and both totals
     // recompute from the same facts rather than drifting from the list.
-  }, [storeState]);
+      // Nothing writes to the store, so nothing here changes because of it.
+  }, []);
 
   /*
     TODO(FR-905): the screen should ask *when* it was paid rather than assume

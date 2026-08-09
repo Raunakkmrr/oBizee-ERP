@@ -1,12 +1,11 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { PersonForm } from "@/components/people/person-form";
-import { useStoreState } from "@/lib/data/use-store";
-import { getState } from "@/lib/data/store";
+import { getPeople, type Person } from "@/lib/data/people";
 import { Requires } from "@/components/shared/requires";
 
 /**
@@ -25,8 +24,22 @@ function EditPerson({
 }) {
   const { id } = use(params);
   // Subscribing keeps the form honest if the directory changes underneath it.
-  useStoreState();
-  const person = getState().people.find((candidate) => candidate.id === id);
+  /*
+    From the register. A person's role and whether they can still sign in are
+    decided there, and a browser copy would show somebody as active after an
+    owner on another machine had removed them.
+  */
+  const [people, setPeople] = useState<Person[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getPeople().then((result) => {
+      if (!cancelled && result.status === "ready") setPeople([...result.data.people]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const person = people.find((candidate) => candidate.id === id);
 
   if (!person) {
     const today = new Date();

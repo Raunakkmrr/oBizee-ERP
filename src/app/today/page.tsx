@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { loading, type Query } from "@/lib/data/result";
 import { getBoard, restOfDay, triageJobs, type Board, type JobRow, type Technician } from "@/lib/data/board";
 import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
-import { useCurrentUser, useStoreState } from "@/lib/data/use-store";
+import { useCurrentUser } from "@/lib/data/use-store";
 import { assignJob } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
@@ -58,7 +58,6 @@ export default function TodayBoardPage() {
   const [query, setQuery] = useState<Query<Board>>(loading());
   const assign = useMutation(assignJob);
   // Subscribing keeps this screen live when another surface writes.
-  const storeState = useStoreState();
   const [view, setView] = useState<(typeof VIEWS)[number]>("Today");
   const [hideAmounts, setHideAmounts] = useState(false);
   const [openSlots, setOpenSlots] = useState<Record<string, boolean>>({});
@@ -71,7 +70,7 @@ export default function TodayBoardPage() {
     return () => {
       cancelled = true;
     };
-  }, [storeState]);
+  }, []);
 
   const today = new Date();
   const canAssign = can(CURRENT_USER.role, "job:dispatch");
