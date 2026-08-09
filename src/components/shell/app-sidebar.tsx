@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
+import { NavRail } from "./nav-rail";
 import { NavStack } from "./nav-stack";
 import { footerNavFor, navGroupsFor, type NavBadge, type NavItem } from "@/lib/navigation";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
@@ -78,21 +79,29 @@ export function AppSidebar({
         </Link>
       </SidebarHeader>
 
-      <SidebarContent>
-        {groups.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <NavStack
-                layoutGroup="nav"
-                items={group.items}
-                isActive={isActive}
-                badgeFor={(item) => badgeCount(item, badges)}
-              />
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
-      </SidebarContent>
+      {/*
+        The rail wraps every group, because the highlight has to cross between
+        them: Today is in Overview and Jobs is in Work, and moving between the
+        two is the commonest navigation in the product. A pill owned by a list
+        could only fade out on one side and in on the other.
+      */}
+      <NavRail>
+        <SidebarContent>
+          {groups.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <NavStack
+                  group={group.label}
+                  items={group.items}
+                  isActive={isActive}
+                  badgeFor={(item) => badgeCount(item, badges)}
+                />
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </SidebarContent>
+      </NavRail>
 
       <SidebarFooter className="border-t border-sidebar-border">
         {/*
@@ -121,11 +130,13 @@ export function AppSidebar({
         </div>
 
         {/*
-          Its own layout group. The footer is a separate list; sharing the
-          main menu's pill would send the highlight flying the height of the
-          rail whenever the two lists disagreed about who was active.
+          Its own rail. The footer is a separate list; sharing the main menu's
+          pill would send the highlight flying the height of the sidebar
+          whenever the two lists disagreed about who was active.
         */}
-        <NavStack layoutGroup="nav-footer" items={footer} isActive={isActive} />
+        <NavRail>
+          <NavStack group="footer" items={footer} isActive={isActive} />
+        </NavRail>
       </SidebarFooter>
 
       <SidebarRail />
