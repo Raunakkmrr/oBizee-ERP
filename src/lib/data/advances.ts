@@ -47,7 +47,9 @@ export type Advance = z.infer<typeof advanceSchema>;
 /** Just enough of an invoice to offer it as the one an advance settles into. */
 const settlementTargetSchema = z.object({
   id: z.string(),
-  number: z.string(),
+  /** Null until issued. */
+  number: z.string().nullable(),
+  status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]),
   customerId: z.string(),
   grandTotalPaise: z.number().int(),
   /*
@@ -79,6 +81,18 @@ const settlementTargetSchema = z.object({
 });
 
 export type SettlementTarget = z.infer<typeof settlementTargetSchema>;
+
+/**
+ * A row that has been issued, and therefore has a number.
+ *
+ * The narrowing is a type predicate rather than a comment, so a screen cannot
+ * hand a draft to something that prints an invoice number.
+ */
+export type IssuedInvoice = SettlementTarget & { number: string };
+
+export function isIssued(row: SettlementTarget): row is IssuedInvoice {
+  return row.status === "ISSUED" && row.number !== null;
+}
 
 /** The register's row: the voucher, plus who it came from. */
 export const advanceRowSchema = advanceSchema.extend({ customerId: z.string() });

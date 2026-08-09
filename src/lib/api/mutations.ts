@@ -232,6 +232,20 @@ export const issueInvoice = (id: string) =>
     {},
   ));
 
+/**
+ * Cancel an invoice, or discard a draft.
+ *
+ * The number is kept on a cancelled invoice. Reusing it would put two
+ * documents in the series under one identity, which is the single thing a
+ * consecutive series exists to prevent. A draft never had one to spend, so it
+ * is simply discarded.
+ */
+export const cancelInvoice = (id: string, reason: string) =>
+  attempt(() => post<{ id: string; number?: string; discarded?: boolean }>(
+    `/api/invoices/${id}/cancel`,
+    { reason },
+  ));
+
 /* --------------------------------------------------------------- payments */
 
 export const recordPayment = (body: {

@@ -16,7 +16,7 @@ import { downloadCsv, downloadJson, downloadXlsx, stampFor } from "@/lib/export"
 import { ZOHO_COLUMNS, zohoRows } from "@/lib/zoho";
 import { tallyXml, type TallyInvoice } from "@/lib/tally";
 import { useCurrentUser } from "@/lib/data/use-store";
-import { getInvoiceRegister, type SettlementTarget } from "@/lib/data/advances";
+import { getInvoiceRegister, isIssued, type IssuedInvoice } from "@/lib/data/advances";
 
 /** Writes the Tally envelope as a file, since `lib/export` only knows CSV/JSON. */
 function downloadTally(
@@ -67,11 +67,18 @@ export default function GstWorkspacePage() {
     working paper printed beside them. The envelope is the evidence for the
     numbers on this screen, so both must come from one place.
   */
-  const [invoices, setInvoices] = useState<SettlementTarget[]>([]);
+  const [invoices, setInvoices] = useState<IssuedInvoice[]>([]);
   useEffect(() => {
     let cancelled = false;
     void getInvoiceRegister().then((result) => {
-      if (!cancelled && result.status === "ready") setInvoices([...result.data.invoices]);
+      /*
+        Issued documents only. A draft is not a supply and has no number, so it
+        belongs in neither envelope — and the working paper beside them excludes
+        drafts too, which is what makes the two agree.
+      */
+      if (!cancelled && result.status === "ready") {
+        setInvoices(result.data.invoices.filter(isIssued));
+      }
     });
     return () => {
       cancelled = true;

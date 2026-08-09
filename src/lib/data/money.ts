@@ -471,7 +471,8 @@ const invoiceLineSchema = z.object({
 
 export const invoiceSchema = z.object({
   id: z.string(),
-  number: z.string(),
+  /** Null until issued — a draft is not a document anybody can refer to. */
+  number: z.string().nullable(),
   jobId: z.string().nullable(),
   jobNumber: z.string().nullable(),
   contractId: z.string().nullable(),
@@ -501,7 +502,7 @@ export const invoiceSchema = z.object({
   totalTaxPaise: z.number().int(),
   roundOffPaise: z.number().int(),
   grandTotalPaise: z.number().int(),
-  status: z.enum(["DRAFT", "ISSUED"]),
+  status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]),
 });
 
 export type Invoice = z.infer<typeof invoiceSchema>;
