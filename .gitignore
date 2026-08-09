@@ -43,3 +43,6 @@ next-env.d.ts
 # macOS AppleDouble sidecars (exFAT volume)
 ._*
 .DS_Store
+/test-results
+/playwright-report
+/blob-report
