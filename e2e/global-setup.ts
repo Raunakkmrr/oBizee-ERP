@@ -63,7 +63,13 @@ function clearSignInBudgets(): void {
       "--env-file-if-exists=.env",
       "--input-type=module",
       "--eval",
-      `import { sql } from "drizzle-orm";\nimport { db } from "./src/db/client.ts";\n${script}\nprocess.exit(0);`,
+      /*
+        `adminDb`, not `db`. Attempt budgets are counted before anyone is
+        authenticated — per phone and per address, across every firm — so they
+        live outside row-level security and outside the tenant-scoped handle,
+        which refuses to send a statement with no tenant in force.
+      */
+      `import { sql } from "drizzle-orm";\nimport { adminDb as db } from "./src/db/client.ts";\n${script}\nprocess.exit(0);`,
     ],
     { cwd: API_DIR, stdio: "inherit" },
   );
