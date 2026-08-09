@@ -26,7 +26,9 @@ import {
   validate,
 } from "@/lib/validate";
 import { STATE_BY_CODE } from "@/lib/data/pincode";
-import { useDispatch } from "@/lib/data/use-store";
+import { createCustomer } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * Add a customer — FR-201, and the thing that was blocking billing.
@@ -89,7 +91,7 @@ const TYPES = [
 ] as const;
 
 export function NewCustomerForm() {
-  const dispatch = useDispatch();
+  const add = useMutation(createCustomer);
   const router = useRouter();
 
   const [name, setName] = useState("");
@@ -298,12 +300,17 @@ export function NewCustomerForm() {
           </Card>
         </div>
 
+        {add.error ? (
+          <div className="mt-4 max-w-5xl">
+            <ErrorState error={add.error} onRetry={add.reset} />
+          </div>
+        ) : null}
+
         <div className="mt-4 flex max-w-5xl flex-wrap items-center gap-2">
           <Button
-            disabled={!check.ok}
-            onClick={() => {
-              dispatch({
-                type: "ADD_CUSTOMER",
+            disabled={!check.ok || add.pending}
+            onClick={async () => {
+              const result = await add.run({
                 name: name.trim(),
                 customerType,
                 gstin: gstin.trim() === "" ? null : gstin.trim(),
@@ -323,7 +330,7 @@ export function NewCustomerForm() {
                     ? null
                     : { name: contactName.trim(), phone: contactPhone.trim() },
               });
-              router.push("/customers");
+              if (result?.ok) router.push("/customers");
             }}
           >
             Add customer

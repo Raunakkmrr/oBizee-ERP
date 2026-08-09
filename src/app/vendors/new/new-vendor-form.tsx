@@ -24,7 +24,9 @@ import {
   type PanType,
   type UdyamActivity,
 } from "@/lib/data/vendors";
-import { useDispatch } from "@/lib/data/use-store";
+import { createVendor } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * Add a vendor — FR-705.
@@ -67,7 +69,7 @@ const VENDOR_FORM = z
   });
 
 export function NewVendorForm() {
-  const dispatch = useDispatch();
+  const add = useMutation(createVendor);
   const router = useRouter();
 
   const [name, setName] = useState("");
@@ -309,26 +311,29 @@ export function NewVendorForm() {
           ) : null}
         </div>
 
+        {add.error ? (
+          <div className="mt-4 max-w-5xl">
+            <ErrorState error={add.error} onRetry={add.reset} />
+          </div>
+        ) : null}
+
         <div className="mt-4 flex max-w-5xl flex-wrap items-center gap-2">
           <Button
-            disabled={!check.ok}
-            onClick={() => {
-              dispatch({
-                type: "ADD_VENDOR",
-                vendor: {
-                  name: name.trim(),
-                  gstin: gstin.trim() === "" ? null : gstin.trim(),
-                  stateCode,
-                  pan: pan.trim() === "" ? null : pan.trim(),
-                  panType,
-                  msmeClass,
-                  udyamNumber: udyamNumber.trim() === "" ? null : udyamNumber.trim(),
-                  udyamActivity,
-                  hasWrittenAgreement,
-                  paymentTermsDays: Number(paymentTermsDays) || 0,
-                },
+            disabled={!check.ok || add.pending}
+            onClick={async () => {
+              const result = await add.run({
+                name: name.trim(),
+                gstin: gstin.trim() === "" ? null : gstin.trim(),
+                stateCode,
+                pan: pan.trim() === "" ? null : pan.trim(),
+                panType,
+                msmeClass,
+                udyamNumber: udyamNumber.trim() === "" ? null : udyamNumber.trim(),
+                udyamActivity,
+                hasWrittenAgreement,
+                paymentTermsDays: Number(paymentTermsDays) || 0,
               });
-              router.push("/vendors");
+              if (result?.ok) router.push("/vendors");
             }}
           >
             Add vendor

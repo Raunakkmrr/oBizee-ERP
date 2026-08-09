@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, Info } from "lucide-react";
@@ -22,7 +22,10 @@ import {
   RESCHEDULE_POLICY_LABEL,
   type ReschedulePolicy,
   BILLING_FREQUENCIES, BILLING_LABEL, COVERAGES, COVERAGE_LABEL, INVOICES_PER_YEAR, RECURRENCES, RECURRENCE_LABEL, VISITS_PER_YEAR, needsReceiptVoucher, perInvoiceAmount, type BillingFrequency, type Coverage, type Recurrence } from "@/lib/data/contracts";
-import { useDispatch } from "@/lib/data/use-store";
+import { getCustomers, type Customer } from "@/lib/data/customers";
+import { createContract } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * New AMC contract — FR-106, FR-501, FR-504, FR-505, FR-810, FR-1406.
@@ -75,8 +78,24 @@ const CONTRACT_FORM = z.object({
 
 export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
   const { fromLead } = prefill;
-  const dispatch = useDispatch();
   const router = useRouter();
+  const create = useMutation(createContract);
+
+  /*
+    Pickers, not free text. A contract points at a customer and a site by id —
+    the schedule it generates hangs off the site, and the site's state decides
+    the tax head on every invoice the contract raises for a year.
+  */
+  const [register, setRegister] = useState<Customer[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getCustomers().then((query) => {
+      if (!cancelled && query.status === "ready") setRegister([...query.data.customers]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // FR-106: pre-populated from the won lead — customer, site and quoted value
   // carried across so nothing is retyped.
@@ -101,6 +120,10 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const [touched, setTouched] = useState<Set<string>>(new Set());
+
+  const chosenCustomer = register.find((entry) => entry.name === customer) ?? null;
+  const sitesForCustomer = chosenCustomer?.sites ?? [];
+  const chosenSite = sitesForCustomer.find((entry) => entry.label === site) ?? null;
   const touch = (field: string) =>
     setTouched((prev) => new Set(prev).add(field));
   const check = validate(
@@ -160,20 +183,56 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                 <CardTitle className="text-base">Customer &amp; value</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
-                <Field
-                  label="Customer"
-                  value={customer}
-                  onChange={setCustomer}
-                  onBlur={() => touch("customer")}
-                  error={check.errors.customer}
-                />
-                <Field
-                  label="Site"
-                  value={site}
-                  onChange={setSite}
-                  onBlur={() => touch("site")}
-                  error={check.errors.site}
-                />
+                <div className="space-y-1.5">
+                  <label htmlFor="contract-customer" className="text-sm font-medium">
+                    Customer
+                  </label>
+                  <select
+                    id="contract-customer"
+                    value={customer}
+                    onChange={(event) => {
+                      setCustomer(event.target.value);
+                      setSite("");
+                    }}
+                    onBlur={() => touch("customer")}
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="">Pick a customer</option>
+                    {register.map((entry) => (
+                      <option key={entry.id} value={entry.name}>
+                        {entry.name}
+                      </option>
+                    ))}
+                  </select>
+                  {check.errors.customer ? (
+                    <p className="text-xs text-destructive">{check.errors.customer}</p>
+                  ) : null}
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="contract-site" className="text-sm font-medium">
+                    Site
+                  </label>
+                  <select
+                    id="contract-site"
+                    value={site}
+                    disabled={sitesForCustomer.length === 0}
+                    onChange={(event) => setSite(event.target.value)}
+                    onBlur={() => touch("site")}
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
+                  >
+                    <option value="">
+                      {sitesForCustomer.length === 0 ? "Pick a customer first" : "Pick a site"}
+                    </option>
+                    {sitesForCustomer.map((entry) => (
+                      <option key={entry.id} value={entry.label}>
+                        {entry.label} — {entry.locality}
+                      </option>
+                    ))}
+                  </select>
+                  {check.errors.site ? (
+                    <p className="text-xs text-destructive">{check.errors.site}</p>
+                  ) : null}
+                </div>
                 <Field
                   label="Annual contract value (₹)"
                   inputMode="numeric"
@@ -416,6 +475,9 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
             </Card>
 
             <div className="space-y-2">
+              {create.error ? (
+                <ErrorState error={create.error} onRetry={create.reset} />
+              ) : null}
               {/*
                 FR-501: "a contract without a schedule generates nothing" — and
                 a contract without a value generates invoices for nothing. Both
@@ -425,20 +487,32 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
               {canCreate ? (
                 <Button
                   className="w-full"
-                  onClick={() => {
-                    dispatch({
-                      type: "CREATE_CONTRACT",
-                      customer,
-                      site,
+                  disabled={!chosenCustomer || !chosenSite || create.pending}
+                  onClick={async () => {
+                    if (!chosenCustomer || !chosenSite) return;
+                    const result = await create.run({
+                      customerId: chosenCustomer.id,
+                      siteId: chosenSite.id,
                       annualValuePaise: annualPaise,
                       coverage,
-                      recurrence,
                       billing,
-                      anchorDay: Number(anchorDay) || 1,
                       reschedulePolicy,
-                      fromLeadReference: fromLead,
+                      startDate: new Date().toISOString().slice(0, 10),
+                      /*
+                        FR-501: a contract without a schedule generates nothing,
+                        so one is always sent. FR-1406 allows several cadences on
+                        one contract; this screen creates the first and the
+                        contract page adds the rest.
+                      */
+                      schedules: [
+                        {
+                          scope: "All equipment",
+                          recurrence,
+                          anchorDay: Number(anchorDay) || 1,
+                        },
+                      ],
                     });
-                    router.push("/contracts");
+                    if (result?.ok) router.push("/contracts");
                   }}
                 >
                   Create contract &amp; generate visits
