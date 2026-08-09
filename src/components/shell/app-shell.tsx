@@ -2,7 +2,10 @@
 
 import type { ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { useCurrentUser, useStoreState } from "@/lib/data/use-store";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useCurrentUser, useSessionResolved } from "@/lib/data/use-store";
+import { loadCaller } from "@/lib/api/session";
 import { AppSidebar, type BadgeCounts } from "./app-sidebar";
 import { TopBar, type Freshness } from "./top-bar";
 
@@ -43,16 +46,33 @@ export function AppShell({
    * silently overwrote the write — a created work order disappeared between the
    * form and the board.
    */
-  useStoreState();
   /*
-    The acting user is resolved here rather than passed in.
+    The signed-in user is resolved here rather than passed in.
 
     Every screen used to hand down `role` and `userName` read from a hardcoded
-    const, so switching user would have meant editing twenty call sites and
+    const, so changing user would have meant editing twenty call sites and
     would silently miss one. The shell owns the session; a page cannot
     contradict it.
+
+    It now comes from the token via `/api/me`, not from a switcher in the
+    browser. The shell is also where "nobody is signed in" is answered, because
+    it wraps every screen: a page rendered without a user is a page that has
+    already leaked whatever it was about to check.
   */
   const me = useCurrentUser();
+  const resolved = useSessionResolved();
+  const router = useRouter();
+
+  useEffect(() => {
+    void loadCaller();
+  }, []);
+
+  useEffect(() => {
+    if (resolved && !me) router.replace("/sign-in");
+  }, [resolved, me, router]);
+
+  // "Not yet" is not "nobody": one waits, the other is already on its way out.
+  if (!me) return null;
 
   return (
     <SidebarProvider>

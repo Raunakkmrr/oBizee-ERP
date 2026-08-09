@@ -172,7 +172,13 @@ export default function GstWorkspacePage() {
                             {
                               source: "GSTR-1 working paper",
                               filters: `${period.periodLabel} · ${SEED_TENANT.branches[0].name} · GSTIN ${SEED_TENANT.branches[0].gstin}`,
-                              exportedBy: me.name,
+                              /*
+                                Who exported it. FR-1002 wants provenance on
+                                the envelope, and an empty name is a truthful
+                                "we do not know yet" — better than a stale one
+                                left over from a switcher.
+                              */
+                              exportedBy: me?.name ?? "",
                               exportedAt: today.toLocaleString("en-IN"),
                             },
                             `GSTR1-${period.periodLabel.replace(/\s+/g, "-")}-${stampFor(today)}.xlsx`,

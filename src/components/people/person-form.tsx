@@ -142,7 +142,7 @@ export function PersonForm({ existing }: { existing?: Person }) {
     is choosing rather than after they commit.
   */
   const roleGuard: Guard = existing
-    ? guardRoleChange(state.people, existing.id, role, me.id)
+    ? guardRoleChange(state.people, existing.id, role, me?.id ?? "")
     : { kind: "allow" };
 
   const openJobsToday = existing

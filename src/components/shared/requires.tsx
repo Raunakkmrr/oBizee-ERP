@@ -28,7 +28,14 @@ export function Requires({
   children: React.ReactNode;
 }) {
   const me = useCurrentUser();
-  if (can(me.role, permission)) return <>{children}</>;
+
+  /*
+    Fail closed. No identity is not "allow while we find out" — a screen that
+    renders first and checks second has already shown the thing it was meant
+    to gate. Nothing is rendered until the token has said who this is.
+  */
+  if (!me) return null;
+  if (can(me.role, permission, undefined, me.level ?? undefined)) return <>{children}</>;
 
   const today = new Date();
   return (

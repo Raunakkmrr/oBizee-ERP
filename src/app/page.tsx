@@ -57,11 +57,15 @@ export default function HomePage() {
     chose, it is where a logo or a bookmark lands you, and the honest answer to
     "take me home" is that role's actual home.
   */
-  const home = homeHrefFor(me.role);
+  // Until the token has answered, treat this as the least-privileged case:
+  // the redirect below is harmless and the snapshot is not shown to nobody.
+  const home = me ? homeHrefFor(me.role) : "/today";
   // Gate on the permission the screen actually needs, not on where the role's
   // nav points: `/` is in nobody's navigation, so comparing hrefs would send
   // every role away and quietly delete §6.2 from the product.
-  const canSeeSnapshot = can(me.role, "job:read", undefined, me.level);
+  const canSeeSnapshot = me
+    ? can(me.role, "job:read", undefined, me.level ?? undefined)
+    : false;
 
   useEffect(() => {
     if (!canSeeSnapshot) {

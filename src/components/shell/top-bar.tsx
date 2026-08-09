@@ -4,13 +4,14 @@ import { useSyncExternalStore } from "react";
 
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { Check, ChevronDown, CircleCheck, Eye, EyeOff, Moon, RefreshCw, Sun, TriangleAlert } from "lucide-react";
+import { ChevronDown, CircleCheck, Eye, EyeOff, Moon, RefreshCw, Sun, TriangleAlert } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useCurrentUser, useDispatch, useStoreState } from "@/lib/data/use-store";
-import type { Person } from "@/lib/data/people";
+import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/lib/data/use-store";
+import { endSession, type Caller } from "@/lib/api/session";
 import { formatDateLong, formatTime } from "@/lib/datetime";
 import { ROLE_LABELS } from "@/lib/roles";
 import { homeHrefFor } from "@/lib/navigation";
@@ -155,21 +156,20 @@ function ThemeToggle() {
 }
 
 /**
- * Who you are acting as.
+ * Who is signed in, and the way out.
  *
- * **Why this exists at all.** §6.2 role-gates the navigation, and the acting
- * user was a hardcoded const — a coordinator, who by design has no Settings
- * item. So People management shipped genuinely unreachable: the screen existed,
- * the routes existed, and no sequence of clicks led to them.
+ * **What this replaces.** Until sign-in existed this was a switcher: a list of
+ * everybody in the firm, one click to become any of them. It was the honest
+ * shape while the browser store *was* the database — §6.2 role-gates the
+ * navigation, and without it People management shipped genuinely unreachable.
  *
- * It is labelled as standing in for sign-in rather than dressed up as a profile
- * menu, because that is what it is until auth lands (DR-9). Switching is what
- * makes the role model visible instead of something you have to read the code
- * to believe.
+ * It cannot survive a real session. A menu that turns a technician into the
+ * owner is not a convenience beside an access model, it is the absence of one.
+ * The identity now comes from the token and the only thing this offers is
+ * signing out.
  */
-function ActingAs({ me }: { me: Person }) {
-  const dispatch = useDispatch();
-  const people = useStoreState().people.filter((person) => person.active);
+function SignedIn({ me }: { me: Caller }) {
+  const router = useRouter();
   const initials =
     me.name.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "OB";
 
@@ -180,7 +180,7 @@ function ActingAs({ me }: { me: Person }) {
           <button
             type="button"
             className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-1 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
-            aria-label={`Signed in as ${me.name}, ${ROLE_LABELS[me.role]}. Change user.`}
+            aria-label={`Signed in as ${me.name}, ${ROLE_LABELS[me.role]}`}
           />
         }
       >
@@ -201,24 +201,16 @@ function ActingAs({ me }: { me: Person }) {
 
       <DropdownMenuContent align="end" className="min-w-56">
         <p className="px-2 py-1.5 text-xs text-muted-foreground">
-          Standing in for sign-in until accounts exist
+          Signed in as {me.name}
         </p>
-        {people.map((person) => (
-          <DropdownMenuItem
-            key={person.id}
-            onClick={() => dispatch({ type: "ACT_AS", personId: person.id })}
-          >
-            <span className="flex min-w-0 flex-1 items-baseline gap-2">
-              <span className="truncate">{person.name}</span>
-              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                {ROLE_LABELS[person.role]}
-              </span>
-            </span>
-            {person.id === me.id ? (
-              <Check className="ml-1.5 size-3.5 shrink-0" aria-hidden="true" />
-            ) : null}
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuItem
+          onClick={() => {
+            endSession();
+            router.replace("/sign-in");
+          }}
+        >
+          Sign out
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -262,7 +254,7 @@ export function TopBar({
         §6.13.1's own mobile rule: the mark shrinks to 20px but "the wordmark is
         never dropped".
       */}
-      <Link href={homeHrefFor(me.role)} className="flex items-center gap-1.5 lg:hidden">
+      <Link href={me ? homeHrefFor(me.role) : "/today"} className="flex items-center gap-1.5 lg:hidden">
         <span className="grid size-5 shrink-0 place-items-center rounded bg-primary text-[10px] font-bold text-primary-foreground">
           oB
         </span>
@@ -293,7 +285,7 @@ export function TopBar({
 
         <ThemeToggle />
 
-        <ActingAs me={me} />
+        {me ? <SignedIn me={me} /> : null}
       </div>
     </header>
   );

@@ -15,10 +15,31 @@
  * pretended away**: it is on the B5 list, and refresh rotation already makes a
  * stolen token visible the moment the real one is used.
  */
+import type { Role } from "../roles";
+import { apiFetch } from "./client";
+
 const REFRESH_KEY = "obizee.refresh";
 
+/**
+ * Who is signed in — the whole of it, from `/api/me`.
+ *
+ * This replaces `actingAs` in the browser store, which was a menu that let
+ * anybody become the owner by choosing them. It was the right shape for a
+ * fixture and is unthinkable beside a real sign-in: a technician could have
+ * picked "Owner" and seen every price in the firm.
+ */
+export type Caller = {
+  id: string;
+  name: string;
+  role: Role;
+  level: string | null;
+  tenantId: string;
+};
+
 let accessToken: string | null = null;
-let caller: { name: string; role: string } | null = null;
+let caller: Caller | null = null;
+/** Distinguishes "nobody is signed in" from "we have not asked yet". */
+let resolved = false;
 const listeners = new Set<() => void>();
 
 function announce() {
@@ -34,7 +55,37 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
-export function getCaller(): { name: string; role: string } | null {
+export function getCaller(): Caller | null {
+  return caller;
+}
+
+export function callerResolved(): boolean {
+  return resolved;
+}
+
+/**
+ * Ask the API who this token belongs to.
+ *
+ * The token is the only thing that decides. A caller cannot be chosen, typed
+ * or remembered from last time — which is the entire difference between this
+ * and the switcher it replaces.
+ */
+export async function loadCaller(): Promise<Caller | null> {
+  if (!accessToken && !getRefreshToken()) {
+    resolved = true;
+    announce();
+    return null;
+  }
+
+  try {
+    const { raw } = await apiFetch<Caller>("/api/me");
+    caller = raw;
+  } catch {
+    // A token we cannot exchange for an identity is not a session.
+    caller = null;
+  }
+  resolved = true;
+  announce();
   return caller;
 }
 
@@ -46,10 +97,14 @@ export function getRefreshToken(): string | null {
 export function startSession(tokens: {
   accessToken: string;
   refreshToken: string;
-  user?: { name: string; role: string };
 }): void {
   accessToken = tokens.accessToken;
-  caller = tokens.user ?? caller;
+  /*
+    The identity is not taken from the sign-in response. That reply carries a
+    name and a role for the greeting, and half an identity is worse than none —
+    a screen reading `caller.id` would get `undefined` and compare it against
+    somebody. `loadCaller()` asks `/api/me` for all of it.
+  */
   if (typeof window !== "undefined") {
     window.localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
   }
@@ -57,6 +112,8 @@ export function startSession(tokens: {
 }
 
 export function endSession(): void {
+  caller = null;
+  resolved = true;
   accessToken = null;
   caller = null;
   if (typeof window !== "undefined") {

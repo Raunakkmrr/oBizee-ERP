@@ -208,7 +208,7 @@ export default function TodayBoardPage() {
                     setRatings((prev) =>
                       prev.map((rating) =>
                         rating.jobNumber === jobNumber
-                          ? { ...rating, acknowledgedBy: me.name }
+                          ? { ...rating, acknowledgedBy: me?.name ?? "" }
                           : rating,
                       ),
                     )
