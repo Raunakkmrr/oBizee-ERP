@@ -7,6 +7,7 @@ import { useTheme } from "next-themes";
 import { ChevronDown, CircleCheck, Eye, EyeOff, Moon, RefreshCw, Sun, TriangleAlert } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { ActivityLog } from "./activity-log";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
@@ -285,6 +286,7 @@ export function TopBar({
           </Button>
         ) : null}
 
+        <ActivityLog />
         <ThemeToggle />
 
         {me ? <SignedIn me={me} /> : null}
