@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The 532 unit tests, the type-check and a production build.
+#
+# **The E2E suite is not here, and that is a real gap rather than an oversight.**
+# It needs the API running against a real database — Playwright starts both, and
+# the API's driver talks to Neon's HTTP proxy, which no service container
+# provides. Running it against the live database would have every push seeding
+# jobs and issuing invoices into the tenant the demos use.
+#
+# The honest fix is a staging Neon branch with its own credentials, and it is
+# worth doing: those thirty-five tests are the only thing that has ever caught
+# a defect in the join between the two repos, and every one they found was
+# invisible to everything in this file. Until then they run before a deploy.
+#
+# The build step is not ceremony. It is what fails when a client component
+# imports something server-only, which type-checking does not notice.
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Types
+        run: pnpm exec tsc --noEmit
+
+      - name: Tests
+        run: pnpm exec vitest run
+
+      - name: Production build
+        # Fixtures, not the API: there is no API to talk to here, and the build
+        # only needs to compile.
+        env:
+          NEXT_PUBLIC_DATA_SOURCE: fixture
+        run: pnpm run build
