@@ -44,6 +44,7 @@ const SURFACE =
 function Team() {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<Role | null>(null);
+  const [showLeavers, setShowLeavers] = useState(false);
   /*
     From the register. This screen decides who can sign in, so reading a local
     copy would show one machine's idea of the team while another had already
@@ -61,9 +62,26 @@ function Team() {
     };
   }, []);
 
+  /*
+    **Deactivated people are out of the way, not gone.**
+
+    The list showed everyone who had ever had a login. On the development
+    tenant that is ninety-seven disabled accounts in front of thirteen real
+    ones — you scroll past `Leaver 2601120995` to reach your own technician.
+    It is not only a fixture problem: a firm five years old has more leavers
+    than staff, and this screen answers "who works here", which is a question
+    about the present tense.
+
+    Hidden rather than removed, because the leavers still matter — restoring
+    access, and seeing that somebody's login really was revoked, both start
+    here. The count beside the toggle is what stops it being a hiding place.
+  */
+  const deactivated = people.filter((person) => !person.active).length;
   const visible = people.filter(
     (person) =>
-      (role === null || person.role === role) && matchesQuery(person, query),
+      (showLeavers || person.active) &&
+      (role === null || person.role === role) &&
+      matchesQuery(person, query),
   );
   const active = people.filter((person) => person.active).length;
   const technicians = people.filter(
@@ -116,6 +134,14 @@ function Team() {
             />
           ))}
         </div>
+
+        {deactivated > 0 ? (
+          <FilterChip
+            label={`Deactivated (${deactivated})`}
+            selected={showLeavers}
+            onClick={() => setShowLeavers((previous) => !previous)}
+          />
+        ) : null}
       </div>
 
       {visible.length === 0 ? (
