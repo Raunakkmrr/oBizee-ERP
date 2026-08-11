@@ -12,25 +12,17 @@ import { Card } from "@/components/ui/card";
 import { Panel } from "@/components/shared/panel";
 import { AdvancesPanel } from "@/components/money/advances-panel";
 import { RecordedBills } from "@/components/money/recorded-bills";
-import { groupByContract } from "@/lib/data/billable";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
-import { AGEING_BUCKETS, MSME_LABEL, ageingTotals, bucketFor, countdownFor, deductionAtRiskPaise, deductionLostPaise, moneyAlarms, splitByPromise, getMoney, type AgeingBucket, type MoneyAlarm, type MoneyData, type Payable, type Receivable } from "@/lib/data/money";
+import { AGEING_BUCKETS, MSME_LABEL, ageingTotals, bucketFor, countdownFor, deductionAtRiskPaise, deductionLostPaise, moneyAlarms, splitByPromise, getMoney, type AgeingBucket, type MoneyAlarm, type BillablePeriod, type MoneyData, type Payable, type Receivable, getDueInvoices } from "@/lib/data/money";
 import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
 import { useRouter } from "next/navigation";
-import { getContracts, type Contract } from "@/lib/data/contracts";
-import { getInvoiceRegister, type SettlementTarget } from "@/lib/data/advances";
 import { createInvoice, payPurchaseBill } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
-import {
-  BILLING_LABEL,
-  billingDue,
-  type BillingDue as DueRow,
-} from "@/lib/data/contracts";
 
 /**
  * Money — PRD §6.12. Two sides, **one screen, no tab**.
@@ -219,159 +211,16 @@ function AlarmBand({
 
 /* ----------------------------------------------------------- billing due */
 
-/**
- * What the contracts owe, and the one click that raises it.
+/*
+ * `BillingDue` lived here: a worklist of contract instalments whose *date* had
+ * passed, offered for billing whether or not anybody had been to the site.
  *
- * **The gap this closes.** A contract knew it produced twelve invoices and the
- * product could produce none: the only invoice action needed a *job*, and an
- * advance-billed AMC has no job yet. So a six-month contract billed monthly
- * meant somebody remembering, every month, or not billing.
- *
- * Nothing raises itself. A GST invoice carrying the tenant's GSTIN should not
- * come into existence unseen — so this is a worklist, and the invoice it makes
- * is a draft that opens for review.
+ * It is replaced by `ReadyToBill`, which asks the register what the work has
+ * earned — a visit booked, dated, assigned and completed releases its billing
+ * period, and nothing else does. Keeping both would have put two answers to
+ * "what should I bill?" on one screen, and the calendar's answer is the one
+ * that bills for work that has not happened.
  */
-function BillingDue({ onRaise, busy }: { onRaise: (row: DueRow) => void; busy: boolean }) {
-  const [contracts, setContracts] = useState<Contract[]>([]);
-  const [invoices, setInvoices] = useState<SettlementTarget[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([getContracts(), getInvoiceRegister()]).then(([amcs, register]) => {
-      if (cancelled) return;
-      if (amcs.status === "ready") setContracts([...amcs.data.contracts]);
-      if (register.status === "ready") setInvoices([...register.data.invoices]);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  const today = new Date();
-
-  /*
-    The furthest instalment already raised per contract, from the register.
-
-    Read from a browser copy this misses a colleague's invoice and offers to
-    raise the same instalment twice — which the unique constraint would refuse,
-    but only after somebody had tried.
-  */
-  const raised: Record<string, number> = {};
-  for (const invoice of invoices) {
-    if (invoice.contractId) {
-      raised[invoice.contractId] = Math.max(
-        raised[invoice.contractId] ?? 0,
-        invoice.contractPoint ?? 0,
-      );
-    }
-  }
-
-  const rows = billingDue(contracts, raised, today);
-  if (rows.length === 0) return null;
-
-  /*
-    One row per contract, not per invoice.
-
-    A contract ten months unbilled produced ten near-identical rows, which is
-    the crowding this screen was rebuilt to avoid. You bill the oldest first
-    anyway, so the row carries the oldest point and says how many follow.
-  */
-  const grouped = groupByContract(rows);
-
-  const overdue = rows.filter((row) => row.daysLate >= 0);
-
-  return (
-    <section
-      aria-label="Billing due"
-      className="rounded-xl bg-card p-4 shadow-[var(--shadow-card)]"
-    >
-      <div className="flex flex-wrap items-baseline gap-x-3">
-        <h2 className="text-sm font-semibold tracking-tight">Billing due</h2>
-        <p className="text-xs text-muted-foreground">
-          {overdue.length > 0
-            ? `${overdue.length} overdue · contracts bill on their own schedule, not from a job`
-            : "Nothing overdue — what is coming is listed below"}
-        </p>
-      </div>
-
-      <div className="mt-3 grid gap-2">
-        {grouped.map(({ oldest: row, backlog, totalPaise }) => {
-          const late = row.daysLate >= 0;
-          return (
-            <div
-              key={row.contract.id}
-              /*
-                `min-w-0` is load-bearing: this row is a grid item, and a grid
-                item's `min-width` is `auto`, so without it the row refuses to
-                shrink below its own min-content and pushes 25px of itself off
-                a 360px screen. Third time this exact rule has bitten.
-              */
-              className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-muted-bg p-3"
-            >
-              <Clock
-                aria-hidden="true"
-                className={cn(
-                  "size-4 shrink-0",
-                  late ? "text-warning" : "text-muted-foreground",
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {row.contract.customer}{" "}
-                  <span className="text-muted-foreground tnum-id">
-                    {row.contract.reference}
-                  </span>
-                </p>
-                <p className="truncate text-xs text-muted-foreground tabular-nums">
-                  {BILLING_LABEL[row.contract.billing]} · invoice{" "}
-                  {row.point.number} of {row.point.of} ·{" "}
-                  {late
-                    ? `${row.daysLate} day${row.daysLate === 1 ? "" : "s"} late`
-                    : `due in ${Math.abs(row.daysLate)} days`}
-                  {backlog > 0 ? (
-                    // The backlog is the number that decides whether this is a
-                    // missed month or a year of not billing.
-                    <span className="text-brand-brown">
-                      {" "}
-                      · {backlog} more unbilled
-                    </span>
-                  ) : null}
-                </p>
-              </div>
-              <span className="shrink-0 text-right">
-                <MoneyText
-                  amount={asPaise(row.point.amountPaise)}
-                  className="block font-medium"
-                />
-                {backlog > 0 ? (
-                  <MoneyText
-                    amount={asPaise(totalPaise)}
-                    className="block text-xs text-muted-foreground"
-                  />
-                ) : null}
-              </span>
-              <Button
-                size="sm"
-                variant={late ? "default" : "outline"}
-                onClick={() => onRaise(row)}
-                disabled={busy}
-              >
-                Raise invoice
-              </Button>
-            </div>
-          );
-        })}
-      </div>
-
-      {rows.length > grouped.length ? (
-        // Says what the grouping folded away, rather than implying one row is
-        // one invoice.
-        <p className="mt-2 text-xs text-muted-foreground tabular-nums">
-          {rows.length} invoices across {grouped.length} contracts — the oldest
-          of each is shown.
-        </p>
-      ) : null}
-    </section>
-  );
-}
 
 /* ------------------------------------------------------------ receivables */
 
@@ -536,6 +385,102 @@ function ReceivableRow({ row, primary }: { row: Receivable; primary: boolean }) 
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Work that has been delivered and not yet billed.
+ *
+ * **Why this sits above "They owe us".** A receivable is money the customer
+ * knows about; this is money the customer does *not* know about, because
+ * nobody has asked for it. An AMC visit completed in August and never invoiced
+ * is revenue that quietly ages out of the year — and it is invisible on a
+ * screen that only lists documents already raised.
+ *
+ * **Why a prompt and not a write.** FR-805 makes an invoice immutable once
+ * issued. A rule that raised one automatically would turn a mis-tapped
+ * "Done" at the wrong address into a statutory document that can only be
+ * cancelled, leaving a numbered hole somebody has to account for. The rule
+ * decides what is *earned*; a person decides what is *billed*.
+ */
+function ReadyToBill({
+  rows,
+  totalPaise,
+  onRaise,
+  busy,
+}: {
+  rows: BillablePeriod[];
+  totalPaise: number;
+  onRaise: (row: BillablePeriod) => void;
+  busy: boolean;
+}) {
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="min-w-0 space-y-3">
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <ReceiptIndianRupee className="size-4 text-success" />
+          Ready to bill
+        </h2>
+        <MoneyText
+          amount={asPaise(totalPaise)}
+          className="text-lg font-semibold tracking-tight"
+        />
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {rows.length} contract {rows.length === 1 ? "period" : "periods"} earned and
+          not yet invoiced
+        </p>
+      </div>
+
+      <Panel
+        title="Ready to bill"
+        icon={ReceiptIndianRupee}
+        count={rows.length}
+        caption="Oldest first — the money owed longest is the money to raise first"
+        flush
+      >
+        {rows.map((row) => (
+          <div
+            key={`${row.contractId}-${row.periodStart}`}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm odd:bg-white/[0.018]"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{row.customer}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {row.reference} · {row.periodStart} to {row.periodEnd}
+              </p>
+            </div>
+
+            {/*
+              The two reasons read very differently to whoever is about to
+              send this, so they are named rather than collapsed into a count.
+            */}
+            <span
+              className={cn(
+                "rounded px-2 py-0.5 text-[11px] font-medium",
+                row.reason === "visits_complete"
+                  ? "bg-success/12 text-success"
+                  : "bg-warning/12 text-warning",
+              )}
+            >
+              {row.reason === "visits_complete"
+                ? `${row.visitsDone} of ${row.visits} visits done`
+                : `Period closed · ${row.visitsDone} of ${row.visits} done`}
+            </span>
+
+            <MoneyText
+              amount={asPaise(row.valuePaise)}
+              className="w-28 shrink-0 text-right font-medium tabular-nums"
+            />
+
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => onRaise(row)}>
+              Raise invoice
+            </Button>
+          </div>
+        ))}
+      </Panel>
     </div>
   );
 }
@@ -763,6 +708,17 @@ function Payables({
 
 export default function MoneyPage() {
   const [query, setQuery] = useState<Query<MoneyData>>(loading());
+  /*
+    What the work has earned, from the register.
+
+    Kept beside the money query rather than inside it: this is the only figure
+    on the screen that is not yet a document, and folding it into the overview
+    would make a "receivable" out of something nobody has been billed for.
+  */
+  const [due, setDue] = useState<{ due: BillablePeriod[]; totalPaise: number }>({
+    due: [],
+    totalPaise: 0,
+  });
   // Two writes on this screen, each with its own in-flight state: settling a
   // bill must not disable the button that raises an invoice.
   const pay = useMutation(payPurchaseBill);
@@ -773,6 +729,9 @@ export default function MoneyPage() {
     let cancelled = false;
     getMoney().then((result) => {
       if (!cancelled) setQuery(result);
+    });
+    void getDueInvoices().then((result) => {
+      if (!cancelled && result.status === "ready") setDue(result.data);
     });
     return () => {
       cancelled = true;
@@ -792,18 +751,29 @@ export default function MoneyPage() {
     await pay.run(billId, { paidOn: new Date().toISOString().slice(0, 10) });
   }
 
-  /** Raises the draft and opens it — never files anything unseen. */
-  async function raise(row: DueRow) {
+  /**
+   * Raises the draft and opens it — never files anything unseen.
+   *
+   * A DRAFT, deliberately. FR-805 makes an invoice immutable from the moment it
+   * is issued, so the button that *earns* an invoice and the button that
+   * *issues* one are two different presses with a document in between.
+   *
+   * The line describes the period in dates rather than as "instalment 5",
+   * because the customer can check one of those against their own records.
+   */
+  async function raise(row: BillablePeriod) {
     const result = await raiseInvoice.run({
-      contractId: row.contract.id,
-      contractPoint: row.point.number,
+      contractId: row.contractId,
+      contractPoint: row.instalment,
+      periodStart: row.periodStart,
+      periodEnd: row.periodEnd,
       lines: [
         {
-          description: `AMC instalment ${row.point.number}`,
+          description: `${row.reference} — ${row.periodStart} to ${row.periodEnd}`,
           code: "9987",
           kind: "service",
           qty: 1,
-          ratePaise: row.point.amountPaise,
+          ratePaise: row.valuePaise,
           ratePercent: 18,
         },
       ],
@@ -853,7 +823,22 @@ export default function MoneyPage() {
           {(data) => (
             <div className="space-y-5">
               <AlarmBand data={data} onPaid={markPaid} busy={pay.pending} />
-              <BillingDue onRaise={raise} busy={raiseInvoice.pending} />
+              {/*
+                **What the work earned, in place of what the calendar said.**
+
+                This was `<BillingDue>`, which offered an invoice as soon as an
+                instalment date passed — whether or not anybody had been to the
+                site. Raunak's rule is the other way round: the visit is booked,
+                dated, assigned and completed, and *then* the period can be
+                billed. Both lists on one screen would be two answers to one
+                question, so this replaces it rather than joining it.
+              */}
+              <ReadyToBill
+                rows={due.due}
+                totalPaise={due.totalPaise}
+                onRaise={raise}
+                busy={raiseInvoice.pending}
+              />
               {/*
                 FR-810 sits between the billing worklist and the two ledgers:
                 it is neither owed to us nor owed by us, it is money we hold

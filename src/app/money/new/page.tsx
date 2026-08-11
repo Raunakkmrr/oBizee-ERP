@@ -20,7 +20,7 @@ import {
   nothingToBillReason,
 } from "@/lib/data/billable";
 import { useEffect, useState } from "react";
-import { getBoard, type JobRow } from "@/lib/data/board";
+import { getJobs, type JobRow } from "@/lib/data/board";
 import { getContracts, type Contract } from "@/lib/data/contracts";
 import { getInvoiceRegister, type SettlementTarget } from "@/lib/data/advances";
 import { createInvoice } from "@/lib/api/mutations";
@@ -67,7 +67,23 @@ export default function NewInvoicePage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getBoard(), getInvoiceRegister(), getContracts()]).then(
+    /*
+      **Every completed job, not today's.**
+
+      This read `getBoard()`, which returns only jobs scheduled for today — so a
+      job finished on the 9th and never invoiced was invisible to the one screen
+      whose question is "what can I bill?". Three of the four completed jobs in
+      the register were unbilled and unreachable here, which is exactly how
+      revenue ages out quietly.
+
+      `done_not_billed` narrows it at the register, so the browser is not sent
+      the whole job table to filter down to four rows.
+    */
+    void Promise.all([
+      getJobs({ filter: "done_not_billed", limit: 100 }),
+      getInvoiceRegister(),
+      getContracts(),
+    ]).then(
       ([board, register, amcs]) => {
         if (cancelled) return;
         if (board.status === "ready") setBoardJobs([...board.data.jobs]);

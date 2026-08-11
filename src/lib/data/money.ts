@@ -528,3 +528,62 @@ export const getInvoice = defineQuery<string, Invoice>({
     return { raw: latest };
   },
 });
+
+/**
+ * What the work has earned and nobody has billed.
+ *
+ * The flow this serves: a visit is booked, dated, assigned and done — and then
+ * that period's invoice becomes available. Nothing here raises it. FR-805 makes
+ * an invoice immutable once issued, so a document created by a rule is a
+ * mistake that can only be cancelled, leaving a hole in a statutory series
+ * somebody has to explain. This is the prompt; a person is still the author.
+ */
+export type BillablePeriod = {
+  contractId: string;
+  reference: string;
+  customerId: string;
+  customer: string;
+  billing: string;
+  /** Which instalment of the contract — the API numbers it, not the browser. */
+  instalment: number;
+  periodStart: string;
+  periodEnd: string;
+  valuePaise: number;
+  visits: number;
+  visitsDone: number;
+  /**
+   * `visits_complete` is a bill the customer is expecting. `period_closed` is
+   * a period that ran out with visits missed — still owed, because cover was
+   * sold and cover was available, but a conversation to have before sending.
+   */
+  reason: "visits_complete" | "period_closed";
+};
+
+const dueSchema = z.object({
+  due: z.array(
+    z.object({
+      contractId: z.string(),
+      reference: z.string(),
+      customerId: z.string(),
+      customer: z.string(),
+      billing: z.string(),
+      instalment: z.number().int().positive(),
+      periodStart: z.string(),
+      periodEnd: z.string(),
+      valuePaise: z.number().int(),
+      visits: z.number().int().nonnegative(),
+      visitsDone: z.number().int().nonnegative(),
+      reason: z.enum(["visits_complete", "period_closed"]),
+    }),
+  ),
+  totalPaise: z.number().int(),
+});
+
+export const getDueInvoices = defineQuery<void, { due: BillablePeriod[]; totalPaise: number }>({
+  key: "invoices.due",
+  schema: dueSchema,
+  api: async () => apiFetch<{ due: BillablePeriod[]; totalPaise: number }>("/api/invoices/due"),
+  // Nothing in the browser store models a contract billing period, and an
+  // invented one would put fictional money on the screen that matters most.
+  fixture: async () => ({ raw: { due: [], totalPaise: 0 } }),
+});
