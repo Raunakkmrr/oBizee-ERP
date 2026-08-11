@@ -279,7 +279,21 @@ export function visitSchedule(
 
       if (on < from || on > until) continue;
       planned.push({
-        key: `${contract.id}:${schedule.id}:${n}`,
+        /*
+          `scheduleId:n`, and the contract id is deliberately not in it.
+
+          FR-502's key had two definitions, one on each side of the seam: the
+          API wrote `scheduleId:n` and this computed
+          `contractId:scheduleId:n`. They could never match, so every generated
+          visit looked ungenerated — the contracts screen said "none on the
+          board yet" over three real jobs and offered to raise them again.
+
+          The database is what settles it: `jobs_tenant_visitkey_uq` is the
+          constraint that actually enforces idempotency, and it holds the
+          server's format. A schedule id is already unique, so the contract id
+          added nothing but a mismatch.
+        */
+        key: `${schedule.id}:${n}`,
         contractId: contract.id,
         scheduleId: schedule.id,
         scope: schedule.scope,
@@ -583,6 +597,15 @@ const contractSchema = z.object({
   status: z.enum(["DRAFT", "ACTIVE", "SUSPENDED", "EXPIRED"]),
   /** FR-1406: many schedules, each with its own scope and cadence. */
   schedules: z.array(scheduleSchema),
+  /**
+   * FR-502's idempotency keys for the visits already raised as jobs.
+   *
+   * Optional rather than defaulted: a contract that has generated nothing and
+   * a fixture that predates the field are the same thing to every reader of
+   * this, and `?? []` at the one call site is cheaper than making every
+   * fixture carry an empty array.
+   */
+  visitsOnBoard: z.array(z.string()).optional(),
   /**
    * FR-503. Defaulted rather than required so contracts written before this
    * field existed — seeds, and anything already in a reader's IndexedDB —

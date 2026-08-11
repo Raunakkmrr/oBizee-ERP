@@ -61,7 +61,16 @@ function ContractCard({
     "3 visits scheduled" is a fact the reader can check against Today, and a
     button that would create nothing says so instead of pretending to work.
   */
-  const existingKeys = visitKeys;
+  /*
+    The contract's own answer, not the board's.
+
+    This read `getBoard()`, which returns only jobs scheduled for *today* —
+    and visits are generated ninety days ahead. So the set was empty for every
+    contract whose visits were not today, which is all of them: the banner said
+    "none on the board yet" no matter how many times somebody had generated
+    them, and offered to do it again for ever.
+  */
+  const existingKeys = new Set(contract.visitsOnBoard ?? []);
   const planned = visitSchedule(contract, new Date());
   const pending = planned.filter((visit) => !existingKeys.has(visit.key));
 

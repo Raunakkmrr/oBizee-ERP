@@ -133,9 +133,27 @@ describe("visitsToGenerate — idempotency", () => {
   });
 
   it("generates only what is missing when the horizon moves", () => {
-    const keys = new Set(["ctr_x:sch_1:1"]);
+    const keys = new Set(["sch_1:1"]);
     const later = visitsToGenerate(contract(), keys, new Date("2026-04-01"), 90);
     expect(later.map((v) => v.number)).toEqual([2, 3]);
+  });
+
+  it("keys a visit the way the database keys it", () => {
+    /*
+      **The one this file was missing.** It asserted the key against a literal
+      it had written itself — `ctr_x:sch_1:1` — so it agreed with the browser
+      and nobody noticed the API was writing `scheduleId:n`. The two formats
+      could never match, and the contracts screen reported "none on the board
+      yet" over visits that had genuinely been generated, offering to raise
+      them again for ever.
+
+      `jobs_tenant_visitkey_uq` is what actually enforces FR-502's idempotency,
+      and it holds the server's format. This pins the shape so the next
+      divergence fails here instead of on a screen.
+    */
+    const [first] = visitsToGenerate(contract(), new Set(), new Date("2026-04-01"), 90);
+    expect(first!.key).toBe(`${first!.scheduleId}:${first!.number}`);
+    expect(first!.key).not.toContain(first!.contractId);
   });
 });
 
