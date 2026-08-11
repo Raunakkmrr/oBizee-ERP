@@ -24,6 +24,21 @@ import {
  * **It fails soft.** No tiles, no network, a provider outage — the panel says
  * so and the typed address underneath is still the record. A map that blocks a
  * lead being saved would be worse than no map.
+ *
+ * **Pinned to maplibre-gl v5, and this is not a preference.** On v6.2.0 this
+ * exact code drew nothing: a blank grey panel with working zoom controls, a
+ * working click-to-drop-a-pin, and correct coordinates captured. Everything
+ * MapLibre needs loaded — style 200, TileJSON 200 with a valid tile template,
+ * sprite 200, 119 layers parsed, WebGL alive on Metal, the container measured
+ * 528×256 — and `isStyleLoaded()` stayed false for ever, so it requested zero
+ * tiles and zero glyphs and raised **no error at all**. `resize()` and
+ * `triggerRepaint()` changed nothing.
+ *
+ * That silence is what makes it worth writing down. The failure looked exactly
+ * like a network problem or a bad style URL, and neither the map's own error
+ * event nor the console said a word. The same code on 5.24.0 renders on the
+ * first open. Do not widen this range to `^6` without opening the map and
+ * looking at it — the tests cannot see this, and nothing throws.
  */
 export function SiteMap({
   value,
