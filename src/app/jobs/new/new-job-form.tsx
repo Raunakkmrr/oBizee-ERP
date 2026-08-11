@@ -20,6 +20,8 @@ import { createJob } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
 import { cn } from "@/lib/utils";
+import { DEFAULT_SERVICE, SERVICES } from "@/lib/data/services";
+import { todayInIndia } from "@/lib/data/attention";
 
 /**
  * New job / work order — FR-106, FR-201, FR-203, FR-205, FR-207.
@@ -122,8 +124,21 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
   const [customer, setCustomer] = useState(prefill.customer ?? "");
   const [site, setSite] = useState(prefill.site ?? "");
   const [landmark, setLandmark] = useState("");
-  const [service, setService] = useState(prefill.service ?? "AC servicing");
+  const [service, setService] = useState(prefill.service ?? DEFAULT_SERVICE);
   const [slot, setSlot] = useState<string>(SLOTS[0].label);
+  /*
+    **FR-203's other half.**
+
+    The form collected a slot and then stamped `new Date().toISOString()` as
+    the date — never asking, and in UTC, so a job booked before 05:30 IST was
+    dated yesterday and born overdue. FR-203 says a schedule is a date *and* a
+    slot; only the slot was ever built.
+
+    Defaulted to today because most work booked on a call is for today, and
+    a required empty date field would be four keystrokes of friction on the
+    common path. Editable because the rest of the time it is not today.
+  */
+  const [scheduledDate, setScheduledDate] = useState(todayInIndia());
   const [exactTime, setExactTime] = useState("11:30");
   const [priority, setPriority] = useState<string>("normal");
   const [technician, setTechnician] = useState("");
@@ -289,14 +304,28 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
                 hint="Its own field — this is how the technician actually finds the place"
               />
 
+              {/*
+                A list that suggests, and a box that still accepts anything.
+
+                `list=` on a text input is a datalist: the twelve services drop
+                down, and a trade name nobody anticipated can still be typed.
+                A `<select>` would have been tidier and wrong — it would force
+                an unusual job under the nearest wrong label.
+              */}
               <Field
                 label="Service type"
                 value={service}
                 onChange={setService}
                 onBlur={() => touch("service")}
                 error={check.errors.service}
+                list="service-types"
                 hint="Decides which technicians the board will offer for this job"
               />
+              <datalist id="service-types">
+                {SERVICES.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
             </CardContent>
           </Card>
 
@@ -305,6 +334,21 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
               <CardTitle className="text-base">When &amp; who</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div>
+                <p className="mb-1.5 text-sm font-medium">Date</p>
+                <Input
+                  type="date"
+                  className="max-w-[180px] tabular-nums"
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  aria-label="Date of the visit"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Today unless you change it — a job with no chosen date is one
+                  nobody promised
+                </p>
+              </div>
+
               <div>
                 <p className="mb-1.5 text-sm font-medium">Slot</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -417,7 +461,7 @@ export function NewJobForm({ prefill }: { prefill: NewJobPrefill }) {
                 // The site, not its locality — two sites can share one.
                 siteId: chosenSite.id,
                 serviceType: service,
-                scheduledDate: new Date().toISOString().slice(0, 10),
+                scheduledDate,
                 // The board's token, not the picker's label.
                 slot: SLOTS.find((option) => option.label === slot)?.token ?? exactTime,
                 priority: priority as "normal" | "urgent" | "breakdown",

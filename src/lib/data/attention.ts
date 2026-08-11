@@ -125,3 +125,21 @@ export function dayWords(iso: string): string {
     timeZone: "Asia/Kolkata",
   }).format(at);
 }
+
+/**
+ * Today, in India, as `2026-08-11`.
+ *
+ * **Not `new Date().toISOString().slice(0, 10)`.** That is the UTC date, and
+ * India is UTC+5:30 — so between midnight and 05:30 IST it returns *yesterday*.
+ * The new-job form used exactly that expression to stamp every job it created,
+ * which meant a job booked at 1 am was born with yesterday's date and was
+ * immediately, permanently, one day late.
+ */
+export function todayInIndia(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}

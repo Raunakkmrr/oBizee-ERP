@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { apiFetch } from "../api/client";
 import { defineQuery } from "./source";
+import { SEED_TENANT } from "./fixtures/tenant";
 
 /**
  * Document numbering — FR-811.
@@ -193,5 +194,45 @@ export const getNumbering = defineQuery<void, Numbering>({
   api: async () => apiFetch<Numbering>("/api/settings/numbering"),
   fixture: async () => ({
     raw: { financialYear: new Date().getFullYear(), branches: [], counters: [] },
+  }),
+});
+
+/**
+ * The firm's own name, for the top of anything printed.
+ *
+ * Read from the register rather than the tenant fixture: a job card carries
+ * this to a customer's door, and printing a seeded demo name on it would be a
+ * document that misrepresents the business handing it over.
+ */
+export type FirmProfile = {
+  businessName: string;
+  legalName: string;
+  branch: { name: string; gstin: string; stateCode: string } | null;
+};
+
+const firmProfileSchema = z.object({
+  businessName: z.string(),
+  legalName: z.string(),
+  branch: z
+    .object({ name: z.string(), gstin: z.string(), stateCode: z.string() })
+    .nullable(),
+});
+
+export const getFirmProfile = defineQuery<void, FirmProfile>({
+  key: "settings.profile",
+  schema: firmProfileSchema,
+  api: async () => apiFetch<FirmProfile>("/api/settings/profile"),
+  fixture: async () => ({
+    raw: {
+      businessName: SEED_TENANT.businessName,
+      legalName: SEED_TENANT.legalName,
+      branch: SEED_TENANT.branches[0]
+        ? {
+            name: SEED_TENANT.branches[0].name,
+            gstin: SEED_TENANT.branches[0].gstin,
+            stateCode: SEED_TENANT.branches[0].stateCode,
+          }
+        : null,
+    },
   }),
 });

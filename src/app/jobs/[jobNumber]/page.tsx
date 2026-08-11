@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarDays, CircleCheck, Clock, FileClock, Flag, MapPin, Package, Phone, ReceiptIndianRupee } from "lucide-react";
+import { ArrowLeft, CalendarDays, CircleCheck, Clock, FileClock, Flag, MapPin, Package, Phone, Printer, ReceiptIndianRupee } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { Button } from "@/components/ui/button";
@@ -513,6 +513,25 @@ export default function JobDetailPage({
                     >
                       Reschedule
                     </Button>
+                    {/*
+                      **Only once somebody is going.**
+
+                      A job card names the technician who is carrying it, so
+                      offering it on an unassigned job produces a sheet with a
+                      blank where the name goes — and a blank on a printed
+                      document is read as an answer rather than an absence.
+                    */}
+                    {job.technician ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        render={<Link href={`/jobs/${encodeURIComponent(job.jobNumber)}/card`} />}
+                        nativeButton={false}
+                      >
+                        <Printer className="size-3.5" />
+                        Job card
+                      </Button>
+                    ) : null}
                     {picker === "technician" ? (
                       <PersonPicker
                         people={people}
