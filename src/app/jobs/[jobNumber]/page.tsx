@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CircleCheck, Clock, Flag, MapPin, Package, Phone, ReceiptIndianRupee } from "lucide-react";
+import { ArrowLeft, CalendarDays, CircleCheck, Clock, FileClock, Flag, MapPin, Package, Phone, ReceiptIndianRupee } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,9 @@ import { asPaise } from "@/lib/money";
 import { loading, type Query } from "@/lib/data/result";
 import { canBillNow, getJobDetail, primaryActionFor, stageFor, type JobDetail } from "@/lib/data/job-detail";
 import { Unavailable } from "@/components/shared/unavailable";
+import { COVERAGE_LABEL } from "@/lib/data/contracts";
+import { attentionFor, ATTENTION_TONE, dayWords } from "@/lib/data/attention";
+import { cn } from "@/lib/utils";
 import { Chip } from "@/components/shared/controls";
 import { PersonPicker } from "@/components/people/person-picker";
 import { telHref, whatsappHref } from "@/lib/contact";
@@ -182,6 +185,11 @@ export default function JobDetailPage({
           {(job) => {
             const stage = stageFor(job, policy);
             const primary = primaryActionFor(job.status);
+            /* The same rule the Jobs list uses — one definition, two screens. */
+            const attention = attentionFor(
+              { status: job.status, scheduledDate: job.scheduledDate, technician: job.technician },
+              today,
+            );
             const billable = canBillNow(job, policy);
             const leads = new Set(stage.lead);
             // The first contact on the site record is the one to ring.
@@ -336,6 +344,54 @@ export default function JobDetailPage({
                       screen never said it anywhere. */}
                   {job.technician ? ` · ${job.technician.name}` : null}
                 </p>
+
+                {/*
+                  **When, and whether it is under contract.**
+
+                  Neither of these was on the screen. The date and slot were
+                  selected by the API and dropped before the response, so the
+                  page devoted to one job could not say what day it was for; the
+                  AMC reference *was* in the payload all along and simply never
+                  rendered, so a twelve-visit contract showed as the bare words
+                  "Visit 3 of 12" with nothing saying which contract, what it
+                  covers, or that there was a contract at all.
+                */}
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+                  <span className="flex items-center gap-1.5">
+                    <CalendarDays className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    <span className="tabular-nums">
+                      {job.scheduledDate ? dayWords(job.scheduledDate) : "No date set"}
+                    </span>
+                    {job.slot ? (
+                      <span className="text-muted-foreground">· {job.slot}</span>
+                    ) : null}
+                  </span>
+
+                  {attention ? (
+                    <span
+                      className={cn(
+                        "rounded px-2 py-0.5 text-xs font-medium",
+                        ATTENTION_TONE[attention.kind],
+                      )}
+                      title={attention.reason}
+                    >
+                      {attention.word}
+                    </span>
+                  ) : null}
+
+                  {job.contract ? (
+                    <Link
+                      href="/contracts"
+                      className="flex items-center gap-1.5 rounded-full bg-info/12 px-2.5 py-0.5 text-xs font-medium text-info hover:bg-info/20"
+                    >
+                      <FileClock className="size-3.5" aria-hidden="true" />
+                      {job.contract.reference}
+                      <span className="font-normal opacity-80">
+                        · {COVERAGE_LABEL[job.contract.coverage]}
+                      </span>
+                    </Link>
+                  ) : null}
+                </div>
 
                 {showValue && job.valuePaise !== null && job.valuePaise !== undefined ? (
                   <p className="mt-1 text-xl font-semibold">

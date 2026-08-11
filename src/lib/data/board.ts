@@ -104,6 +104,15 @@ const jobRowSchema = z.object({
    * visit of.
    */
   visitKey: z.string().nullable().default(null),
+  /**
+   * `2026-10-15`, the day the work is *for*.
+   *
+   * The API has always returned this and the schema quietly dropped it, so the
+   * Jobs list had no date column and the row could not say whether it was
+   * overdue. Zod strips unknown keys without complaining, which is why nothing
+   * ever failed — the field simply was not there to render.
+   */
+  scheduledDate: z.string().nullable().default(null),
 });
 
 const technicianSchema = z.object({
@@ -271,6 +280,15 @@ export function recommendTechnician(
  * customer name long enough to need truncation; and a technician on leave who
  * must not be offered for assignment.
  */
+/**
+ * The seed board is *today's*, so its rows carry today's date.
+ *
+ * A hardcoded day would drift into the past and paint every fixture row red
+ * the moment the calendar moved past it, which would make the offline fallback
+ * look like a firm in crisis.
+ */
+const FIXTURE_DAY = new Date().toISOString().slice(0, 10);
+
 export const SEED_BOARD: Board = {
   counters: {
     unassigned: 3,
@@ -295,6 +313,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: null,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j2",
@@ -311,6 +330,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: null,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j3",
@@ -327,6 +347,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: null,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j4",
@@ -344,6 +365,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: null,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j5",
@@ -360,6 +382,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 2,
       valuePaise: 17_500_00,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j6",
@@ -376,6 +399,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: null,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j7",
@@ -392,6 +416,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: null,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j8",
@@ -408,6 +433,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: 9_200_00,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j9",
@@ -424,6 +450,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: 4_500_00,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j10",
@@ -440,6 +467,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: null,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j11",
@@ -456,6 +484,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: 31_000_00,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j12",
@@ -472,6 +501,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 2,
       valuePaise: 6_800_00,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j13",
@@ -488,6 +518,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: null,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
     {
       id: "j14",
@@ -504,6 +535,7 @@ export const SEED_BOARD: Board = {
       visitAttempt: 1,
       valuePaise: 4_500_00,
       visitKey: null,
+      scheduledDate: FIXTURE_DAY,
     },
   ],
   technicians: [
@@ -595,13 +627,108 @@ export function techniciansFromPeople(
  * The row shape is the board's on purpose: the same filters, the same status
  * badge, the same value helper. Two shapes would mean two of each.
  */
-export const getJobs = defineQuery<void, { jobs: JobRow[] }>({
+/**
+ * What the caller is asking the register for.
+ *
+ * `q` is the whole search — one box over job number, customer, locality,
+ * technician and site phone, matched both as a substring and by trigram
+ * similarity so "Kumar" finds "Rani Kumari". It is sent to the server rather
+ * than filtered here for a reason that is not performance: the list is paged,
+ * so a client-side filter would search only the page in hand and confidently
+ * report "no jobs match" for a job that exists on page two.
+ */
+export type JobsQuery = {
+  q?: string;
+  filter?: JobsFilter;
+  limit?: number;
+  offset?: number;
+};
+
+/**
+ * The record's filters: the board's five, plus one the board must not have.
+ *
+ * `BoardFilter` stays exactly as §6.4.1 defines it — five states, no total —
+ * because the dispatch board's rule is enforced at that type and widening it
+ * would quietly repeal the rule everywhere it is used. The record borrows those
+ * five and adds `unscheduled`, which is meaningless on a board (a job with no
+ * date cannot be dispatched today) and is the fastest way to find the stubs
+ * somebody started and never finished.
+ */
+export const JOBS_FILTERS = [...BOARD_FILTERS, "unscheduled"] as const;
+
+export type JobsFilter = (typeof JOBS_FILTERS)[number];
+
+export const JOBS_FILTER_LABEL: Record<JobsFilter, string> = {
+  ...FILTER_LABEL,
+  unscheduled: "No date set",
+};
+
+export type JobsPage = {
+  jobs: JobRow[];
+  /** Every row the filter matches, not the count on this page. */
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  /** Echoed back, so a slow response cannot repaint a query already replaced. */
+  query: string | null;
+  filter: JobsFilter | null;
+};
+
+const jobsPageSchema = z.object({
+  jobs: z.array(jobRowSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+  hasMore: z.boolean(),
+  query: z.string().nullable(),
+  filter: z.enum(JOBS_FILTERS).nullable().default(null),
+});
+
+export const getJobs = defineQuery<JobsQuery, JobsPage>({
   key: "jobs.list",
-  schema: z.object({ jobs: z.array(jobRowSchema) }),
-  api: async () => apiFetch<{ jobs: JobRow[] }>("/api/jobs"),
-  fixture: async (): Promise<Fetched<unknown>> => ({
-    raw: { jobs: (await import("./store")).getState().board.jobs },
-  }),
+  schema: jobsPageSchema,
+  api: async (params) => {
+    const search = new URLSearchParams();
+    const q = params?.q?.trim();
+    if (q) search.set("q", q);
+    if (params?.filter) search.set("filter", params.filter);
+    if (params?.limit !== undefined) search.set("limit", String(params.limit));
+    if (params?.offset) search.set("offset", String(params.offset));
+    const query = search.toString();
+    return apiFetch<JobsPage>(`/api/jobs${query ? `?${query}` : ""}`);
+  },
+  fixture: async (params): Promise<Fetched<unknown>> => {
+    const all = (await import("./store")).getState().board.jobs;
+    const q = params?.q?.trim().toLowerCase() ?? "";
+    const searched = q
+      ? all.filter((job) =>
+          [job.jobNumber, job.customer, job.locality, job.serviceType, job.technician?.name]
+            .some((field) => field?.toLowerCase().includes(q)),
+        )
+      : all;
+    const matched = params?.filter
+      ? searched.filter((job) =>
+          params.filter === "unscheduled"
+            ? job.scheduledDate === null
+            : matchesFilter(job, params.filter as BoardFilter),
+        )
+      : searched;
+    const limit = params?.limit ?? 50;
+    const offset = params?.offset ?? 0;
+    const page = matched.slice(offset, offset + limit);
+    return {
+      raw: {
+        jobs: page,
+        total: matched.length,
+        limit,
+        offset,
+        hasMore: offset + page.length < matched.length,
+        query: q || null,
+        filter: params?.filter ?? null,
+      },
+    };
+  },
 });
 
 export const getBoard = defineQuery<void, Board>({

@@ -52,6 +52,15 @@ export const jobDetailSchema = z.object({
   priority: z.enum(["normal", "urgent", "breakdown"]),
   customer: z.string(),
   serviceType: z.string(),
+  /**
+   * `2026-10-15` and `9-1` — FR-203's date **and** slot.
+   *
+   * Both were selected by the API and dropped before the response, so the
+   * screen that exists to describe one job could not say which day it was for.
+   * Defaulted rather than required so the older fixtures still parse.
+   */
+  scheduledDate: z.string().nullable().default(null),
+  slot: z.string().nullable().default(null),
   visit: z.object({ n: z.number(), of: z.number() }).nullable(),
   /**
    * Who is on it. Carried from the board row rather than the fixture, so this
@@ -417,6 +426,8 @@ const EMPTY_DEPTH: Omit<
   | "valuePaise"
 > = {
   statusSince: null,
+  scheduledDate: null,
+  slot: null,
   visit: null,
   technician: null,
   site: {
@@ -446,6 +457,8 @@ const FIXTURES: Record<string, JobDetail> = {
     priority: "normal",
     customer: "Shakti Industries",
     serviceType: "AC repair",
+    scheduledDate: null,
+    slot: null,
     visit: null,
     technician: { id: "u3", name: "Ramesh Yadav" },
     valuePaise: null,
@@ -505,6 +518,8 @@ const FIXTURES: Record<string, JobDetail> = {
     priority: "normal",
     customer: "Deshmukh Hospital",
     serviceType: "Generator AMC",
+    scheduledDate: null,
+    slot: null,
     visit: { n: 7, of: 12 },
     technician: { id: "u3", name: "Ramesh Yadav" },
     valuePaise: 1085600,
@@ -561,6 +576,8 @@ const FIXTURES: Record<string, JobDetail> = {
     technician: { id: "u3", name: "Ramesh Yadav" },
     customer: "Mrs. Deshpande",
     serviceType: "AC servicing",
+    scheduledDate: null,
+    slot: null,
     visit: null,
     valuePaise: 450000,
     site: {
@@ -641,6 +658,9 @@ export const getJobDetail = defineQuery<string, JobDetail>({
       technician: row.technician,
       customer: row.customer,
       serviceType: row.serviceType,
+      // The board row knows the day; the fixture's depth does not.
+      scheduledDate: row.scheduledDate,
+      slot: row.slot === "Unslotted" ? null : row.slot,
       valuePaise: row.valuePaise,
     };
 

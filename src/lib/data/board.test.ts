@@ -27,6 +27,7 @@ function job(over: Partial<JobRow> = {}): JobRow {
     visitAttempt: 1,
     valuePaise: null,
     visitKey: null,
+  scheduledDate: null,
     ...over,
   };
 }

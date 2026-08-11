@@ -502,6 +502,7 @@ function withGeneratedVisits(
       visitAttempt: 1,
       valuePaise: null,
       visitKey: visit.key,
+      scheduledDate: visit.on.toISOString().slice(0, 10),
     };
   });
 
@@ -751,6 +752,12 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
         valuePaise: null,
         // Ad-hoc, so it is not the nth visit of any contract.
         visitKey: null,
+        /*
+          Undated on purpose. The new-job form collects a slot but never a day,
+          so claiming one here would invent a promise nobody made — and the
+          Jobs list now marks an undated job rather than hiding it.
+        */
+        scheduledDate: null,
       };
       return {
         ...state,

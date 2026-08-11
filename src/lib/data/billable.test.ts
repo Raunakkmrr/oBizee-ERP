@@ -20,6 +20,7 @@ const job = (over: Partial<JobRow> = {}): JobRow => ({
   visitAttempt: 1,
   valuePaise: 5_000_00,
   visitKey: null,
+  scheduledDate: null,
   ...over,
 });
 
