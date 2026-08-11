@@ -57,18 +57,23 @@ export function NumberTicker({
     }
   }, [motionValue, isInView, delay, value, direction, startValue])
 
-  useEffect(
-    () =>
-      springValue.on("change", (latest) => {
-        if (ref.current) {
-          ref.current.textContent = Intl.NumberFormat(locale, {
-            minimumFractionDigits: decimalPlaces,
-            maximumFractionDigits: decimalPlaces,
-          }).format(Number(latest.toFixed(decimalPlaces)))
-        }
-      }),
-    [springValue, decimalPlaces, locale]
-  )
+  const format = (amount: number) =>
+    Intl.NumberFormat(locale, {
+      minimumFractionDigits: decimalPlaces,
+      maximumFractionDigits: decimalPlaces,
+    }).format(Number(amount.toFixed(decimalPlaces)))
+
+  useEffect(() => {
+    /*
+      Subscribed only once the element is in view, so nothing overwrites the
+      true figure below until there is actually an animation to run.
+    */
+    if (!isInView) return
+    return springValue.on("change", (latest) => {
+      if (ref.current) ref.current.textContent = format(latest)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [springValue, decimalPlaces, locale, isInView])
 
   return (
     <span
@@ -79,7 +84,25 @@ export function NumberTicker({
       )}
       {...props}
     >
-      {startValue}
+      {/*
+        **The value, not the starting point.**
+
+        This rendered `{startValue}` — literally `0` — and the real figure only
+        ever arrived by the spring writing `textContent` imperatively. So when
+        the observer did not fire, the animation did not run, or React
+        re-rendered the subtree, the number stayed at zero and stayed there.
+
+        It was doing exactly that on Settings: turnover read ₹0 against a real
+        ₹4.2 crore, on the screen that decides SAC/HSN digit count and whether
+        the e-invoicing threshold applies. Not a flicker — permanent, and
+        indistinguishable from a firm that had declared nothing.
+
+        Same rule the navigation learned the hard way: **the resting state must
+        never depend on an animation completing.** The truth is the markup; the
+        count-up is decoration on top of it, and it only takes over once there
+        is something to animate.
+      */}
+      {format(direction === "down" ? startValue : value)}
     </span>
   )
 }
