@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# …except the local development defaults, which hold no secret. Without them
+# `npm run dev` renders the browser fixtures instead of the API — an app that
+# looks like it works and is not the product.
+!.env.development
 
 # vercel
 .vercel
