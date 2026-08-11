@@ -1,99 +1,70 @@
-import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import path from "node:path";
-
 /**
- * Put the database in a state these tests can assert against.
+ * Check that something is listening, and say what to do if not.
  *
- * The day fixture is anchored to *today*, so it goes stale overnight — and a
- * board with no jobs on it makes every assertion here pass on an empty list,
- * which is the failure mode the contract tests were written to remove. Running
- * it here means the suite is answerable for its own preconditions rather than
- * depending on somebody having run a script this morning.
+ * **What this used to do, and why it stopped.** It resolved `../obez-erp-api`,
+ * ran that repository's seed scripts with that repository's `.env`, and started
+ * its server. Convenient, and it meant this repository could not be cloned and
+ * tested on its own: the frontend needed the backend checked out beside it, with
+ * working database credentials, or nothing ran at all. Two repositories that
+ * could only be used as one.
  *
- * It is additive and idempotent: the masters are only created when missing,
- * the day is replaced, and the stock ledger is append-only and cannot be
- * rebuilt at all.
+ * The API now owns its own fixtures — `npm run e2e:prepare` over there. This
+ * suite talks to whatever answers at `API_URL` and knows nothing about where
+ * that came from: a local process, a staging deploy, a colleague's machine.
+ *
+ * The cost is that `npx playwright test` no longer does everything by itself,
+ * and a suite that needs two commands is a suite somebody runs wrong. Hence the
+ * message below, which names them.
  */
-const API_DIR = path.resolve(process.cwd(), "../obez-erp-api");
+const API = process.env.API_URL ?? "http://localhost:8787";
 
-function seed(script: string): void {
-  const file = path.join(API_DIR, "src/db", script);
-  if (!existsSync(file)) throw new Error(`Cannot find ${file} — is the API repo beside this one?`);
+export default async function globalSetup(): Promise<void> {
+  const live = await fetch(`${API}/health`)
+    .then((response) => response.ok)
+    .catch(() => false);
 
-  execFileSync(
-    process.execPath,
-    ["--experimental-strip-types", "--env-file-if-exists=.env", `src/db/${script}`],
-    { cwd: API_DIR, stdio: "inherit" },
-  );
-}
+  if (!live) {
+    throw new Error(
+      `No API at ${API}.\n\n` +
+        `  In the API repository:  npm start\n` +
+        `  Then, once:             npm run e2e:prepare\n\n` +
+        `Or point this suite elsewhere with API_URL=https://…`,
+    );
+  }
 
-/**
- * Hand back the sign-in budgets this suite is about to spend.
- *
- * One test signs in with the wrong password on purpose, and wrong sign-ins
- * are counted — five in fifteen minutes locks the seeded owner out, and then
- * every later test fails as "too many attempts". That reads as the product
- * being broken rather than the limiter working, which is precisely the
- * confusion it caused the first time it happened.
- *
- * Only the seeded development account, and only the keys these tests touch.
- */
-function clearSignInBudgets(): void {
-  const keys = [
-    "pw:account:manish@shakticooling.test",
-    "pw:ip:unknown",
-    "pw:ip:127.0.0.1",
-    "pw:ip:::1",
-    "otp:req:phone:919820012345",
-    "otp:req:ip:unknown",
-    "otp:req:ip:127.0.0.1",
-    "otp:req:ip:::1",
-    "otp:verify:phone:919820012345",
-    /*
-      The refresh budget, which this suite spends faster than any human could:
-      every `page.goto` is a cold document, and a cold document exchanges the
-      cookie for an access token. It is refunded on success now, so this is
-      belt-and-braces for the failures the suite causes on purpose.
-    */
-    "refresh:ip:unknown",
-    "refresh:ip:127.0.0.1",
-    "refresh:ip:::1",
-  ];
-
-  const script = keys
-    .map((key) => `await db.execute(sql\`select clear_rate_limit('${key}')\`);`)
-    .join("\n");
-
-  execFileSync(
-    process.execPath,
-    [
-      "--experimental-strip-types",
-      "--env-file-if-exists=.env",
-      "--input-type=module",
-      "--eval",
-      /*
-        `adminDb`, not `db`. Attempt budgets are counted before anyone is
-        authenticated — per phone and per address, across every firm — so they
-        live outside row-level security and outside the tenant-scoped handle,
-        which refuses to send a statement with no tenant in force.
-      */
-      `import { sql } from "drizzle-orm";\nimport { adminDb as db } from "./src/db/client.ts";\n${script}\nprocess.exit(0);`,
-    ],
-    { cwd: API_DIR, stdio: "inherit" },
-  );
-}
-
-export default function globalSetup(): void {
-  // Masters first: the day fixture hangs jobs off customers and technicians.
-  seed("seed.ts");
-  seed("seed-day.ts");
-  clearSignInBudgets();
   /*
-    Drafts from the last run. `billing.spec.ts` presses "Bill this" and the
-    draft stays — forty-nine had piled up on the money screen before anybody
-    looked. A draft holds no number, so clearing them costs the series nothing;
-    leaving them turns the screen into a record of how often the tests ran.
+    Fixtures are not seeded from here any more, and that is a real trade rather
+    than a tidy-up. The day fixture is anchored to *today*, so it goes stale
+    overnight — and a board with no jobs makes every assertion pass on an empty
+    list, which is the failure the contract tests exist to remove. Running
+    `e2e:prepare` is now something a person has to remember.
+
+    So the suite checks rather than trusts. Thirty-five green tests that
+    examined nothing is a worse outcome than a suite that refuses to start.
   */
-  seed("clear-drafts.ts");
+  const signIn = await fetch(`${API}/auth/password`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "manish@shakticooling.test", password: "obizee-dev-2026" }),
+  });
+  if (!signIn.ok) {
+    throw new Error(
+      `The seeded owner cannot sign in to ${API} (${signIn.status}).\n` +
+        `  In the API repository:  npm run e2e:prepare`,
+    );
+  }
+  const { accessToken } = (await signIn.json()) as { accessToken: string };
+
+  const board = (await (
+    await fetch(`${API}/api/board/today`, { headers: { Authorization: `Bearer ${accessToken}` } })
+  ).json()) as { jobs?: unknown[] };
+
+  if (!board.jobs?.length) {
+    throw new Error(
+      `${API} has no jobs on today's board, so every assertion here would pass on an empty list.\n` +
+        `  In the API repository:  npm run e2e:prepare`,
+    );
+  }
+
+  console.log(`API at ${API} — ${board.jobs.length} jobs on today's board`);
 }

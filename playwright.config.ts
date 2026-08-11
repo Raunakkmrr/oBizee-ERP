@@ -58,16 +58,13 @@ export default defineConfig({
 
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 
+  /*
+    Only this repository's server. The API used to be started from here, with
+    `cwd: "../obez-erp-api"` — which meant the frontend could not be tested
+    unless the backend was checked out beside it. Start it yourself; the global
+    setup checks it is there and says so if not.
+  */
   webServer: [
-    {
-      command:
-        "node --experimental-strip-types --env-file=.env src/server.ts",
-      cwd: "../obez-erp-api",
-      url: `${API}/health`,
-      // Reuse a server already running in development; start one in CI.
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-    },
     {
       /*
         A production build, not `next dev`, and the reason is the twelve-route
