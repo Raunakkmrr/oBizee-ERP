@@ -48,7 +48,13 @@ export function ActivityLog() {
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setFailed(false);
+    /*
+      `setFailed(false)` used to run here, synchronously on open, which
+      re-renders the sheet before it has painted for no gain — the flag is
+      already false unless a previous read failed, and the panel resets it when
+      it closes. Cleared in `onOpenChange` instead, where it is a response to an
+      event rather than a render cascade.
+    */
     void getAuditTrail()
       .then((result) => {
         if (cancelled) return;
@@ -64,7 +70,13 @@ export function ActivityLog() {
   }, [open]);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setFailed(false);
+        setOpen(next);
+      }}
+    >
       <SheetTrigger
         render={
           <Button variant="ghost" size="icon" aria-label="Activity log — who changed what">

@@ -16,7 +16,6 @@ import { loading, type Query } from "@/lib/data/result";
 import { BILLING_LABEL, COVERAGE_LABEL, RECURRENCE_LABEL, getContracts, scheduleProgress, visitSchedule, type Contract } from "@/lib/data/contracts";
 import { generateVisits } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
-import { getBoard } from "@/lib/data/board";
 import { RenewalsBand } from "@/components/contracts/renewals-band";
 
 /**
@@ -32,19 +31,9 @@ import { RenewalsBand } from "@/components/contracts/renewals-band";
  */
 function ContractCard({
   contract,
-  visitKeys,
   onGenerated,
 }: {
   contract: Contract;
-  /*
-    The visit keys already on the board, from the register.
-
-    FR-502's idempotency key is what makes "generate visits" safe to run
-    twice, and it only works if the keys being compared are the ones the
-    register holds. Reading a local board meant a second machine's visits were
-    invisible and the button offered to create them again.
-  */
-  visitKeys: ReadonlySet<string>;
   onGenerated: () => void;
 }) {
   const generate = useMutation(
@@ -219,21 +208,16 @@ export default function ContractsPage() {
     loading(),
   );
 
-  const [visitKeys, setVisitKeys] = useState<ReadonlySet<string>>(new Set());
+  /*
+    One request, not two.
 
+    This also fetched the board to collect the visit keys FR-502 dedupes on.
+    That set is now on each contract as `visitsOnBoard`, answered by the same
+    query that returns the contract — so the second call fetched a list of
+    today's jobs that nothing then read.
+  */
   const reload = useCallback(() => {
     void getContracts().then(setQuery);
-    // The board carries the visit keys FR-502 dedupes on.
-    void getBoard().then((result) => {
-      if (result.status !== "ready") return;
-      setVisitKeys(
-        new Set(
-          result.data.jobs
-            .map((job) => job.visitKey)
-            .filter((key): key is string => key !== null),
-        ),
-      );
-    });
   }, []);
   useEffect(reload, [reload]);
 
@@ -267,7 +251,6 @@ export default function ContractsPage() {
                   <ContractCard
                     key={contract.id}
                     contract={contract}
-                    visitKeys={visitKeys}
                     onGenerated={reload}
                   />
                 ))}
