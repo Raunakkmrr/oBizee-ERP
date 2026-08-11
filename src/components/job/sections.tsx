@@ -12,6 +12,7 @@ import { partBilling } from "@/lib/data/contracts";
 import { navigateHref } from "@/lib/data/geo";
 import { Rating } from "@/components/shared/rating";
 import { nextStepFor, type Check as StageCheck, type JobDetail, type Stage } from "@/lib/data/job-detail";
+import { CONTACT_ROLE_LABEL, type ContactRole } from "@/lib/data/customers";
 
 /**
  * The job detail screen's parts, so the page can order them by stage.
@@ -313,7 +314,11 @@ export function WhereBody({ job }: { job: JobDetail }) {
               <span className="block truncate">
                 {contact.name}{" "}
                 {/* Every number carries its role label (§6.5.1). */}
-                <span className="text-muted-foreground">({contact.role})</span>
+                {/* §7.6 wants the role beside the number so nobody rings the
+                    wrong person — in words. This printed the raw enum. */}
+                <span className="text-muted-foreground">
+                  ({CONTACT_ROLE_LABEL[contact.role as ContactRole] ?? contact.role})
+                </span>
               </span>
               <span className="text-muted-foreground tabular-nums">
                 {contact.phone}

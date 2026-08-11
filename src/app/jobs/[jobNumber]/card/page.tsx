@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { getJobDetail, type JobDetail } from "@/lib/data/job-detail";
 import { getFirmProfile, type FirmProfile } from "@/lib/data/series";
 import { COVERAGE_LABEL } from "@/lib/data/contracts";
+import { CONTACT_ROLE_LABEL, type ContactRole } from "@/lib/data/customers";
 import { dayWords } from "@/lib/data/attention";
 import { loading, type Query } from "@/lib/data/result";
 
@@ -172,7 +173,12 @@ export default function JobCardPage({
                   job.site.contacts.map((contact) => (
                     <p key={`${contact.name}-${contact.phone}`} className="text-sm">
                       {contact.name}
-                      <span className="text-neutral-500"> ({contact.role})</span>
+                      {/* The label, not the enum. `SITE_INCHARGE` is a
+                          database value; this sheet is handed to a customer. */}
+                      <span className="text-neutral-500">
+                        {" "}
+                        ({CONTACT_ROLE_LABEL[contact.role as ContactRole] ?? contact.role})
+                      </span>
                       <br />
                       <span className="font-mono">{contact.phone}</span>
                     </p>
