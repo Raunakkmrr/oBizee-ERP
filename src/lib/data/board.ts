@@ -579,6 +579,31 @@ export function techniciansFromPeople(
     }));
 }
 
+/**
+ * Every work order, not today's.
+ *
+ * **Why this exists separately from `getBoard`.** The Jobs screen called
+ * `getBoard()` — `/api/board/today` — under a heading that reads "Every work
+ * order, and where it has got to". It got today's dispatch board. A contract
+ * visit generated for October, or a job rescheduled into June, was invisible on
+ * the one screen whose whole purpose is to list it, and the record silently
+ * meant "today" everywhere it was read.
+ *
+ * `/api/jobs` already existed, already scoped itself by FR-306 and already
+ * stripped prices by FR-1302. Nothing in the browser called it.
+ *
+ * The row shape is the board's on purpose: the same filters, the same status
+ * badge, the same value helper. Two shapes would mean two of each.
+ */
+export const getJobs = defineQuery<void, { jobs: JobRow[] }>({
+  key: "jobs.list",
+  schema: z.object({ jobs: z.array(jobRowSchema) }),
+  api: async () => apiFetch<{ jobs: JobRow[] }>("/api/jobs"),
+  fixture: async (): Promise<Fetched<unknown>> => ({
+    raw: { jobs: (await import("./store")).getState().board.jobs },
+  }),
+});
+
 export const getBoard = defineQuery<void, Board>({
   key: "board.today",
   schema: boardSchema,

@@ -12,7 +12,7 @@ import { ColumnHeader, Panel } from "@/components/shared/panel";
 import { cn } from "@/lib/utils";
 import { EM_DASH, loading, renderComputed, type Query } from "@/lib/data/result";
 import { formatMoney } from "@/lib/money";
-import { BOARD_FILTERS, FILTER_LABEL, getBoard, jobValue, matchesFilter, type Board, type BoardFilter } from "@/lib/data/board";
+import { BOARD_FILTERS, FILTER_LABEL, getJobs, jobValue, matchesFilter, type BoardFilter, type JobRow } from "@/lib/data/board";
 
 /**
  * Jobs — the searchable record of every work order, as distinct from `/today`.
@@ -26,7 +26,7 @@ import { BOARD_FILTERS, FILTER_LABEL, getBoard, jobValue, matchesFilter, type Bo
  * coordinator moving between the two screens does not relearn the vocabulary.
  */
 export default function JobsPage() {
-  const [query, setQuery] = useState<Query<Board>>(loading());
+  const [query, setQuery] = useState<Query<{ jobs: JobRow[] }>>(loading());
   /**
    * `null` is "everything". It is deliberately *not* a sixth member of
    * `BoardFilter`: §6.4.1's union has no total because the board must never
@@ -39,7 +39,7 @@ export default function JobsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getBoard().then((result) => {
+    getJobs().then((result) => {
       if (!cancelled) setQuery(result);
     });
     return () => {
