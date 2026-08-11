@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createLead, type LeadSource, type MutationResult } from "@/lib/api/mutations";
+import { useMutation } from "@/lib/api/use-mutation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Mic } from "lucide-react";
@@ -191,6 +193,13 @@ const LEAD_FORM = z
 
 export default function NewLeadPage() {
   const router = useRouter();
+  /*
+    `run` takes the mutation as a thunk so the hook owns pending, failure and
+    the error surface, exactly as the other create forms do.
+  */
+  const write = useMutation(
+    async (run: () => Promise<MutationResult<{ id: string; reference: string }>>) => run(),
+  );
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [source, setSource] = useState<string | null>(null);
@@ -282,9 +291,59 @@ export default function NewLeadPage() {
   );
   const canSave = check.ok;
 
-  function save() {
-    if (!canSave) return;
-    router.push("/leads?saved=L-2608-0163");
+  /**
+   * FR-105's closed list, mapped from the chips this form shows.
+   *
+   * The two that differ are not cosmetic: the route validates against the
+   * statutory list, and "Repeat" or "Field" would be refused.
+   */
+  const SOURCE_FOR: Record<string, LeadSource> = {
+    Phone: "Phone",
+    WhatsApp: "WhatsApp",
+    "Walk-in": "Walk-in",
+    Referral: "Referral",
+    Website: "Website",
+    Repeat: "Repeat customer",
+    Field: "Field/Marketing",
+  };
+
+  /** FR-104 wants a datetime; the chips are relative words. */
+  function followUpAt(choice: string): string {
+    const days = { Today: 0, Tomorrow: 1, "+3 days": 3, "+1 week": 7 }[choice] ?? 1;
+    const when = new Date();
+    when.setDate(when.getDate() + days);
+    // Late morning, not this instant: a follow-up "today" set at 5pm is a
+    // follow-up nobody makes, and the queue sorts on this.
+    when.setHours(11, 0, 0, 0);
+    return when.toISOString();
+  }
+
+  async function save() {
+    if (!canSave || write.pending) return;
+
+    /*
+      **This used to be `router.push("/leads?saved=L-2608-0163")` and nothing
+      else.** No request, no record — a hardcoded reference in a redirect, on
+      the screen FR-101 calls "capture a lead in under thirty seconds". It
+      validated, it congratulated you, and the lead did not exist.
+
+      Nothing caught it. The screen *reads* from the API, so the wired sweep saw
+      no fixture. The endpoint is real and fast — the NFR gate measures it at
+      269ms — but it was measured by calling it directly, which no screen did.
+      `createLead` sat exported from the mutations module, imported by nobody.
+    */
+    const result = await write.run(() =>
+      createLead({
+        name: name.trim(),
+        phone: phone.trim(),
+        locality: address.locality || undefined,
+        source: SOURCE_FOR[source ?? "Phone"] ?? "Phone",
+        nextFollowUpAt: followUpAt(followUp),
+      }),
+    );
+
+    // The reference the register gave it, not one this file invented.
+    if (result?.ok) router.push(`/leads?saved=${result.data.reference}`);
   }
 
   function onKeyDown(event: React.KeyboardEvent) {
