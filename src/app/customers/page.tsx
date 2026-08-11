@@ -119,6 +119,35 @@ function SitePanel({
         </Card>
 
         <Panel title="Contacts" icon={Users} count={site.contacts.length} flush>
+          {/*
+            **Zero contacts is a gap, not a count.**
+
+            This rendered a calm `0` in the same grey as `Service history (4)`
+            beside it, then nothing. Read at a glance it says "there is nothing
+            at this site" — Raunak read exactly that off Green Park Clinic and
+            asked why an empty location was on the screen at all. It is not
+            empty: it has four jobs against it and a technician on site.
+
+            What the zero actually means is that nobody at this address has a
+            name or a number recorded, so a technician standing at the gate has
+            no one to ring. That is an operational hole, and §7.6 — every number
+            carries its role "so nobody rings the wrong person" — presumes there
+            is a number to carry one.
+
+            So say the consequence rather than the count. Three of eight sites
+            are in this state today.
+          */}
+          {site.contacts.length === 0 ? (
+            <div className={cn("px-4 py-3", ROW)}>
+              <p className="text-sm text-warning">
+                No contact recorded — nobody to call on arrival.
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                The site is real and has work against it. Add a name and number
+                before the next visit.
+              </p>
+            </div>
+          ) : null}
           {contactOrder(site.contacts).map((contact) => (
             <div
               key={contact.id}
