@@ -23,7 +23,8 @@ import {
   type ReschedulePolicy,
   BILLING_FREQUENCIES, BILLING_LABEL, COVERAGES, COVERAGE_LABEL, INVOICES_PER_YEAR, RECURRENCES, RECURRENCE_LABEL, VISITS_PER_YEAR, needsReceiptVoucher, perInvoiceAmount, type BillingFrequency, type Coverage, type Recurrence } from "@/lib/data/contracts";
 import { getCustomers, type Customer } from "@/lib/data/customers";
-import { createContract } from "@/lib/api/mutations";
+import { DEFAULT_SERVICE, SERVICES } from "@/lib/data/services";
+import { createContract, generateVisits } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
 
@@ -66,6 +67,9 @@ export type NewContractPrefill = {
 const CONTRACT_FORM = z.object({
   customer: requiredName("A customer"),
   site: requiredName("A site"),
+  // The API refuses a scope under two characters; saying so here means the
+  // form explains it rather than the save failing.
+  scope: requiredName("What the visits cover"),
   annualValue: rupees("The annual contract value"),
   anchorDay: z
     .string()
@@ -113,6 +117,17 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
 
   const [coverage, setCoverage] = useState<Coverage>("COMPREHENSIVE");
   const [recurrence, setRecurrence] = useState<Recurrence>("MONTHLY");
+  /*
+    **What the visits are actually for.**
+
+    This was hardcoded to `"All equipment"` at the call site, so every contract
+    created through this screen stamped that phrase onto every visit it
+    generated — twelve work orders a year saying nothing about the work. It is
+    the field the Jobs list shows, the field the job card prints, and the field
+    the board matches technicians on, so a contract that will not say it is
+    twelve jobs nobody can read.
+  */
+  const [scope, setScope] = useState(DEFAULT_SERVICE);
   const [billing, setBilling] = useState<BillingFrequency>("UPFRONT_ANNUAL");
   const [anchorDay, setAnchorDay] = useState("15");
   const [reschedulePolicy, setReschedulePolicy] =
@@ -128,8 +143,10 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
     setTouched((prev) => new Set(prev).add(field));
   const check = validate(
     CONTRACT_FORM,
-    { customer, site, annualValue, anchorDay },
-    touched as ReadonlySet<"customer" | "site" | "annualValue" | "anchorDay">,
+    { customer, site, annualValue, anchorDay, scope },
+    touched as ReadonlySet<
+      "customer" | "site" | "annualValue" | "anchorDay" | "scope"
+    >,
   );
 
   const parsed = Number(annualValue);
@@ -263,7 +280,25 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                   Visit schedule — how often someone goes
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-4">
+                {/* Suggested, not enforced — the same list the job form offers,
+                    so a contract's visits and an ad-hoc job for the same work
+                    are the same string and can be counted together. */}
+                <Field
+                  label="What the visits cover"
+                  value={scope}
+                  onChange={setScope}
+                  onBlur={() => touch("scope")}
+                  error={check.errors.scope}
+                  list="contract-scopes"
+                  hint="Printed on every visit this contract generates"
+                />
+                <datalist id="contract-scopes">
+                  {SERVICES.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+
                 <div className="flex flex-wrap gap-1.5">
                   {RECURRENCES.map((option) => (
                     <Chip
@@ -506,13 +541,35 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                       */
                       schedules: [
                         {
-                          scope: "All equipment",
+                          scope,
                           recurrence,
                           anchorDay: Number(anchorDay) || 1,
                         },
                       ],
                     });
-                    if (result?.ok) router.push("/contracts");
+                    /*
+                      **The button says "and generate visits", so it does.**
+
+                      It did not. `POST /api/contracts` creates the contract and
+                      nothing else; generation is a separate endpoint that the
+                      Contracts screen offers afterwards. So a contract sold as
+                      twelve visits was created by a button promising twelve
+                      visits and produced none — Nandini Foods sat live for days
+                      with a schedule, a value, and an empty board, which nobody
+                      would notice until a customer rang to ask where the
+                      technician was.
+
+                      Generation is idempotent by visit key (FR-502), so the
+                      Contracts screen's own button stays safe to press after
+                      this. A failure here is not fatal: the contract exists and
+                      the visits can still be generated from the list, so the
+                      redirect happens either way and the list is where the
+                      state is visible.
+                    */
+                    if (result?.ok) {
+                      await generateVisits(result.data.id);
+                      router.push("/contracts");
+                    }
                   }}
                 >
                   Create contract &amp; generate visits
