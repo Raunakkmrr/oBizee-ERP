@@ -144,6 +144,16 @@ export const jobDetailSchema = z.object({
     })
     .nullable(),
   invoiceNumber: z.string().nullable(),
+  /**
+   * The document this job became, and how to reach it.
+   *
+   * The number alone was returned and nothing rendered it, so a billed job's
+   * screen would not say which invoice it produced, let alone open it. The id
+   * is what makes the copy reachable; the status is what stops a draft being
+   * offered as though it were a bill.
+   */
+  invoiceId: z.string().nullable().default(null),
+  invoiceStatus: z.enum(["DRAFT", "ISSUED", "CANCELLED"]).nullable().default(null),
 });
 
 export type JobDetail = z.infer<typeof jobDetailSchema>;
@@ -160,7 +170,24 @@ export type PrimaryAction = { label: string; href: string } | null;
  * follow-up is secondary only and those states get **no primary**, because
  * offering one invents work on a job that is finished.
  */
-export function primaryActionFor(status: string): PrimaryAction {
+export function primaryActionFor(
+  status: string,
+  /**
+   * Whether this job has already produced an invoice.
+   *
+   * §6.5.3 keys the table on status alone, and on a signed-off job that says
+   * "Create invoice" — which stays true right up until somebody creates one,
+   * and then keeps saying it. The register refuses the second attempt with a
+   * 409, so no money was ever at risk; what the reader got was a filled primary
+   * button, in the position muscle memory reaches for, that answers with an
+   * error. Offering the document instead is the action that is actually left.
+   */
+  invoice?: { id: string | null; number: string | null } | null,
+): PrimaryAction {
+  if (invoice?.id && (status === "SIGNED_OFF" || status === "INVOICED")) {
+    return { label: "Print invoice", href: `#invoice-print:${invoice.id}` };
+  }
+
   switch (status) {
     case "CREATED":
       return { label: "Schedule", href: "#schedule" };
@@ -446,6 +473,8 @@ const EMPTY_DEPTH: Omit<
   // No contract until one is linked — a job created loose is not an AMC visit.
   contract: null,
   invoiceNumber: null,
+  invoiceId: null,
+  invoiceStatus: null,
 };
 
 const FIXTURES: Record<string, JobDetail> = {
@@ -498,6 +527,8 @@ const FIXTURES: Record<string, JobDetail> = {
     signOff: null,
     contract: null,
     invoiceNumber: null,
+    invoiceId: null,
+    invoiceStatus: null,
   },
   /*
     The job the end-to-end flow lands on — lead to contract to work order to
@@ -566,6 +597,8 @@ const FIXTURES: Record<string, JobDetail> = {
     ],
     signOff: null,
     invoiceNumber: null,
+    invoiceId: null,
+    invoiceStatus: null,
   },
   "J-2608-0417": {
     id: "j9",
@@ -610,6 +643,8 @@ const FIXTURES: Record<string, JobDetail> = {
       signatureUploaded: false,
     },
     invoiceNumber: null,
+    invoiceId: null,
+    invoiceStatus: null,
   },
 };
 

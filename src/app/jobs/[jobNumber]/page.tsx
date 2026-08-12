@@ -184,7 +184,10 @@ export default function JobDetailPage({
         <QueryBoundary query={query} label="this job" loadingRows={6}>
           {(job) => {
             const stage = stageFor(job, policy);
-            const primary = primaryActionFor(job.status);
+            const primary = primaryActionFor(job.status, {
+              id: job.invoiceId,
+              number: job.invoiceNumber,
+            });
             /* The same rule the Jobs list uses — one definition, two screens. */
             const attention = attentionFor(
               { status: job.status, scheduledDate: job.scheduledDate, technician: job.technician },
@@ -391,6 +394,31 @@ export default function JobDetailPage({
                       </span>
                     </Link>
                   ) : null}
+
+                  {/*
+                    **What this job became, and a copy of it.**
+
+                    The API returned `invoiceNumber` from the first version of
+                    this screen and nothing ever rendered it, so a billed job
+                    would not say which invoice it produced — and there was no
+                    way anywhere in the product to hand a customer their bill.
+
+                    A draft says so. It is not a document anybody can refer to,
+                    and offering it as though it were is how an amount nobody
+                    was charged ends up in somebody's inbox.
+                  */}
+                  {job.invoiceId ? (
+                    <Link
+                      href={`/money/invoice/${job.invoiceId}/print`}
+                      className="flex items-center gap-1.5 rounded-full bg-success/12 px-2.5 py-0.5 text-xs font-medium text-success hover:bg-success/20"
+                    >
+                      <ReceiptIndianRupee className="size-3.5" aria-hidden="true" />
+                      {job.invoiceNumber ?? "Draft invoice"}
+                      <span className="font-normal opacity-80">
+                        · {job.invoiceStatus === "ISSUED" ? "print or save" : "not issued yet"}
+                      </span>
+                    </Link>
+                  ) : null}
                 </div>
 
                 {showValue && job.valuePaise !== null && job.valuePaise !== undefined ? (
@@ -424,7 +452,18 @@ export default function JobDetailPage({
                         to a working primary and doing nothing — which is how
                         the whole dead-button problem started.
                       */
-                      primary.href === "#signoff-link" ||
+                      primary.href.startsWith("#invoice-print:") ? (
+                        <Button
+                          size="sm"
+                          render={
+                            <Link href={`/money/invoice/${job.invoiceId}/print`} />
+                          }
+                          nativeButton={false}
+                        >
+                          <Printer className="size-3.5" />
+                          {primary.label}
+                        </Button>
+                      ) : primary.href === "#signoff-link" ||
                       primary.href === "#reminder" ? (
                         <Button
                           size="sm"

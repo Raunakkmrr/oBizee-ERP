@@ -80,6 +80,8 @@ function detail(over: Partial<JobDetail> = {}): JobDetail {
     contract: null,
     signOff: null,
     invoiceNumber: null,
+  invoiceId: null,
+  invoiceStatus: null,
     ...over,
   };
 }
