@@ -492,3 +492,27 @@
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+/* ------------------------------------------------------------------- print */
+
+/*
+  Paper is white, and the app's surface colour is not.
+
+  The job card and the invoice both draw a white sheet inside the page, and
+  under `@media print` everything below that sheet was still painted in the
+  app's background — a grey block over the lower two-thirds of an A4 invoice.
+  It survived to PDF, so it would survive to a customer, and to the toner.
+
+  Set here rather than on each print route: any surface that prints wants the
+  same thing, and the next one should not have to rediscover it.
+*/
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* A print job is read on paper; a shadow is ink spent saying nothing. */
+  * {
+    box-shadow: none !important;
+  }
+}
