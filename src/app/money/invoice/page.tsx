@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Info, Star, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Check, Info, Printer, Star, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -244,16 +244,38 @@ function ReviewInvoice() {
       freshness={{ kind: "fresh", at: today }}
     >
       <div className="p-4 md:p-6">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mb-3 -ml-2"
-          render={<Link href={`/jobs/${jobRef}`} />}
-          nativeButton={false}
-        >
-          <ArrowLeft className="size-4" />
-          Back to {jobRef}
-        </Button>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2"
+            render={<Link href={`/jobs/${jobRef}`} />}
+            nativeButton={false}
+          >
+            <ArrowLeft className="size-4" />
+            Back to {jobRef}
+          </Button>
+
+          {/*
+            **The copy a customer asks for.**
+
+            This screen reviews a document and could not produce one. The GST
+            workspace exports CSV, XLSX, JSON and a Tally envelope — every shape
+            an accountant's software wants and none a customer does — so "send
+            me the bill" had no answer anywhere in the product.
+          */}
+          {invoiceId ? (
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href={`/money/invoice/${invoiceId}/print`} />}
+              nativeButton={false}
+            >
+              <Printer className="size-4" />
+              Print or save as PDF
+            </Button>
+          ) : null}
+        </div>
 
         {/* 62 / 38 (§6.11.1). */}
         <div className="grid gap-4 xl:grid-cols-8">
