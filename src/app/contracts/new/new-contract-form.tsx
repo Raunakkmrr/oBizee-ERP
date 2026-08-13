@@ -24,6 +24,7 @@ import {
   BILLING_FREQUENCIES, BILLING_LABEL, COVERAGES, COVERAGE_LABEL, INVOICES_PER_YEAR, RECURRENCES, RECURRENCE_LABEL, VISITS_PER_YEAR, needsReceiptVoucher, perInvoiceAmount, type BillingFrequency, type Coverage, type Recurrence } from "@/lib/data/contracts";
 import { getCustomers, type Customer } from "@/lib/data/customers";
 import { DEFAULT_SERVICE, SERVICES } from "@/lib/data/services";
+import { todayInIndia } from "@/lib/data/attention";
 import { createContract, generateVisits } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
@@ -64,6 +65,19 @@ export type NewContractPrefill = {
  * turned a typo into the 1st of the month, which is a wrong billing date the
  * office would only find twelve invoices later.
  */
+/**
+ * The terms a service firm actually sells.
+ *
+ * Not a free number of days: a contract is negotiated in months, and a box
+ * accepting 187 would invite one. Six is here because a half-year AMC is a
+ * common first sale to a customer who will not commit to a year yet.
+ */
+const TERMS = [
+  { months: 6, label: "6 months" },
+  { months: 12, label: "1 year" },
+  { months: 24, label: "2 years" },
+] as const;
+
 const CONTRACT_FORM = z.object({
   customer: requiredName("A customer"),
   site: requiredName("A site"),
@@ -128,6 +142,16 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
     twelve jobs nobody can read.
   */
   const [scope, setScope] = useState(DEFAULT_SERVICE);
+  /*
+    **How long the deal runs.**
+
+    The form never sent `termDays`, so the API's 365-day default applied to
+    everything and every contract was a year — a six-month deal could not be
+    written down at all. The field beside it is labelled *annual* value, which
+    only means anything once the term is known: eighteen thousand rupees is a
+    very different deal over six months than over twelve.
+  */
+  const [termMonths, setTermMonths] = useState(12);
   const [billing, setBilling] = useState<BillingFrequency>("UPFRONT_ANNUAL");
   const [anchorDay, setAnchorDay] = useState("15");
   const [reschedulePolicy, setReschedulePolicy] =
@@ -154,6 +178,15 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
   const hasValue = annualValue.trim() !== "" && Number.isFinite(parsed) && parsed > 0;
   const annualPaise = hasValue ? Math.round(parsed * 100) : 0;
   const visits = VISITS_PER_YEAR[recurrence];
+  /*
+    What the customer actually gets, and pays, over the term they signed.
+
+    The annual figures above are the unit the contract is stored in; these are
+    the ones a reader checks against the conversation they just had. Rounded
+    down, because a term that covers two and a half visits delivers two.
+  */
+  const visitsOverTerm = Math.floor((visits * termMonths) / 12);
+  const termValue = Math.round((annualPaise * termMonths) / 12);
   const invoices = INVOICES_PER_YEAR[billing];
   const perInvoice = useMemo(
     () => perInvoiceAmount(annualPaise, billing, visits),
@@ -259,6 +292,27 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                   onBlur={() => touch("annualValue")}
                   error={check.errors.annualValue}
                 />
+                <div>
+                  <p className="mb-1.5 text-sm font-medium">How long it runs</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TERMS.map((option) => (
+                      <Chip
+                        key={option.months}
+                        label={option.label}
+                        selected={termMonths === option.months}
+                        onClick={() => setTermMonths(option.months)}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                    {visitsOverTerm} visit{visitsOverTerm === 1 ? "" : "s"} over the
+                    term
+                    {hasValue
+                      ? ` · ₹${Math.round(termValue / 100).toLocaleString("en-IN")} in total`
+                      : ""}
+                  </p>
+                </div>
+
                 <Field
                   label="Anchor day of month"
                   inputMode="numeric"
@@ -532,7 +586,8 @@ export function NewContractForm({ prefill }: { prefill: NewContractPrefill }) {
                       coverage,
                       billing,
                       reschedulePolicy,
-                      startDate: new Date().toISOString().slice(0, 10),
+                      startDate: todayInIndia(),
+                      termDays: Math.round(termMonths * 30.44),
                       /*
                         FR-501: a contract without a schedule generates nothing,
                         so one is always sent. FR-1406 allows several cadences on

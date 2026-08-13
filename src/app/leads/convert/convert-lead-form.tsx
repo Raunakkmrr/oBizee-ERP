@@ -7,7 +7,10 @@ import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { logLeadOutcome } from "@/lib/api/mutations";
+import { convertLead, logLeadOutcome } from "@/lib/api/mutations";
+import { useState } from "react";
+import { Field } from "@/components/shared/field";
+import { STATE_NAMES } from "@/lib/tax";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
 
@@ -43,7 +46,35 @@ export function ConvertLeadForm({
   value: string | null;
 }) {
   const won = useMutation(logLeadOutcome);
+  const convert = useMutation(convertLead);
   const router = useRouter();
+
+  /*
+    **The address, asked for once, at the moment it is known.**
+
+    `convertLead` — the endpoint that turns a lead into a customer *and a site*
+    — existed and was called by nothing. This page marked the lead won and
+    redirected with the name in a query string, so the customer never came into
+    being: the contract form had nobody to select, and the address gathered
+    across three or four follow-up calls was thrown away with the lead.
+
+    It is asked for here rather than earlier because this is the first moment it
+    is reliably known. A lead is a phone number and a name; the address arrives
+    during the calls, and demanding it at capture would either block the capture
+    or fill the field with guesses.
+  */
+  const [addressLine1, setAddressLine1] = useState("");
+  const [locality, setLocality] = useState(site ?? "");
+  const [city, setCity] = useState("");
+  const [stateCode, setStateCode] = useState("07");
+  const [pincode, setPincode] = useState("");
+  const [landmark, setLandmark] = useState("");
+
+  const addressReady =
+    addressLine1.trim().length > 0 &&
+    locality.trim().length > 1 &&
+    city.trim().length > 0 &&
+    /^[1-8][0-9]{5}$/.test(pincode.trim());
 
   const carry = new URLSearchParams({
     ...(reference ? { fromLead: reference } : {}),
@@ -70,6 +101,45 @@ export function ConvertLeadForm({
         nextFollowUpAt: null,
       });
       if (!result?.ok) return;
+
+      /*
+        Then make the customer real.
+
+        `to: "customer"` creates the customer and the site and does **not**
+        raise a job — the AMC path wants a customer to hang a contract on, and
+        the one-off path raises its own work order on the next screen with the
+        details the reader is about to confirm. Asking the register to make a
+        job here as well would produce a second, empty one.
+
+        A refusal stops the navigation. The lead is already marked won by then,
+        which is correct: it was won. What must not happen is landing on a
+        contract form for a customer that does not exist.
+      */
+      const made = await convert.run(leadId, {
+        to: "customer",
+        site: {
+          label: "Main site",
+          addressLine1: addressLine1.trim(),
+          locality: locality.trim(),
+          city: city.trim(),
+          stateCode,
+          pincode: pincode.trim(),
+          landmark: landmark.trim() || null,
+        },
+      });
+      if (!made?.ok) return;
+
+      // The next screen is told which customer, by name, so its picker can
+      // select the one just created rather than the reader hunting for it.
+      router.push(
+        `${href}?${new URLSearchParams({
+          ...(reference ? { fromLead: reference } : {}),
+          customer: made.data.customer.name,
+          site: "Main site",
+          ...(value ? { value } : {}),
+        }).toString()}`,
+      );
+      return;
     }
     router.push(`${href}?${carry}`);
   }
@@ -82,6 +152,11 @@ export function ConvertLeadForm({
         {won.error ? (
           <div className="mb-4">
             <ErrorState error={won.error} onRetry={won.reset} />
+          </div>
+        ) : null}
+        {convert.error ? (
+          <div className="mb-4">
+            <ErrorState error={convert.error} onRetry={convert.reset} />
           </div>
         ) : null}
         <Button
@@ -102,6 +177,85 @@ export function ConvertLeadForm({
           description="Two different products. Pick the one they actually bought."
         />
 
+        {/*
+          Where the work will happen — the thing the follow-up calls were for.
+
+          Above the two products on purpose: whichever they bought, the visit
+          has to go somewhere, and a reader who picks the product first would
+          then be asked for an address by a screen that looked finished.
+        */}
+        <Card className="mb-3 max-w-4xl">
+          <CardContent className="p-5">
+            <p className="text-base font-medium">Where the work happens</p>
+            <p className="mt-1 mb-4 text-sm text-muted-foreground">
+              What you took down over the calls. This becomes the customer and
+              their site — the lead itself keeps nothing.
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field
+                label="Address"
+                value={addressLine1}
+                onChange={setAddressLine1}
+                placeholder="B-42, Second Floor"
+              />
+              <Field
+                label="Locality"
+                value={locality}
+                onChange={setLocality}
+                placeholder="Lajpat Nagar"
+              />
+              <Field
+                label="City / district"
+                value={city}
+                onChange={setCity}
+                placeholder="South Delhi"
+              />
+              <Field
+                label="PIN code"
+                inputMode="numeric"
+                className="tabular-nums"
+                value={pincode}
+                onChange={setPincode}
+                placeholder="110024"
+              />
+              <div>
+                <label
+                  htmlFor="convert-state"
+                  className="mb-1.5 block text-sm font-medium"
+                >
+                  State
+                </label>
+                <select
+                  id="convert-state"
+                  value={stateCode}
+                  onChange={(event) => setStateCode(event.target.value)}
+                  className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+                >
+                  {Object.entries(STATE_NAMES).map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name} ({code})
+                    </option>
+                  ))}
+                </select>
+                {/* FR-802: this decides CGST+SGST or IGST on every invoice for
+                    the site, so it is a field and never an inference. */}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Decides the tax head on every invoice for this site
+                </p>
+              </div>
+              <Field
+                label="Landmark"
+                optional
+                value={landmark}
+                onChange={setLandmark}
+                placeholder="Near the Ring Road petrol pump"
+                hint="How the technician actually finds the place"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid max-w-4xl gap-3 md:grid-cols-2">
           <Card className="flex flex-col">
             <CardContent className="flex flex-1 flex-col gap-3 p-5">
@@ -119,8 +273,11 @@ export function ConvertLeadForm({
                   <li>A renewal reaches you 45 days before it lapses</li>
                 </ul>
               </div>
-              <Button className="mt-2" disabled={won.pending}
-                onClick={() => void convertTo("/contracts/new")}>
+              <Button
+                className="mt-2"
+                disabled={won.pending || convert.pending || !addressReady}
+                onClick={() => void convertTo("/contracts/new")}
+              >
                 Set up the contract
                 <ArrowRight className="size-4" />
               </Button>
@@ -146,7 +303,7 @@ export function ConvertLeadForm({
               <Button
                 variant="outline"
                 className="mt-2"
-                disabled={won.pending}
+                disabled={won.pending || convert.pending || !addressReady}
                 onClick={() => void convertTo("/jobs/new")}
               >
                 Raise the work order
@@ -157,8 +314,9 @@ export function ConvertLeadForm({
         </div>
 
         <p className="mt-4 max-w-4xl text-xs text-muted-foreground">
-          Either choice marks {customer ?? "this lead"} as won and takes it out
-          of the follow-up queue.
+          {addressReady
+            ? `Either choice marks ${customer ?? "this lead"} as won, creates them as a customer with this site, and takes the lead out of the follow-up queue.`
+            : "Fill in the address above — a customer cannot be created without somewhere to send anybody."}
         </p>
       </div>
     </AppShell>

@@ -24,6 +24,7 @@ import { attentionFor, ATTENTION_TONE, dayWords } from "@/lib/data/attention";
 import { cn } from "@/lib/utils";
 import { Chip } from "@/components/shared/controls";
 import { PersonPicker } from "@/components/people/person-picker";
+import { JobProgress } from "@/components/job/progress";
 import { telHref, whatsappHref } from "@/lib/contact";
 import { CURRENT_USER, SEED_TENANT, SEED_USERS } from "@/lib/data/fixtures/tenant";
 import { can } from "@/lib/roles";
@@ -571,6 +572,22 @@ export default function JobDetailPage({
                         Job card
                       </Button>
                     ) : null}
+                    {/*
+                      The way a job actually moves.
+
+                      Placed under the action row rather than in it: §6.5.3
+                      allows exactly one primary, and these are a coordinator
+                      recording facts rather than the screen's single decision.
+                    */}
+                    <div className="w-full">
+                      <JobProgress
+                        jobId={job.id}
+                        status={job.status}
+                        siteContact={job.site.contacts[0]?.name ?? null}
+                        onMoved={reload}
+                      />
+                    </div>
+
                     {picker === "technician" ? (
                       <PersonPicker
                         people={people}

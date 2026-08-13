@@ -179,6 +179,24 @@ export const rescheduleJob = (
  * checks it *before* the transition table, so replaying "reached site" on a
  * job already on site is accepted rather than refused into a retry loop.
  */
+/**
+ * Record that the customer signed, and move the job with it.
+ *
+ * One request, deliberately: the status and the signature drifted apart
+ * precisely because they were separable — two jobs reached `SIGNED_OFF` with
+ * no record behind them, so the header claimed a signature the panel below it
+ * denied. The register writes both or neither.
+ */
+export const signOffJob = (
+  id: string,
+  body: {
+    signerName: string;
+    rating: number;
+    comment?: string;
+    origin?: "reported_by_office" | "signed_on_device";
+  },
+) => attempt(() => post<{ id: string; status: string }>(`/api/jobs/${id}/sign-off`, body));
+
 export const transitionJob = (
   id: string,
   body: { to: string; clientUuid?: string; occurredAt?: string; note?: string },
