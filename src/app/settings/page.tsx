@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Building2, Clock, Hash, Landmark, Lock, Percent, ScrollText, ShieldCheck, type LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
@@ -14,6 +14,13 @@ import { cn } from "@/lib/utils";
 // Aliased: this file already has a local `Chip`, which is a label/value
 // display pill rather than a control.
 import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/shared/field";
+import { ErrorState } from "@/components/data-states/error-state";
+import { useMutation } from "@/lib/api/use-mutation";
+import { renameFirm } from "@/lib/api/mutations";
+import { getFirmProfile, type FirmProfile } from "@/lib/data/series";
+import { EM_DASH } from "@/lib/data/result";
 
 /**
  * Settings — attempt 3. **Dark-first.**
@@ -156,7 +163,37 @@ function Settings() {
 
 /* ------------------------------------------------------------- business */
 
+/**
+ * Who this firm is — read from the register, and editable.
+ *
+ * **It read `SEED_TENANT`.** A hardcoded fixture, so the screen that answers
+ * "what is my business called" showed the seeded demo firm to everybody, and
+ * no amount of correcting the database would have changed it. The same name
+ * prints on every invoice, which is where it stopped being cosmetic: an
+ * invoice is issued *by* somebody, and the wrong supplier on a tax document is
+ * the wrong document.
+ *
+ * The GSTIN stays read-only. It encodes the entity's PAN and is issued by the
+ * department rather than chosen; a field that accepted a typed one would be a
+ * field for putting a false registration on a bill.
+ */
 function Business() {
+  const [firm, setFirm] = useState<FirmProfile | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [legalName, setLegalName] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const rename = useMutation(renameFirm);
+
+  const load = useCallback(() => {
+    void getFirmProfile().then((result) => {
+      if (result.status !== "ready") return;
+      setFirm(result.data);
+      setLegalName(result.data.legalName);
+      setBusinessName(result.data.businessName);
+    });
+  }, []);
+  useEffect(load, [load]);
+
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       {/* The identity surface is the one thing that gets a moving light. */}
@@ -169,15 +206,66 @@ function Business() {
         <p className="text-[11px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">
           Registered business
         </p>
-        <h2 className="mt-2.5 text-[26px] leading-tight font-semibold tracking-tight text-foreground">
-          {SEED_TENANT.legalName}
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Trading as {SEED_TENANT.businessName}
-        </p>
-        <p className="mt-1 font-mono text-xs text-muted-foreground">
-          {SEED_TENANT.branches[0].gstin}
-        </p>
+        {editing ? (
+          <div className="mt-3 max-w-md space-y-3">
+            <Field
+              label="Legal name"
+              value={legalName}
+              onChange={setLegalName}
+              hint="What a tax invoice must carry"
+            />
+            <Field
+              label="Trading name"
+              value={businessName}
+              onChange={setBusinessName}
+              hint="What a customer recognises — often shorter"
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={rename.pending || legalName.trim().length < 2}
+                onClick={async () => {
+                  const result = await rename.run({
+                    legalName: legalName.trim(),
+                    businessName: businessName.trim() || legalName.trim(),
+                  });
+                  if (result?.ok) {
+                    setEditing(false);
+                    load();
+                  }
+                }}
+              >
+                Save
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </div>
+            {rename.error ? (
+              <ErrorState error={rename.error} onRetry={rename.reset} />
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <h2 className="mt-2.5 text-[26px] leading-tight font-semibold tracking-tight text-foreground">
+              {firm?.legalName ?? EM_DASH}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Trading as {firm?.businessName ?? EM_DASH}
+            </p>
+            <p className="mt-1 font-mono text-xs text-muted-foreground">
+              {firm?.branch?.gstin ?? EM_DASH}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="relative mt-4"
+              onClick={() => setEditing(true)}
+            >
+              Change the name
+            </Button>
+          </>
+        )}
       </div>
 
       {/* The number that drives two statutory rules — accent, and it glows. */}

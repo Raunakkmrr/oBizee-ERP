@@ -189,6 +189,18 @@ export const transitionJob = (
 export const createContract = (body: Record<string, unknown>) =>
   attempt(() => post<{ id: string; reference: string }>("/api/contracts", body));
 
+/**
+ * Rename the firm.
+ *
+ * The name prints on every invoice raised afterwards, so this is a supplier
+ * change rather than a preference — which is why the API records both sides of
+ * it in the trail, and why the GSTIN is not editable alongside it.
+ */
+export const renameFirm = (body: { legalName?: string; businessName?: string }) =>
+  attempt(() =>
+    patch<{ legalName: string; businessName: string }>("/api/settings/profile", body),
+  );
+
 /** FR-502 — idempotent by visit key, so running it twice cannot double a year. */
 export const generateVisits = (id: string) =>
   attempt(() => post<{ created: number; skipped: number }>(
