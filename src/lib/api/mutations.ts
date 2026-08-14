@@ -76,6 +76,19 @@ export const createLead = (body: {
   /** FR-104: ISO datetime, and the route refuses a lead without one. */
   nextFollowUpAt: string;
   ownerUserId?: string | null;
+  /**
+   * What the call gathered.
+   *
+   * The capture screen asks for every one of these and used to send none of
+   * them: the service somebody rang about, where they are, and the note saying
+   * what they actually said were all typed and then dropped on save.
+   */
+  serviceType?: string;
+  note?: string;
+  pincode?: string;
+  city?: string;
+  stateCode?: string;
+  landmark?: string;
 }) => attempt(() => post<{ id: string; reference: string }>("/api/leads", body));
 
 /**

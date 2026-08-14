@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Mic } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/shared/page-header";
+import { ErrorState } from "@/components/data-states/error-state";
 import { Chip } from "@/components/shared/controls";
 import { Field, WhyDisabled } from "@/components/shared/field";
 import { AddressFields, EMPTY_ADDRESS, type AddressValue } from "@/components/location/address-fields";
@@ -28,7 +29,9 @@ import { MoneyText } from "@/components/shared/money-text";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, isReady } from "@/lib/data/result";
 import { lookupPhone, type Lookup } from "@/lib/data/lead-lookup";
-import { CURRENT_USER, SEED_USERS } from "@/lib/data/fixtures/tenant";
+import { CURRENT_USER } from "@/lib/data/fixtures/tenant";
+import { getPeople, type Person } from "@/lib/data/people";
+import { useCurrentUser } from "@/lib/data/use-session";
 
 /**
  * New lead — PRD §6.7, FR-101 · FR-102 · FR-103 · FR-104 · FR-105.
@@ -200,6 +203,41 @@ export default function NewLeadPage() {
   const write = useMutation(
     async (run: () => Promise<MutationResult<{ id: string; reference: string }>>) => run(),
   );
+  /*
+    Who took the call, and who owns it.
+
+    Both pickers read `SEED_USERS`, a fixture — so a marketer added through the
+    Team screen this morning could not be named as the person who took the
+    call, and the list offered names who may have left. FR-103 locks "taken by"
+    the moment the lead is saved, so choosing from a stale list is a mistake
+    nobody can correct afterwards.
+
+    **The register, when the caller may read it.** `/api/people` is behind
+    `people:manage`, which marketing does not hold — and marketing is exactly
+    who fills this form. So a marketer gets themselves, which is the true answer
+    for the person typing a call they just took, and an owner or coordinator
+    gets the whole team because they book leads on other people's behalf.
+  */
+  const me = useCurrentUser();
+  const [team, setTeam] = useState<Person[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void getPeople().then((result) => {
+      if (!cancelled && result.status === "ready") setTeam([...result.data.people]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** The register's list, or just the person filling the form in. */
+  const owners: { id: string; name: string }[] =
+    team.length > 0
+      ? team.filter((person) => person.active).map((p) => ({ id: p.id, name: p.name }))
+      : me
+        ? [{ id: me.id, name: me.name }]
+        : [];
+
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [source, setSource] = useState<string | null>(null);
@@ -207,8 +245,22 @@ export default function NewLeadPage() {
   const [service, setService] = useState<string | null>(null);
   const [otherService, setOtherService] = useState("");
   const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
-  const [takenBy, setTakenBy] = useState(CURRENT_USER.name);
-  const [owner, setOwner] = useState(CURRENT_USER.name);
+  /*
+    Whose lead this is.
+
+    Both defaulted to the fixture's user, so a lead saved by anybody was
+    attributed to whoever the fixture happened to name — and FR-103 locks that
+    the moment it saves.
+
+    Held as "unset until chosen" rather than corrected in an effect once the
+    session answers: an effect that overwrites state would race a reader who had
+    already picked somebody, and would fight them if `/api/me` re-resolved.
+    `?? me.name` simply means nobody has chosen yet.
+  */
+  const [takenByChoice, setTakenBy] = useState<string | null>(null);
+  const [ownerChoice, setOwner] = useState<string | null>(null);
+  const takenBy = takenByChoice ?? me?.name ?? CURRENT_USER.name;
+  const owner = ownerChoice ?? me?.name ?? CURRENT_USER.name;
   const [followUp, setFollowUp] = useState<string>("Tomorrow");
   const [note, setNote] = useState("");
   const [match, setMatch] = useState<Lookup["match"]>(null);
@@ -339,6 +391,21 @@ export default function NewLeadPage() {
         locality: address.locality || undefined,
         source: SOURCE_FOR[source ?? "Phone"] ?? "Phone",
         nextFollowUpAt: followUpAt(followUp),
+        /*
+          Everything else this screen asked for.
+
+          It collected the service, the PIN, the city, the state, a landmark and
+          a note — "what they actually said" — and sent five fields, so all of
+          that was typed and then thrown away on save. The address had to be
+          asked for a second time at conversion, and nobody could see what the
+          customer had rung about.
+        */
+        serviceType: chosenService ?? undefined,
+        note: note.trim() || undefined,
+        pincode: address.pin || undefined,
+        city: address.city || undefined,
+        stateCode: address.stateCode || undefined,
+        landmark: address.landmark || undefined,
       }),
     );
 
@@ -378,6 +445,26 @@ export default function NewLeadPage() {
           title="New lead"
           description="Enough to call this person back — nothing more."
         />
+
+        {/*
+          **A refused save said nothing at all.**
+
+          `write.error` was set and rendered nowhere, so a rejection cleared the
+          form and left the screen looking like nothing had happened. The
+          register was answering 409 on every attempt — a reference collision —
+          and the only symptom was a page that quietly emptied itself. Whoever
+          had just spent thirty seconds on a call lost every word of it and had
+          no idea why.
+
+          Above the form rather than beside the button: the reader's eye is at
+          the top after a failed save, and the reason has to reach them before
+          they start retyping.
+        */}
+        {write.error ? (
+          <div className="mb-4 max-w-3xl">
+            <ErrorState error={write.error} onRetry={write.reset} />
+          </div>
+        ) : null}
 
         {/* A single column, as §6.7.1 specifies, but as a page rather than a
             modal (DR-17). Capped so the form does not stretch across a wide
@@ -509,8 +596,8 @@ export default function NewLeadPage() {
                     onChange={(e) => setTakenBy(e.target.value)}
                     className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                   >
-                    {SEED_USERS.filter((u) => u.active).map((u) => (
-                      <option key={u.id}>{u.name}</option>
+                    {owners.map((person) => (
+                      <option key={person.id}>{person.name}</option>
                     ))}
                   </select>
                   {/* Editable now, immutable after save — FR-103. */}
@@ -531,8 +618,8 @@ export default function NewLeadPage() {
                     onChange={(e) => setOwner(e.target.value)}
                     className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                   >
-                    {SEED_USERS.filter((u) => u.active).map((u) => (
-                      <option key={u.id}>{u.name}</option>
+                    {owners.map((person) => (
+                      <option key={person.id}>{person.name}</option>
                     ))}
                   </select>
                 </div>
