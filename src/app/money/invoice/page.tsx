@@ -19,6 +19,9 @@ import { Panel } from "@/components/shared/panel";
 import { Briefcase, Send, ShieldCheck } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { getInvoice, type Invoice } from "@/lib/data/money";
+import { useMutation } from "@/lib/api/use-mutation";
+import { issueInvoice } from "@/lib/api/mutations";
+import { ErrorState } from "@/components/data-states/error-state";
 import { EM_DASH } from "@/lib/data/result";
 import { cn } from "@/lib/utils";
 import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
@@ -136,6 +139,7 @@ function ReviewInvoice() {
   */
   const invoiceId = useSearchParams().get("id");
   const [created, setCreated] = useState<Invoice | null>(null);
+  const [reloads, setReloads] = useState(0);
   useEffect(() => {
     if (!invoiceId) return;
     let cancelled = false;
@@ -145,7 +149,22 @@ function ReviewInvoice() {
     return () => {
       cancelled = true;
     };
-  }, [invoiceId]);
+  }, [invoiceId, reloads]);
+
+  /*
+    **Issuing had no button anywhere in the product.**
+
+    `issueInvoice` sat exported and imported by nobody, so every invoice this
+    system produced stayed a DRAFT for ever: no number, nothing a customer
+    could be sent, nothing the GST return could contain. The accountant could
+    prepare a bill and never actually raise one.
+
+    Issuing is the irreversible step — FR-805 makes the document immutable and
+    FR-811 spends a number from a statutory series that cannot be reused — so
+    it asks first, and says what it is about to spend.
+  */
+  const issue = useMutation(issueInvoice);
+  const [confirming, setConfirming] = useState(false);
   /*
     The fixture identity belongs to the cold-start example and to nothing else.
 
@@ -264,18 +283,57 @@ function ReviewInvoice() {
             an accountant's software wants and none a customer does — so "send
             me the bill" had no answer anywhere in the product.
           */}
-          {invoiceId ? (
-            <Button
-              variant="outline"
-              size="sm"
-              render={<Link href={`/money/invoice/${invoiceId}/print`} />}
-              nativeButton={false}
-            >
-              <Printer className="size-4" />
-              Print or save as PDF
-            </Button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {invoiceId && created?.status === "DRAFT" ? (
+              confirming ? (
+                <>
+                  <span className="text-xs text-muted-foreground">
+                    Issuing spends a number from the statutory series and cannot
+                    be undone.
+                  </span>
+                  <Button
+                    size="sm"
+                    disabled={issue.pending}
+                    onClick={async () => {
+                      const result = await issue.run(invoiceId);
+                      if (result?.ok) {
+                        setConfirming(false);
+                        setReloads((n) => n + 1);
+                      }
+                    }}
+                  >
+                    Yes, issue it
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setConfirming(false)}>
+                    Not yet
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" onClick={() => setConfirming(true)}>
+                  Issue this invoice
+                </Button>
+              )
+            ) : null}
+
+            {invoiceId ? (
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link href={`/money/invoice/${invoiceId}/print`} />}
+                nativeButton={false}
+              >
+                <Printer className="size-4" />
+                Print or save as PDF
+              </Button>
+            ) : null}
+          </div>
         </div>
+
+        {issue.error ? (
+          <div className="mb-4">
+            <ErrorState error={issue.error} onRetry={issue.reset} />
+          </div>
+        ) : null}
 
         {/* 62 / 38 (§6.11.1). */}
         <div className="grid gap-4 xl:grid-cols-8">
