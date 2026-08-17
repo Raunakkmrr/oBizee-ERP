@@ -62,7 +62,15 @@ function parseOrExplain<T>(schema: z.ZodType<T>, body: unknown, what: string): T
 }
 
 describe.skipIf(!reachable)("live API satisfies the web app's schemas", () => {
-  it("serves every read-side screen in the shape it renders", async () => {
+  /*
+    Fourteen sequential round trips to a live Neon database, one per read-side
+    screen. Vitest's five-second default was comfortable against a seeded
+    fixture and stopped being so once the register filled up — the failure was
+    a timeout, not a wrong shape, which is the sort of red that teaches people
+    to ignore red. Thirty seconds is far more than it needs and still fails
+    loudly if the API actually stalls.
+  */
+  it("serves every read-side screen in the shape it renders", { timeout: 30_000 }, async () => {
     const token = await accessToken();
     const get = async (path: string) => {
       const res = await fetch(`${BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
