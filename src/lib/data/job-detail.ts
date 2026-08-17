@@ -231,7 +231,29 @@ export function primaryActionFor(
  * inventing one ("await payment" on a settled invoice) would be a task the
  * office cannot do anything about.
  */
-export function nextStepFor(status: string): string | null {
+export function nextStepFor(
+  status: string,
+  /*
+    The invoice, because the status alone cannot answer this.
+
+    A signed-off job's next step is "Invoice raised" — and it stayed that way
+    after the invoice was raised, because `SIGNED_OFF` is where a billed job
+    sits until it is paid. So the header read "Invoiced SVC/26-27/0347" while
+    the timeline four inches below insisted the invoice was still owed. Two
+    answers to one question on one screen; the reader has no way to know which
+    to believe.
+  */
+  invoice?: { number: string | null; status: string | null } | null,
+): string | null {
+  if (status === "SIGNED_OFF" && invoice?.number) {
+    // Issued and unpaid is a real next step — it is what the collections list
+    // is chasing. Anything else about this job is somebody else's move.
+    return invoice.status === "ISSUED" ? "Payment received" : null;
+  }
+  if (status === "SIGNED_OFF" && invoice && !invoice.number) {
+    // A draft exists but has no number, so the document is not yet real.
+    return "Invoice issued";
+  }
   switch (status) {
     case "CREATED":
       return "Scheduled for a day and slot";

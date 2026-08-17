@@ -410,7 +410,10 @@ export function AssetBody({ job }: { job: JobDetail }) {
 }
 
 export function TimelineBody({ job }: { job: JobDetail }) {
-  const next = nextStepFor(job.status);
+  const next = nextStepFor(job.status, {
+    number: job.invoiceNumber,
+    status: job.invoiceStatus,
+  });
 
   if (job.timeline.length === 0) {
     // A panel with nothing in it reads as a rendering failure. A job created in
