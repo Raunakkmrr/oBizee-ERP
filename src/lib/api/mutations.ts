@@ -158,6 +158,22 @@ export const convertLead = (
 export const createCustomer = (body: Record<string, unknown>) =>
   attempt(() => post<{ id: string }>("/api/customers", body));
 
+/**
+ * Somebody to ring at a site that already exists.
+ *
+ * The customer screen warned that a site had no contact and offered no way to
+ * add one — the only route into the table was the optional block on customer
+ * creation. So every site that arrived without a contact stayed uncallable.
+ */
+export const addSiteContact = (
+  customerId: string,
+  siteId: string,
+  body: { name: string; phone: string; roleLabel?: string },
+) =>
+  attempt(() =>
+    post<{ id: string }>(`/api/customers/${customerId}/sites/${siteId}/contacts`, body),
+  );
+
 /* ------------------------------------------------------------------- jobs */
 
 export const createJob = (body: Record<string, unknown>) =>

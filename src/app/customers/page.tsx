@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarSync, MapPin, MessageCircle, Phone, Plus, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
@@ -18,7 +18,11 @@ import { cn } from "@/lib/utils";
 import { Unavailable, NEEDS_BACKEND } from "@/components/shared/unavailable";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
-import { CONDITION_LABEL, CONTACT_ROLE_LABEL, contactOrder, getCustomers, warrantyStateFor, type CustomersData, type Site } from "@/lib/data/customers";
+import { CONDITION_LABEL, CONTACT_ROLE_LABEL, contactOrder, getCustomers, warrantyStateFor, type ContactRole, type CustomersData, type Site } from "@/lib/data/customers";
+import { Field } from "@/components/shared/field";
+import { ErrorState } from "@/components/data-states/error-state";
+import { useMutation } from "@/lib/api/use-mutation";
+import { addSiteContact } from "@/lib/api/mutations";
 
 /**
  * Customers & sites — §6.14's "Site & asset history".
@@ -35,12 +39,129 @@ import { CONDITION_LABEL, CONTACT_ROLE_LABEL, contactOrder, getCustomers, warran
  * asset**, because "has this happened before" is a question about the site
  * first and the unit second.
  */
+
+/**
+ * Adding somebody to ring, from the screen that reports they are missing.
+ *
+ * The warning above has always said "Add a name and number before the next
+ * visit" and the product had no way to do it — the only route into `contacts`
+ * was the optional block on customer creation, so a site that arrived without
+ * one stayed uncallable forever. An instruction with no control is a dead end
+ * the reader blames themselves for.
+ *
+ * Kept inline rather than behind a route: this is a name and a number, and the
+ * person typing it is usually mid-call.
+ */
+function AddContact({
+  customerId,
+  siteId,
+  onAdded,
+}: {
+  customerId: string;
+  siteId: string;
+  onAdded: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [role, setRole] = useState<ContactRole>("SITE_INCHARGE");
+  const add = useMutation(
+    useCallback(
+      (body: { name: string; phone: string; roleLabel: string }) =>
+        addSiteContact(customerId, siteId, body),
+      [customerId, siteId],
+    ),
+  );
+
+  // Ten digits is what an Indian mobile is; the server normalises and refuses.
+  const ready = name.trim().length >= 2 && phone.replace(/\D/g, "").length >= 10;
+
+  if (!open) {
+    return (
+      <div className={cn("px-4 py-2.5", ROW)}>
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          <Plus className="size-3.5" />
+          Add a contact
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("space-y-2 px-4 py-3", ROW)}>
+      {add.error ? <ErrorState error={add.error} onRetry={add.reset} /> : null}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="Name" value={name} onChange={setName} placeholder="Who to ask for" />
+        <Field
+          label="Phone"
+          value={phone}
+          onChange={setPhone}
+          placeholder="10 digits"
+          hint="+91 assumed"
+        />
+      </div>
+      <div>
+        {/* The role travels with the number — §7.6, so nobody rings the wrong
+            person. Chosen as a word, never typed. */}
+        <p className="mb-1.5 text-sm font-medium">What are they to the site?</p>
+        <div className="flex flex-wrap gap-1.5">
+          {(Object.keys(CONTACT_ROLE_LABEL) as ContactRole[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={role === option}
+              onClick={() => setRole(option)}
+              className={cn(
+                "min-h-9 rounded-full px-3 py-1.5 text-sm transition-colors",
+                "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
+                role === option
+                  ? "bg-primary font-medium text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {CONTACT_ROLE_LABEL[option]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          disabled={!ready || add.pending}
+          onClick={async () => {
+            const result = await add.run({
+              name: name.trim(),
+              phone: phone.trim(),
+              roleLabel: role,
+            });
+            if (result?.ok) {
+              setOpen(false);
+              setName("");
+              setPhone("");
+              onAdded();
+            }
+          }}
+        >
+          Save contact
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SitePanel({
   site,
   customerName,
+  customerId,
+  onChanged,
 }: {
   site: Site;
   customerName: string;
+  customerId: string;
+  onChanged: () => void;
 }) {
   const [assetFilter, setAssetFilter] = useState<string | null>(null);
   const entries = assetFilter
@@ -206,6 +327,7 @@ function SitePanel({
               </div>
             </div>
           ))}
+          <AddContact customerId={customerId} siteId={site.id} onAdded={onChanged} />
         </Panel>
 
         <div>
@@ -371,15 +493,11 @@ export default function CustomersPage() {
   const [query, setQuery] = useState<Query<CustomersData>>(loading());
   const [selected, setSelected] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    getCustomers().then((result) => {
-      if (!cancelled) setQuery(result);
-    });
-    return () => {
-      cancelled = true;
-    };
+  /* Re-read after a write, so a contact just added is on the screen. */
+  const reload = useCallback(() => {
+    void getCustomers().then(setQuery);
   }, []);
+  useEffect(reload, [reload]);
 
   const today = new Date();
 
@@ -469,6 +587,8 @@ export default function CustomersPage() {
                       key={active.site.id}
                       site={active.site}
                       customerName={active.customer.name}
+                      customerId={active.customer.id}
+                      onChanged={reload}
                     />
                   </>
                 ) : null}
