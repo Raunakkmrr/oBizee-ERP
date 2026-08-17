@@ -142,6 +142,8 @@ export default function JobDetailPage({
   /** Why the visit moved — FR-203. Required, so it is asked for, not invented. */
   const [pendingSlot, setPendingSlot] = useState<Slot | null>(null);
   const [reason, setReason] = useState("");
+  /** Why billing stopped, when it stopped before it reached the server. */
+  const [billBlocked, setBillBlocked] = useState<string | null>(null);
 
   const today = new Date();
   const showValue = can(CURRENT_USER.role, "price:view_selling");
@@ -154,7 +156,23 @@ export default function JobDetailPage({
     store by number — which meant the page could only act on a job the store
     happened to hold, and silently did nothing when it did not.
   */
+  /*
+    Refused rather than guessed.
+
+    This used to read `job.valuePaise ?? 4_500_00` — a job with no price of its
+    own was billed a hardcoded ₹4,500, and the number was neither shown to the
+    biller beforehand nor flagged afterwards. An invoice is the customer's
+    evidence of what was agreed; inventing the figure on it is the one thing
+    this screen must never do. So it says what is missing and stops.
+  */
   async function bill(job: JobDetail) {
+    if (!job.valuePaise) {
+      setBillBlocked(
+        "This job has no agreed price, so there is nothing to bill it at. Put the amount on the job first, or raise the invoice by hand from Money → New invoice.",
+      );
+      return;
+    }
+    setBillBlocked(null);
     const result = await raise.run({
       jobId: job.id,
       lines: [
@@ -163,7 +181,7 @@ export default function JobDetailPage({
           code: "9987",
           kind: "service",
           qty: 1,
-          ratePaise: job.valuePaise ?? 4_500_00,
+          ratePaise: job.valuePaise,
           ratePercent: 18,
         },
       ],
@@ -179,11 +197,17 @@ export default function JobDetailPage({
       hideAmounts={hideAmounts}
       onToggleAmounts={() => setHideAmounts((v) => !v)}
     >
-      {[assign.error, move.error, raise.error].filter(Boolean).length > 0 ? (
+      {[assign.error, move.error, raise.error, billBlocked].filter(Boolean).length > 0 ? (
         <div className="space-y-2 p-4 pb-0 md:p-6 md:pb-0">
           {assign.error ? <ErrorState error={assign.error} onRetry={assign.reset} /> : null}
           {move.error ? <ErrorState error={move.error} onRetry={move.reset} /> : null}
           {raise.error ? <ErrorState error={raise.error} onRetry={raise.reset} /> : null}
+          {billBlocked ? (
+            <ErrorState
+              error={{ kind: "server", code: "NO_PRICE_ON_JOB", message: billBlocked }}
+              onRetry={() => setBillBlocked(null)}
+            />
+          ) : null}
         </div>
       ) : null}
 
