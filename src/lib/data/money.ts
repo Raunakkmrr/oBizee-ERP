@@ -514,6 +514,31 @@ export const invoiceSchema = z.object({
     })
     .nullable()
     .optional(),
+  /**
+   * What has been received against it, and what is still owed — FR-901.
+   *
+   * Derived from the payments, never stored, because partial payment is normal
+   * in this business: an invoice carries many payments and its balance is the
+   * arithmetic. A status field somebody has to remember to flip is the version
+   * that goes wrong.
+   *
+   * Optional because the list endpoint does not carry them and one shape
+   * validates both.
+   */
+  paidPaise: z.number().int().nonnegative().optional(),
+  outstandingPaise: z.number().int().nonnegative().optional(),
+  payments: z
+    .array(
+      z.object({
+        id: z.string(),
+        amountPaise: z.number().int(),
+        method: z.string(),
+        reference: z.string().nullable(),
+        recordedBy: z.string().nullable(),
+        dateWord: z.string(),
+      }),
+    )
+    .optional(),
   head: z.enum(["CGST_SGST", "IGST"]),
   explanation: z.string(),
   lines: z.array(invoiceLineSchema),

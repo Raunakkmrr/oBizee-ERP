@@ -12,15 +12,16 @@ import { validate } from "@/lib/validate";
 import { Separator } from "@/components/ui/separator";
 import { MoneyText } from "@/components/shared/money-text";
 import { ROW_TR } from "@/components/shared/controls";
-import { asPaise } from "@/lib/money";
+import { asPaise, rupeesToPaise } from "@/lib/money";
 import { STATE_NAMES, codeForAato, computeTotals, derivePlaceOfSupply, type InvoiceLine } from "@/lib/tax";
 import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
-import { Panel } from "@/components/shared/panel";
-import { Briefcase, Send, ShieldCheck } from "lucide-react";
+import { CapacityBar, Panel, ValuePill } from "@/components/shared/panel";
+import { Briefcase, Send, ShieldCheck, Wallet } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { getInvoice, type Invoice } from "@/lib/data/money";
+import { todayInIndia } from "@/lib/data/attention";
 import { useMutation } from "@/lib/api/use-mutation";
-import { issueInvoice } from "@/lib/api/mutations";
+import { issueInvoice, recordPayment } from "@/lib/api/mutations";
 import { ErrorState } from "@/components/data-states/error-state";
 import { EM_DASH } from "@/lib/data/result";
 import { cn } from "@/lib/utils";
@@ -116,6 +117,248 @@ export default function ReviewInvoicePage() {
     <Suspense fallback={null}>
       <ReviewInvoice />
     </Suspense>
+  );
+}
+
+/**
+ * What has been received against this invoice, and recording another.
+ *
+ * **Why this had to exist.** `recordPayment` was in the mutation layer and no
+ * screen called it, so a firm could issue a bill and had no way anywhere in the
+ * product to mark it settled. The receivables figure was therefore a number
+ * that only ever grew, and the job timeline pointed at "Payment received" as
+ * the next step with no door behind it.
+ *
+ * **Partial payment is the normal case, not the exception** (FR-901). A
+ * customer paying ₹4,000 against ₹7,080 is an ordinary Tuesday here, so the
+ * balance is arithmetic over many payments rather than a paid/unpaid flag
+ * somebody has to remember to flip.
+ *
+ * **The consequence is stated before the write, not after.** The amount arrives
+ * pre-filled with exactly what is outstanding — so the common case is zero
+ * typing — and the moment it is edited the panel says what will still be owed.
+ * That is the sum the accountant would otherwise do on a phone calculator with
+ * the customer waiting.
+ */
+const METHODS = [
+  { value: "UPI", label: "UPI" },
+  { value: "BANK_TRANSFER", label: "Bank transfer" },
+  { value: "CHEQUE", label: "Cheque" },
+  { value: "CASH", label: "Cash" },
+] as const;
+
+type Method = (typeof METHODS)[number]["value"];
+
+function PaymentsPanel({
+  invoice,
+  onRecorded,
+}: {
+  invoice: Invoice;
+  onRecorded: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [receivedOn, setReceivedOn] = useState(todayInIndia());
+  const [method, setMethod] = useState<Method>("UPI");
+  const [reference, setReference] = useState("");
+  const record = useMutation(recordPayment);
+
+  const billed = invoice.grandTotalPaise;
+  const paid = invoice.paidPaise ?? 0;
+  const outstanding = invoice.outstandingPaise ?? billed - paid;
+  const received = invoice.payments ?? [];
+  const settled = outstanding === 0 && billed > 0;
+
+  /*
+    A draft cannot be paid.
+
+    Not a disabled button — a statement. §6.11 draws a number at issue, so
+    until then there is no document for the money to be against, and offering
+    to collect against one invites a payment recorded against nothing.
+  */
+  if (invoice.status === "DRAFT") {
+    return (
+      <Panel title="Payments" icon={Wallet} tone="support">
+        <p className="text-sm text-muted-foreground">
+          Nothing can be received against a draft — it has no number yet. Issue
+          it first.
+        </p>
+      </Panel>
+    );
+  }
+
+  if (invoice.status === "CANCELLED") {
+    return (
+      <Panel title="Payments" icon={Wallet} tone="support">
+        <p className="text-sm text-muted-foreground">
+          This invoice was cancelled, so it collects nothing.
+        </p>
+      </Panel>
+    );
+  }
+
+  /*
+    The only rupees-to-paise conversion on this screen, and it is here because
+    this is the only place a human types money. Everything else is already paise
+    off the register — `asPaise` brands an integer, it does not convert, and
+    treating it as a converter is how a 7,080 balance renders as ₹70.80.
+  */
+  const typed = rupeesToPaise(Number(amount.replace(/[^\d.]/g, "")) || 0);
+  const remainderAfter = Math.max(0, outstanding - typed);
+
+  return (
+    <Panel
+      title="Payments"
+      icon={Wallet}
+      caption={settled ? "settled in full" : `${received.length} received`}
+      tone="support"
+    >
+      <div className="space-y-3">
+        {record.error ? <ErrorState error={record.error} onRetry={record.reset} /> : null}
+
+        {/*
+          Two numbers and a rule, not a percentage — the reader can see both the
+          position and the headroom. Paired with the balance as a word, because
+          §6.13.4 never lets colour carry a fact on its own.
+        */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <CapacityBar
+            label="Received of billed"
+            value={paid}
+            of={billed}
+            format={(n) => `₹${(n / 100).toLocaleString("en-IN")}`}
+          />
+          <span className="flex items-baseline gap-2">
+            <span className="text-xs text-muted-foreground">
+              {settled ? "Balance" : "Still owed"}
+            </span>
+            <ValuePill tone={settled ? "good" : "warn"}>
+              <MoneyText amount={asPaise(outstanding)} />
+            </ValuePill>
+          </span>
+        </div>
+
+        {received.length > 0 ? (
+          <ul className="space-y-1.5 text-sm">
+            {received.map((payment) => (
+              <li key={payment.id} className="flex flex-wrap items-baseline gap-x-2">
+                <MoneyText amount={asPaise(payment.amountPaise)} className="font-medium" />
+                <span className="text-muted-foreground">
+                  {METHODS.find((m) => m.value === payment.method)?.label ?? payment.method}
+                </span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {payment.dateWord}
+                </span>
+                {/* The UTR or cheque number is the whole point of a reference —
+                    it is what reconciles against the bank statement. */}
+                {payment.reference ? (
+                  <span className="text-xs text-muted-foreground">· {payment.reference}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Nothing received yet.
+          </p>
+        )}
+
+        {settled ? null : open ? (
+          <div className="space-y-3 border-t border-border/60 pt-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field
+                label="Amount received"
+                value={amount}
+                onChange={setAmount}
+                hint={
+                  typed > 0 && typed < outstanding
+                    ? `₹${(remainderAfter / 100).toLocaleString("en-IN")} will still be owed`
+                    : typed > outstanding
+                      ? "That is more than is outstanding"
+                      : "Pre-filled with the full balance"
+                }
+              />
+              <Field label="Received on" value={receivedOn} onChange={setReceivedOn} />
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-sm font-medium">How did it come in?</p>
+              <div className="flex flex-wrap gap-1.5">
+                {METHODS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={method === option.value}
+                    onClick={() => setMethod(option.value)}
+                    className={cn(
+                      "min-h-9 rounded-full px-3 py-1.5 text-sm transition-colors",
+                      "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
+                      method === option.value
+                        ? "bg-primary font-medium text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Field
+              label={method === "CHEQUE" ? "Cheque number" : "Reference"}
+              optional
+              value={reference}
+              onChange={setReference}
+              placeholder={method === "UPI" ? "UPI transaction id" : "UTR or slip number"}
+              hint="What this reconciles against on the bank statement"
+            />
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={record.pending || typed <= 0 || typed > outstanding}
+                onClick={async () => {
+                  const result = await record.run({
+                    invoiceId: invoice.id,
+                    amountPaise: typed,
+                    receivedOn,
+                    method,
+                    reference: reference.trim() || null,
+                  });
+                  if (result?.ok) {
+                    setOpen(false);
+                    setReference("");
+                    onRecorded();
+                  }
+                }}
+              >
+                {typed > 0 && typed >= outstanding
+                  ? "Record and settle"
+                  : "Record this payment"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              // Pre-filled with the balance: paid-in-full is the common case,
+              // and it should cost no typing at all.
+              setAmount((outstanding / 100).toFixed(2));
+              setReceivedOn(todayInIndia());
+              setOpen(true);
+            }}
+          >
+            <Wallet className="size-4" />
+            Record a payment
+          </Button>
+        )}
+      </div>
+    </Panel>
   );
 }
 
@@ -701,6 +944,12 @@ function ReviewInvoice() {
                 </ul>
               </div>
             </Panel>
+
+            {/* Money state sits above Send: "has this been paid" outranks
+                "send it again". */}
+            {created ? (
+              <PaymentsPanel invoice={created} onRecorded={() => setReloads((n) => n + 1)} />
+            ) : null}
 
             <Panel title="Send" icon={Send} tone="support">
               <div className="space-y-2 text-sm">
