@@ -413,6 +413,7 @@ export function TimelineBody({ job }: { job: JobDetail }) {
   const next = nextStepFor(job.status, {
     number: job.invoiceNumber,
     status: job.invoiceStatus,
+    outstandingPaise: job.invoiceOutstandingPaise,
   });
 
   if (job.timeline.length === 0) {

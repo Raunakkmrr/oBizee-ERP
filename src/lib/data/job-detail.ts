@@ -154,6 +154,15 @@ export const jobDetailSchema = z.object({
    */
   invoiceId: z.string().nullable().default(null),
   invoiceStatus: z.enum(["DRAFT", "ISSUED", "CANCELLED"]).nullable().default(null),
+  /**
+   * What is still owed on it — derived, because there is no PAID status.
+   *
+   * FR-901 makes the balance arithmetic over many payments rather than a flag.
+   * Without it this screen cannot tell a bill that is outstanding from one that
+   * has been settled, and announced "Payment received — not yet" on an invoice
+   * paid in full.
+   */
+  invoiceOutstandingPaise: z.number().int().nullable().default(null),
 });
 
 export type JobDetail = z.infer<typeof jobDetailSchema>;
@@ -243,12 +252,27 @@ export function nextStepFor(
     answers to one question on one screen; the reader has no way to know which
     to believe.
   */
-  invoice?: { number: string | null; status: string | null } | null,
+  invoice?: {
+    number: string | null;
+    status: string | null;
+    /** Null when unknown; 0 means settled. */
+    outstandingPaise?: number | null;
+  } | null,
 ): string | null {
   if (status === "SIGNED_OFF" && invoice?.number) {
+    if (invoice.status !== "ISSUED") return null;
+    /*
+      Settled is settled.
+
+      Keying on the status alone left this announcing "Payment received — not
+      yet" on an invoice paid in full, because an invoice never becomes PAID:
+      the balance is derived. A job whose bill is collected owes nothing and
+      should say nothing.
+    */
+    if (invoice.outstandingPaise === 0) return null;
     // Issued and unpaid is a real next step — it is what the collections list
     // is chasing. Anything else about this job is somebody else's move.
-    return invoice.status === "ISSUED" ? "Payment received" : null;
+    return "Payment received";
   }
   if (status === "SIGNED_OFF" && invoice && !invoice.number) {
     // A draft exists but has no number, so the document is not yet real.
@@ -497,6 +521,7 @@ const EMPTY_DEPTH: Omit<
   invoiceNumber: null,
   invoiceId: null,
   invoiceStatus: null,
+  invoiceOutstandingPaise: null,
 };
 
 const FIXTURES: Record<string, JobDetail> = {
@@ -551,6 +576,7 @@ const FIXTURES: Record<string, JobDetail> = {
     invoiceNumber: null,
     invoiceId: null,
     invoiceStatus: null,
+    invoiceOutstandingPaise: null,
   },
   /*
     The job the end-to-end flow lands on — lead to contract to work order to
@@ -621,6 +647,7 @@ const FIXTURES: Record<string, JobDetail> = {
     invoiceNumber: null,
     invoiceId: null,
     invoiceStatus: null,
+    invoiceOutstandingPaise: null,
   },
   "J-2608-0417": {
     id: "j9",
@@ -667,6 +694,7 @@ const FIXTURES: Record<string, JobDetail> = {
     invoiceNumber: null,
     invoiceId: null,
     invoiceStatus: null,
+    invoiceOutstandingPaise: null,
   },
 };
 
