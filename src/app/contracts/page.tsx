@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
+import { ErrorState } from "@/components/data-states/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/shared/panel";
@@ -83,6 +84,15 @@ function ContractCard({
       }
     >
       <div className="space-y-3">
+        {/*
+          Generating a year of visits could fail and say nothing — the button
+          simply stopped working. A refused write has to be visible, or it
+          reads as a broken control.
+        */}
+        {generate.error ? (
+          <ErrorState error={generate.error} onRetry={generate.reset} />
+        ) : null}
+
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg bg-muted-bg p-2.5">
           <p className="min-w-0 text-xs text-muted-foreground">
             {planned.length === 0

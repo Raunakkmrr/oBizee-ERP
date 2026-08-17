@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getLeads, type Lead } from "@/lib/data/leads";
 import { workRenewalAsLead } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * AMC renewals inside 45 days — FR-506.
@@ -76,6 +77,16 @@ export function RenewalsBand({ contracts }: { contracts: readonly Contract[] }) 
       aria-label="AMC renewals due"
       className="mb-4 rounded-xl bg-card p-4 shadow-[var(--shadow-card)]"
     >
+      {/*
+        FR-507 answers a second request with the lead that already exists, so
+        the common refusal here is benign — but it was invisible, and so was
+        every other one.
+      */}
+      {work.error ? (
+        <div className="mb-3">
+          <ErrorState error={work.error} onRetry={work.reset} />
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-baseline gap-x-3">
         <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
           <CalendarClock className="size-4 text-primary-text" />

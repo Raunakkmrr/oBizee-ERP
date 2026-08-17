@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { OUTCOMES, isTerminalOutcome, type Lead } from "@/lib/data/leads";
 import { logLeadOutcome } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * Log outcome — PRD §6.6.3.
@@ -179,6 +180,22 @@ export function LogOutcome({
             unrelated choice. It is now a page of its own, reachable from the
             row whether or not an outcome has been logged. See /leads/convert.
           */}
+
+          {/*
+            **A refused outcome said nothing.**
+
+            `save()` ended in `if (!result?.ok) return;` — the popover stayed
+            open, the chips stayed selected, and nothing anywhere said why. To
+            the person who had just put the phone down it looked like a button
+            that did not work, and the call they had just made went unrecorded.
+
+            Inside the popover rather than on the page behind it: this control
+            is a layer above the queue, and a message that appears underneath
+            the thing covering it is a message nobody sees.
+          */}
+          {log.error ? (
+            <ErrorState error={log.error} onRetry={log.reset} />
+          ) : null}
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setOpen(false)}>

@@ -21,6 +21,7 @@ import { EM_DASH, loading, type Query } from "@/lib/data/result";
 import { COLLAPSED_BY_DEFAULT, GROUP_LABEL, STALL_DAYS, pipelineColumns, getLeads, groupLeads, type Lead, type LeadGroup, type LeadsData } from "@/lib/data/leads";
 import { moveLeadStage } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
+import { ErrorState } from "@/components/data-states/error-state";
 
 /**
  * Leads — PRD §6.6. **The one decision:** *who do I call right now?*
@@ -130,6 +131,17 @@ export default function LeadsPage() {
       ) : null}
 
       <div className="p-4 md:p-6">
+        {/*
+          Moving a card between stages could be refused with nothing shown, so
+          the card sprang back and the reader was left guessing whether they
+          had dragged it wrong.
+        */}
+        {moveStage.error ? (
+          <div className="mb-4">
+            <ErrorState error={moveStage.error} onRetry={moveStage.reset} />
+          </div>
+        ) : null}
+
         <PageHeader
           className="mb-4"
           breadcrumb={[{ label: "Work" }]}
