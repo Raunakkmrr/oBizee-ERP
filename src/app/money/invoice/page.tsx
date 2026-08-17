@@ -588,8 +588,19 @@ function ReviewInvoice() {
                   <h1 className="text-lg font-semibold tracking-tight">
                     TAX INVOICE
                   </h1>
+                  {/*
+                    A draft has no number, and says so.
+
+                    This read `created?.number ?? "SVC/26-27/0148"` — so an
+                    unissued invoice displayed a plausible, well-formed number
+                    from the statutory series that had not been allocated to it.
+                    The real one turned out to be 0347. A number on a tax
+                    document is its identity under Rule 46(b); showing one the
+                    document does not own invites somebody to quote it down the
+                    phone.
+                  */}
                   <span className="text-sm text-muted-foreground tnum-id">
-                    {created?.number ?? "SVC/26-27/0148"} ·{" "}
+                    {created?.number ?? "No number until issued"} ·{" "}
                     {created?.dateWord ??
                       `${("0" + today.getDate()).slice(-2)}/08/2026`}
                   </span>
@@ -963,11 +974,20 @@ function ReviewInvoice() {
                 </p>
                 {/* FR-901: the code *is* the link, generated here, so it can
                     never drift from the amount printed beside it. */}
-                <UpiQr
-                  payee={UPI_PAYEE}
-                  amountPaise={totals.grandTotalPaise}
-                  invoiceNumber={created?.number ?? "DRAFT"}
-                />
+                {/* Not offered on a draft: a customer paying against "DRAFT"
+                    leaves a receipt that reconciles to no document. */}
+                {created?.number ? (
+                  <UpiQr
+                    payee={UPI_PAYEE}
+                    amountPaise={totals.grandTotalPaise}
+                    invoiceNumber={created.number}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    A payment code needs the invoice number, so it appears once
+                    this is issued.
+                  </p>
+                )}
               </div>
             </Panel>
 
@@ -989,7 +1009,8 @@ function ReviewInvoice() {
                     href={
                       whatsappHref(
                         CUSTOMER_PHONE,
-                        `Namaste, please find invoice ${created?.number ?? "SVC"} for ${created?.customer ?? "your service"}. Thank you.`,
+                        /* "please find invoice SVC" was what a draft sent. */
+                        `Namaste, please find invoice ${created?.number ?? "(not yet issued)"} for ${created?.customer ?? "your service"}. Thank you.`,
                       ) ?? undefined
                     }
                     target="_blank"
