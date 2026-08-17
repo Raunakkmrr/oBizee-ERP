@@ -84,11 +84,22 @@ export default function JobDetailPage({
   */
   const [people, setPeople] = useState<Person[]>([]);
   const [boardJobs, setBoardJobs] = useState<JobRow[]>([]);
+  /*
+    Whether the bench failed to load, kept apart from the bench being empty.
+
+    These were the same thing — anything but `ready` left `people` at `[]` — and
+    the picker's empty state reads "No technicians on the strength yet". So a
+    refused or failed fetch told the coordinator to go and hire somebody. The
+    two states have opposite remedies, so the screen has to be able to tell
+    them apart.
+  */
+  const [peopleFailed, setPeopleFailed] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void Promise.all([getPeople(), getBoard()]).then(([team, board]) => {
       if (cancelled) return;
       if (team.status === "ready") setPeople([...team.data.people]);
+      setPeopleFailed(team.status === "failed");
       if (board.status === "ready") setBoardJobs([...board.data.jobs]);
     });
     return () => {
@@ -588,7 +599,14 @@ export default function JobDetailPage({
                       />
                     </div>
 
-                    {picker === "technician" ? (
+                    {picker === "technician" && peopleFailed ? (
+                      <p className="mt-2 rounded-xl bg-muted p-3 text-sm text-muted-foreground">
+                        The team list could not be loaded, so there is nobody to
+                        choose from. This is not an empty team — try again, and
+                        if it keeps failing ask the owner to check your access.
+                      </p>
+                    ) : null}
+                    {picker === "technician" && !peopleFailed ? (
                       <PersonPicker
                         people={people}
                         job={{
