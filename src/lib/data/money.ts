@@ -495,6 +495,25 @@ export const invoiceSchema = z.object({
     })
     .nullable(),
   dateWord: z.string(),
+  /**
+   * The visit this bill is evidence for — §6.11.1's reason the accountant can
+   * bill without opening the job.
+   *
+   * Optional on the schema, not because it is optional in the product, but
+   * because the list endpoint does not carry it and the same shape validates
+   * both. Null on an ad-hoc invoice, which has no visit behind it.
+   */
+  fromJob: z
+    .object({
+      dateWord: z.string().nullable(),
+      technician: z.string().nullable(),
+      serviceType: z.string().nullable(),
+      signerName: z.string().nullable(),
+      rating: z.number().int().nullable(),
+      comment: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
   head: z.enum(["CGST_SGST", "IGST"]),
   explanation: z.string(),
   lines: z.array(invoiceLineSchema),

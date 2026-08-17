@@ -608,29 +608,63 @@ function ReviewInvoice() {
                 can bill without opening the job — the reason he will use this
                 screen instead of asking the coordinator" (§6.11.1).
               */}
-              <div className="space-y-2 text-sm">
-                <p className="text-muted-foreground tabular-nums">
-                  30 Jul 2026 · Ramesh Yadav
-                </p>
-                <p>Gas top-up and filter clean; capacitor replaced.</p>
-                <div className="flex items-center gap-3 pt-1">
-                  <span
-                    aria-hidden="true"
-                    className="grid h-12 w-24 place-items-center rounded border bg-muted text-xs text-muted-foreground italic"
-                  >
-                    signature
-                  </span>
-                  <span>
-                    <span className="block">Anil Joshi</span>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Star className="size-3 fill-current" aria-hidden="true" />
-                      {/* An accountant about to bill a 1-star job should know
-                          before he sends it (§6.11.2). */}
-                      <span className="tabular-nums">4 of 5</span>
-                    </span>
-                  </span>
+              {/*
+                The real visit, from the register.
+
+                This block was six hardcoded lines — every invoice in the
+                product claimed a gas top-up on 30 July by Ramesh Yadav, signed
+                by Anil Joshi at four stars, whatever the job said. On an
+                invoice review screen that is not a placeholder, it is evidence
+                for somebody else's bill sitting beside the amount you are about
+                to charge.
+              */}
+              {created?.fromJob ? (
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground tabular-nums">
+                    {[created?.fromJob.dateWord, created?.fromJob.technician]
+                      .filter(Boolean)
+                      .join(" · ") || "No visit details recorded"}
+                  </p>
+                  {created?.fromJob.serviceType ? <p>{created?.fromJob.serviceType}</p> : null}
+                  {/* What the customer actually said, when they said anything. */}
+                  {created?.fromJob.comment ? (
+                    <p className="text-muted-foreground">{created?.fromJob.comment}</p>
+                  ) : null}
+                  {created?.fromJob.signerName ? (
+                    <div className="flex items-center gap-3 pt-1">
+                      <span
+                        aria-hidden="true"
+                        className="grid h-12 w-24 place-items-center rounded border bg-muted text-xs text-muted-foreground italic"
+                      >
+                        signature
+                      </span>
+                      <span>
+                        <span className="block">{created?.fromJob.signerName}</span>
+                        {created?.fromJob.rating !== null ? (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Star className="size-3 fill-current" aria-hidden="true" />
+                            {/* An accountant about to bill a 1-star job should
+                                know before he sends it (§6.11.2). */}
+                            <span className="tabular-nums">
+                              {created?.fromJob.rating} of 5
+                            </span>
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                  ) : (
+                    /* Said rather than left blank: billing unsigned work is a
+                       decision, and the reader should be making it knowingly. */
+                    <p className="pt-1 text-warning">
+                      Nobody has signed for this visit.
+                    </p>
+                  )}
                 </div>
-              </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Raised by hand — there is no visit behind this bill.
+                </p>
+              )}
             </Panel>
 
             <Panel title="Compliance" icon={ShieldCheck} tone="support">
