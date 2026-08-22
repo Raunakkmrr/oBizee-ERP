@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleAlert, CircleHelp, Clock, HandCoins, MessageCircle, Phone, Plus, ReceiptIndianRupee } from "lucide-react";
+import { CircleAlert, CircleHelp, Clock, HandCoins, IndianRupee, MessageCircle, Phone, Plus, ReceiptIndianRupee } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { asPaise } from "@/lib/money";
 import { EM_DASH, loading, type Query } from "@/lib/data/result";
-import { AGEING_BUCKETS, MSME_LABEL, ageingTotals, bucketFor, countdownFor, deductionAtRiskPaise, deductionLostPaise, moneyAlarms, splitByPromise, getMoney, type AgeingBucket, type MoneyAlarm, type BillablePeriod, type MoneyData, type Payable, type Receivable, getDueInvoices } from "@/lib/data/money";
+import { AGEING_BUCKETS, MSME_LABEL, ageingTotals, bucketFor, countdownFor, deductionAtRiskPaise, deductionLostPaise, moneyAlarms, splitByPromise, isPartPaid, getMoney, type AgeingBucket, type MoneyAlarm, type BillablePeriod, type MoneyData, type Payable, type Receivable, getDueInvoices } from "@/lib/data/money";
 import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
 import { useRouter } from "next/navigation";
@@ -335,10 +335,23 @@ function ReceivableRow({ row, primary }: { row: Receivable; primary: boolean }) 
         {row.daysOverdue} days late
       </span>
 
-      <MoneyText
-        amount={asPaise(row.amountPaise)}
-        className="w-28 shrink-0 text-right font-medium"
-      />
+      {/*
+        The balance, and what it is a balance *of*.
+
+        The outstanding figure alone reads identically whether the customer has
+        paid most of the bill or none of it, and those are opposite calls to
+        make. Shown only when something has actually come in — on a wholly
+        unpaid invoice the second line would just repeat the first.
+      */}
+      <span className="w-32 shrink-0 text-right">
+        <MoneyText amount={asPaise(row.amountPaise)} className="font-medium" />
+        {isPartPaid(row) ? (
+          <span className="block text-xs text-success tabular-nums">
+            <MoneyText amount={asPaise(row.paidPaise)} /> paid of{" "}
+            <MoneyText amount={asPaise(row.billedPaise)} />
+          </span>
+        ) : null}
+      </span>
 
       <div className="flex shrink-0 items-center gap-1">
         {row.promise !== null && !row.promise.broken ? (
@@ -487,9 +500,19 @@ function ReadyToBill({
 
 function Receivables({ data }: { data: MoneyData }) {
   const [filter, setFilter] = useState<AgeingBucket | null>(null);
-  const visible = filter
-    ? data.receivables.filter((r) => bucketFor(r.daysOverdue) === filter)
-    : data.receivables;
+  /*
+    Part-paid is a separate axis from age, not another bucket.
+
+    An invoice can be 40 days late *and* half collected, and those are two
+    different things to say on the call — "you owe us" versus "thank you for the
+    four thousand, when does the rest come". Making it a bucket would force a
+    choice between them.
+  */
+  const [partPaidOnly, setPartPaidOnly] = useState(false);
+  const partPaid = data.receivables.filter(isPartPaid);
+  const visible = data.receivables
+    .filter((r) => (filter ? bucketFor(r.daysOverdue) === filter : true))
+    .filter((r) => (partPaidOnly ? isPartPaid(r) : true));
   const { chase, promised } = splitByPromise(visible);
   const totalOverdue = data.receivables.reduce(
     (sum, r) => sum + r.amountPaise,
@@ -514,6 +537,38 @@ function Receivables({ data }: { data: MoneyData }) {
       </div>
 
       <AgeingLine rows={data.receivables} active={filter} onPick={setFilter} />
+
+      {/*
+        Offered only when there is something to see.
+
+        A permanently-visible filter that always yields nothing teaches the
+        reader to ignore the row it sits in — and this one carries the number
+        the firm is losing money on.
+      */}
+      {partPaid.length > 0 ? (
+        <button
+          type="button"
+          aria-pressed={partPaidOnly}
+          onClick={() => setPartPaidOnly((on) => !on)}
+          className={cn(
+            "flex min-h-9 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+            "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
+            partPaidOnly
+              ? "bg-primary font-medium text-primary-foreground"
+              : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          <IndianRupee className="size-4 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            {partPaid.length} part paid
+            {partPaidOnly ? " — showing only these" : ""}
+          </span>
+          <MoneyText
+            amount={asPaise(partPaid.reduce((sum, r) => sum + r.amountPaise, 0))}
+            className="tabular-nums"
+          />
+        </button>
+      ) : null}
 
       {chase.length > 0 ? (
         <Panel

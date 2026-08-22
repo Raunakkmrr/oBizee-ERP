@@ -10,6 +10,7 @@ import {
   moneyAlarms,
   splitByPromise,
   type Payable,
+  isPartPaid,
   type Receivable,
 } from "./money";
 
@@ -21,6 +22,8 @@ function receivable(over: Partial<Receivable> = {}): Receivable {
     invoiceDate: "1 Jan 2026",
     daysOverdue: 10,
     amountPaise: 1_000_00,
+    billedPaise: 1_000_00,
+    paidPaise: 0,
     lastContact: null,
     phone: "98200 12345",
     promise: null,
@@ -249,5 +252,19 @@ describe("money alarms — what is irreversible or running out", () => {
     const alarms = moneyAlarms([payable({ msmeClass: "UNVERIFIED" })]);
     expect(alarms).toHaveLength(1);
     expect(alarms[0].kind).toBe("unverified_vendor");
+  });
+});
+
+describe("part paid", () => {
+  it("is money in and money still owed, not either alone", () => {
+    expect(isPartPaid(receivable({ billedPaise: 7_080_00, paidPaise: 4_000_00 }))).toBe(true);
+    // Nothing received: a plain unpaid bill, and a different conversation.
+    expect(isPartPaid(receivable({ billedPaise: 7_080_00, paidPaise: 0 }))).toBe(false);
+    // Settled in full does not reach this list at all, but the rule holds.
+    expect(isPartPaid(receivable({ billedPaise: 7_080_00, paidPaise: 7_080_00 }))).toBe(false);
+  });
+
+  it("treats an unknown billed total as not part paid, rather than guessing", () => {
+    expect(isPartPaid(receivable({ billedPaise: 0, paidPaise: 0 }))).toBe(false);
   });
 });

@@ -20,6 +20,17 @@ import { defineQuery, type Fetched } from "./source";
 /* ------------------------------------------------------------ receivables */
 
 /** §6.12.1's six ageing buckets, in order. Each cell is a filter. */
+/**
+ * Something has been received, and something is still owed.
+ *
+ * Not `paidPaise > 0` alone: an invoice settled in full is not on this list at
+ * all, so the interesting case is strictly between the two — and it is the one
+ * FR-901 calls normal and the one the firm keeps issuing a second invoice for.
+ */
+export function isPartPaid(row: { billedPaise: number; paidPaise: number }): boolean {
+  return row.paidPaise > 0 && row.paidPaise < row.billedPaise;
+}
+
 export const AGEING_BUCKETS = [
   "0–15",
   "16–30",
@@ -47,6 +58,19 @@ const receivableSchema = z.object({
   invoiceDate: z.string(),
   daysOverdue: z.number().int().nonnegative(),
   amountPaise: z.number().int(),
+  /**
+   * What the invoice was for, and what has come in against it.
+   *
+   * A ₹3,080 balance on a ₹7,080 invoice and a ₹3,080 invoice nobody has
+   * touched are the same number and completely different conversations. Without
+   * these the collections list could not tell a customer who has paid most of
+   * it from one who has paid nothing.
+   *
+   * Defaulted so older fixtures still parse; `billedPaise` of 0 simply means
+   * "unknown", and the part-paid test below treats it as not part-paid.
+   */
+  billedPaise: z.number().int().nonnegative().default(0),
+  paidPaise: z.number().int().nonnegative().default(0),
   lastContact: z.string().nullable(),
   /**
    * The number to chase on. Added because `Remind` and `Log call` existed as

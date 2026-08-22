@@ -61,12 +61,6 @@ export default function TodayBoardPage() {
   const assign = useMutation(assignJob);
   // Subscribing keeps this screen live when another surface writes.
   const [view, setView] = useState<(typeof VIEWS)[number]>("Today");
-  /* `23 Aug` — the reader is deciding about a specific day, not "tomorrow". */
-  const tomorrowWords = new Date(Date.now() + 86_400_000).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    timeZone: "Asia/Kolkata",
-  });
   const [hideAmounts, setHideAmounts] = useState(false);
   const [openSlots, setOpenSlots] = useState<Record<string, boolean>>({});
 
@@ -81,6 +75,18 @@ export default function TodayBoardPage() {
   }, []);
 
   const today = new Date();
+  /*
+    `24 Aug` — the reader is deciding about a specific day, not "tomorrow".
+
+    Derived from `today` rather than calling `Date.now()` again: the React
+    Compiler refuses an impure call in render, and two clock reads in one render
+    can straddle midnight and label the list with the wrong day.
+  */
+  const tomorrowWords = new Date(today.getTime() + 86_400_000).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Asia/Kolkata",
+  });
   const canAssign = can(CURRENT_USER.role, "job:dispatch");
   const board = query.status === "ready" ? query.data : null;
 
