@@ -60,9 +60,18 @@ function ContractCard({
     "none on the board yet" no matter how many times somebody had generated
     them, and offered to do it again for ever.
   */
-  const existingKeys = new Set(contract.visitsOnBoard ?? []);
   const planned = visitSchedule(contract, new Date());
-  const pending = planned.filter((visit) => !existingKeys.has(visit.key));
+  /*
+    The server's count, not a second opinion computed here.
+
+    This filtered the local schedule against the placed keys and disagreed with
+    the API — "1 of 3 not on the board yet" on a contract with everything
+    placed, so the button was always offered and always did nothing. The
+    recurrence maths still runs locally for the *list* of dates below, which is
+    presentation; what is pending is a fact, and the side that writes the jobs
+    owns it.
+  */
+  const pendingCount = contract.visitsPending;
 
   return (
     <Panel
@@ -97,13 +106,13 @@ function ContractCard({
           <p className="min-w-0 text-xs text-muted-foreground">
             {planned.length === 0
               ? "No visits fall in the next 90 days"
-              : pending.length === 0
+              : pendingCount === 0
                 ? `All ${planned.length} visit${planned.length === 1 ? "" : "s"} due in the next 90 days are on the board`
-                : pending.length === planned.length
+                : pendingCount === planned.length
                   ? `${planned.length} visit${planned.length === 1 ? "" : "s"} due in the next 90 days, none on the board yet`
-                  : `${pending.length} of ${planned.length} visits due in the next 90 days are not on the board yet`}
+                  : `${pendingCount} of ${planned.length} visits due in the next 90 days are not on the board yet`}
           </p>
-          {pending.length > 0 ? (
+          {pendingCount > 0 ? (
             <Button
               size="sm"
               variant="outline"
@@ -112,7 +121,7 @@ function ContractCard({
               onClick={() => void generate.run(contract.id)}
             >
               <CalendarPlus className="size-3.5" />
-              Put {pending.length} on the board
+              Put {pendingCount} on the board
             </Button>
           ) : null}
         </div>

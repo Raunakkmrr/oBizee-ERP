@@ -10,7 +10,8 @@ import {
 function contract(over: Partial<Contract> = {}): Contract {
   return {
     id: "ctr_x",
-    reference: "AMC-2627-0099",
+    visitsPending: 0,
+  reference: "AMC-2627-0099",
     customer: "Shakti Industries",
     site: "Okhla Phase II",
     annualValuePaise: 3_60_000_00,

@@ -607,6 +607,16 @@ const contractSchema = z.object({
    */
   visitsOnBoard: z.array(z.string()).optional(),
   /**
+   * How many due visits are not yet placed — the server's count, not ours.
+   *
+   * The screen recomputed this from its own copy of the recurrence maths and
+   * the two disagreed: it offered "1 of 3 not on the board yet" for a contract
+   * whose visits were all placed, so the button was always shown and always did
+   * nothing. Only one implementation can be the one that actually writes the
+   * jobs, and it is the server's.
+   */
+  visitsPending: z.number().int().nonnegative().default(0),
+  /**
    * FR-503. Defaulted rather than required so contracts written before this
    * field existed — seeds, and anything already in a reader's IndexedDB —
    * still parse. Shifting is the safer default: it preserves the interval the
