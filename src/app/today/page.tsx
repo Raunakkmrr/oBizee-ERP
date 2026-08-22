@@ -6,6 +6,8 @@ import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Plus } from "luci
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { TriageCard } from "@/components/board/triage-card";
+import { Card } from "@/components/ui/card";
+import { TomorrowBoard } from "@/components/board/tomorrow";
 import { EscalationBand } from "@/components/board/escalation-band";
 import { seedRatings } from "@/lib/data/feedback";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -59,6 +61,12 @@ export default function TodayBoardPage() {
   const assign = useMutation(assignJob);
   // Subscribing keeps this screen live when another surface writes.
   const [view, setView] = useState<(typeof VIEWS)[number]>("Today");
+  /* `23 Aug` — the reader is deciding about a specific day, not "tomorrow". */
+  const tomorrowWords = new Date(Date.now() + 86_400_000).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Asia/Kolkata",
+  });
   const [hideAmounts, setHideAmounts] = useState(false);
   const [openSlots, setOpenSlots] = useState<Record<string, boolean>>({});
 
@@ -200,6 +208,28 @@ export default function TodayBoardPage() {
                 problem the day can absorb; a customer who has just rated the
                 visit 1★ is one somebody has sixty seconds to reach.
               */}
+              {/*
+                The view segments used to change only their own highlight.
+
+                `view` was read for `aria-pressed` and nowhere else, so
+                "Tomorrow" showed today's work — on the one screen whose whole
+                job is telling a coordinator what is coming.
+              */}
+              {view === "Tomorrow" ? (
+                <TomorrowBoard jobs={data.tomorrow} dayWords={tomorrowWords} />
+              ) : view === "This week" ? (
+                /* Honest rather than empty: the board loads two days, and
+                   pretending otherwise is how the Tomorrow tab shipped dead. */
+                <Card className="p-6 text-center">
+                  <p className="text-sm font-medium">The week is not loaded yet.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Today and tomorrow come from the board. A seven-day view needs
+                    the range the API does not serve yet — it is not built, rather
+                    than empty.
+                  </p>
+                </Card>
+              ) : (
+              <>
               <div className="mb-5 empty:hidden">
                 <EscalationBand
                   ratings={ratings}
@@ -265,6 +295,8 @@ export default function TodayBoardPage() {
                   />
                 ))}
               </div>
+              </>
+              )}
             </div>
 
             {/* Capacity, not a roster. Who has room, at a glance. */}

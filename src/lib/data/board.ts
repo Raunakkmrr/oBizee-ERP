@@ -144,6 +144,37 @@ export const boardSchema = z.object({
   technicians: z.array(technicianSchema),
   /** Counts used by the empty state's second action and orientation line. */
   tomorrowJobs: z.number().int().nonnegative(),
+  /**
+   * Tomorrow's work, and whether the customer knows about it.
+   *
+   * The board's "Tomorrow" tab was live, changed the highlight and filtered
+   * nothing, because the API sent a count and no rows. The one thing a
+   * coordinator needs the evening before was the one thing not being sent.
+   *
+   * `customerTold` is read from the reminder outbox rather than inferred from
+   * "a reminder exists": a message that failed looks identical to one that
+   * arrived, and the difference is a technician at a locked gate.
+   *
+   * Optional so the older fixtures still parse.
+   */
+  tomorrow: z
+    .array(
+      jobRowSchema.pick({
+        id: true,
+        jobNumber: true,
+        slot: true,
+        customer: true,
+        locality: true,
+        serviceType: true,
+        visit: true,
+        status: true,
+        priority: true,
+        technician: true,
+      }).extend({
+        customerTold: z.enum(["sent", "pending", "failed"]).nullable().default(null),
+      }),
+    )
+    .default([]),
   leadsDueToday: z.number().int().nonnegative(),
 });
 
@@ -575,6 +606,9 @@ export const SEED_BOARD: Board = {
     },
   ],
   tomorrowJobs: 14,
+  // The offline fixture carries no rows: it is a fallback for a board that
+  // could not be reached, and inventing tomorrow's work would be worse.
+  tomorrow: [],
   leadsDueToday: 7,
 };
 
