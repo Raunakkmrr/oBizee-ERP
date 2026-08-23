@@ -3,6 +3,7 @@
 import { DataSourceError, type Fetched } from "@/lib/data/source";
 import { rolesWith, type Permission } from "@/lib/roles";
 import {
+  accessTokenIsStale,
   endSession,
   getAccessToken,
   hasSessionHint,
@@ -115,6 +116,39 @@ export async function apiFetch<T>(
   init: RequestInit = {},
   retried = false,
 ): Promise<Fetched<T>> {
+  /*
+    Replace the token before it is refused, not after.
+
+    The 401-and-retry path below still exists and still works — but relying on
+    it alone meant every request made after the fifteen minutes were up paid a
+    wasted round trip, and a page that fires six reads at once fired six. Worse
+    than the latency, it filled the console with six red errors on an ordinary
+    navigation, which is how a real error stops being noticed.
+
+    Deliberately not a background timer: a tab left open for an hour would wake
+    up to refresh a session nobody is using. This runs on the request that was
+    going to happen anyway.
+  */
+  /*
+    Two ways the token in hand is no good, and both are known before asking.
+
+    **It is about to expire.** The 401-and-retry path below still works, but
+    relying on it alone meant every request after the fifteen minutes were up
+    paid a wasted round trip, and a page firing six reads at once fired six.
+
+    **It is not there at all.** The access token lives in memory, so a reload
+    starts with none — while the refresh cookie is still perfectly good. Firing
+    the first reads unauthenticated meant every page load began with a 401 per
+    request before the session was restored.
+
+    Neither is a background timer, deliberately: a tab left open for an hour
+    would wake to refresh a session nobody is using. This runs on the request
+    that was going to happen anyway.
+  */
+  if (!retried && (accessTokenIsStale() || (!getAccessToken() && hasSessionHint()))) {
+    await refresh();
+  }
+
   const token = getAccessToken();
 
   let response: Response;

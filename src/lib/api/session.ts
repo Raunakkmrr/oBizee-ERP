@@ -39,6 +39,51 @@ export type Caller = {
 };
 
 let accessToken: string | null = null;
+/**
+ * When the access token stops being accepted, in epoch milliseconds.
+ *
+ * Read from the token's own `exp` claim purely to decide *when to refresh* —
+ * never to decide whether the caller may do something. The server validates the
+ * signature on every request and remains the only authority; this is a timer.
+ *
+ * Null when there is no token, or when one arrives in a shape this cannot read.
+ * Both mean "do not refresh early", which falls back to the 401-and-retry path
+ * that worked before.
+ */
+let accessTokenExpiresAt: number | null = null;
+
+/**
+ * The `exp` claim, without verifying anything.
+ *
+ * A JWT is three base64url segments; the middle one is JSON. Parsing it here
+ * needs no dependency and grants no trust — a forged token still fails at the
+ * API, and the only thing a wrong answer here can cause is a refresh at the
+ * wrong moment.
+ */
+function expiryOf(token: string): number | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const exp = (JSON.parse(json) as { exp?: unknown }).exp;
+    return typeof exp === "number" ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the token is close enough to expiry to be worth replacing now.
+ *
+ * The margin covers the request that is about to be sent: a token with four
+ * seconds left will be rejected by the time it arrives, and the round trip is
+ * wasted. Sixty seconds also absorbs the clock skew between a laptop and the
+ * API, which is the other way this goes wrong.
+ */
+export function accessTokenIsStale(marginMs = 60_000): boolean {
+  if (accessToken === null || accessTokenExpiresAt === null) return false;
+  return Date.now() + marginMs >= accessTokenExpiresAt;
+}
 let caller: Caller | null = null;
 /** Distinguishes "nobody is signed in" from "we have not asked yet". */
 let resolved = false;
@@ -105,6 +150,7 @@ export function hasSessionHint(): boolean {
 
 export function startSession(tokens: { accessToken: string }): void {
   accessToken = tokens.accessToken;
+  accessTokenExpiresAt = expiryOf(tokens.accessToken);
   /*
     The identity is not taken from the sign-in response. That reply carries a
     name and a role for the greeting, and half an identity is worse than none —
@@ -121,6 +167,7 @@ export function endSession(): void {
   caller = null;
   resolved = true;
   accessToken = null;
+  accessTokenExpiresAt = null;
   caller = null;
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(SESSION_HINT);
