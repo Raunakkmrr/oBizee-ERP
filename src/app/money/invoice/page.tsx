@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Info, Printer, Star, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Check, FileMinus, Info, Printer, Star, Trash2, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,7 +21,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { getInvoice, type Invoice } from "@/lib/data/money";
 import { todayInIndia } from "@/lib/data/attention";
 import { useMutation } from "@/lib/api/use-mutation";
-import { cancelInvoice, issueInvoice, recordPayment } from "@/lib/api/mutations";
+import { cancelInvoice, issueCreditNote, issueInvoice, raiseCreditNote, recordCreditNoteIms, recordPayment } from "@/lib/api/mutations";
 import { useCurrentUser } from "@/lib/data/use-session";
 import { can, rolesWith, ROLE_LABELS } from "@/lib/roles";
 import { ErrorState } from "@/components/data-states/error-state";
@@ -475,6 +475,247 @@ function WithdrawInvoice({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Reducing what was declared — §34(1), and the only lawful way to do it.
+ *
+ * **Why this control exists at all.** When a corporate customer part-pays and
+ * asks for "a new invoice" for the balance, issuing one declares a second
+ * supply: the same work taxed twice. The balance is a receivable, not a supply.
+ * This is the instrument that reduces the tax already declared, and the product
+ * had no way to raise one — so the only route back was the wrong one.
+ *
+ * **The reason is asked for, not offered as a menu.** §34 permits a credit note
+ * for particular causes — a deficiency in supply, tax charged in excess, goods
+ * returned. "The customer did not pay" is not among them, and the difference
+ * decides whether the note survives scrutiny. A dropdown would let somebody
+ * pick the nearest-looking option without thinking; a sentence makes them say
+ * what actually happened.
+ */
+const IMS_WORDS: Record<string, { label: string; tone: "good" | "warn" | "bad"; says: string }> = {
+  ACCEPTED: {
+    label: "Accepted by the customer",
+    tone: "good",
+    says: "The reduction stands.",
+  },
+  PENDING: {
+    label: "Not yet accepted",
+    tone: "warn",
+    says: "Until the customer accepts it on their portal, this does NOT reduce what you owe.",
+  },
+  REJECTED: {
+    label: "Rejected by the customer",
+    tone: "bad",
+    says: "The liability has come back. Talk to them before the next GSTR-3B.",
+  },
+};
+
+function CreditNotePanel({
+  invoice,
+  onChanged,
+}: {
+  invoice: Invoice;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [amount, setAmount] = useState("");
+  const me = useCurrentUser();
+  const raise = useMutation(raiseCreditNote);
+  const issueNote = useMutation(issueCreditNote);
+  const recordIms = useMutation(
+    useCallback(
+      (id: string, state: "PENDING" | "ACCEPTED" | "REJECTED") => recordCreditNoteIms(id, state),
+      [],
+    ),
+  );
+  const notes = invoice.creditNotes ?? [];
+
+  const credited = invoice.creditedPaise ?? 0;
+  const remaining = Math.max(0, invoice.grandTotalPaise - credited);
+
+  // Nothing to credit against a document that never charged anybody.
+  if (invoice.status !== "ISSUED") return null;
+  if (!me) return null;
+
+  if (!can(me.role, "invoice:write", undefined, me.level ?? undefined)) {
+    return null;
+  }
+
+  const typed = rupeesToPaise(Number(amount.replace(/[^\d.]/g, "")) || 0);
+
+  return (
+    <Panel title="Credit note" icon={FileMinus} tone="support">
+      <div className="space-y-3">
+        {raise.error ? <ErrorState error={raise.error} onRetry={raise.reset} /> : null}
+
+        {credited > 0 ? (
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-sm text-muted-foreground">Credited so far</span>
+            <ValuePill tone="warn">
+              <MoneyText amount={asPaise(credited)} />
+            </ValuePill>
+          </div>
+        ) : null}
+
+        {/*
+          Each note with what the customer has done about it.
+
+          The total alone cannot say this, and since Rule 67B it is the whole
+          question: an issued note nobody has accepted has not reduced the tax,
+          and looks identical in a total to one that has.
+        */}
+        {notes.length > 0 ? (
+          <ul className="space-y-2">
+            {notes.map((note) => {
+              const ims = IMS_WORDS[note.imsState]!;
+              return (
+                <li key={note.id} className="rounded-lg bg-muted p-2.5 text-sm">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="tnum-id">{note.number ?? "Draft — no number yet"}</span>
+                    <MoneyText amount={asPaise(note.grandTotalPaise)} className="font-medium" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{note.reason}</p>
+
+                  {note.status === "DRAFT" ? (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        Not issued — it reduces nothing yet.
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={issueNote.pending}
+                        onClick={async () => {
+                          const r = await issueNote.run(note.id);
+                          if (r?.ok) onChanged();
+                        }}
+                      >
+                        Issue it
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 space-y-1">
+                      <ValuePill tone={ims.tone}>{ims.label}</ValuePill>
+                      <p className="text-xs text-muted-foreground">{ims.says}</p>
+                      {/*
+                        Reported, not polled: nobody here can see the customer's
+                        IMS dashboard, so this is somebody saying what they found
+                        when they looked.
+                      */}
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {(["ACCEPTED", "PENDING", "REJECTED"] as const)
+                          .filter((state) => state !== note.imsState)
+                          .map((state) => (
+                            <Button
+                              key={state}
+                              size="sm"
+                              variant="ghost"
+                              disabled={recordIms.pending}
+                              onClick={async () => {
+                                const r = await recordIms.run(note.id, state);
+                                if (r?.ok) onChanged();
+                              }}
+                            >
+                              Mark {IMS_WORDS[state]!.label.toLowerCase()}
+                            </Button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+
+        {!open ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Reduces the value of this supply, and the tax on it. The one lawful
+              way back — never a second invoice for the balance, which taxes the
+              same work twice.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+              <FileMinus className="size-4" />
+              Raise a credit note
+            </Button>
+          </>
+        ) : (
+          <div className="space-y-3">
+            <Field
+              label="What went wrong"
+              value={reason}
+              onChange={setReason}
+              placeholder="One visit of the three was not performed"
+              hint="§34 covers a deficiency in supply, tax charged in excess, or goods returned — not slow payment"
+            />
+            <Field
+              label="Amount to credit (₹)"
+              value={amount}
+              onChange={setAmount}
+              hint={
+                typed > remaining
+                  ? `Only ₹${(remaining / 100).toLocaleString("en-IN")} is left to credit on this invoice`
+                  : `Up to ₹${(remaining / 100).toLocaleString("en-IN")}, inclusive of tax at the invoice's own rate`
+              }
+            />
+            {/*
+              Said before the write, not discovered after. Since Rule 67B the
+              customer has to accept it, and somebody raising their first credit
+              note will not know that.
+            */}
+            <p className="text-xs text-warning">
+              A credit note only reduces your tax once the customer accepts it on
+              their portal. Until then the liability stands.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={raise.pending || reason.trim().length < 4 || typed <= 0 || typed > remaining}
+                onClick={async () => {
+                  /*
+                    The amount typed is tax-inclusive, because that is what the
+                    reader is thinking about — "give them ₹1,180 back". The line
+                    is the taxable part, so the note's own total comes out equal
+                    to what was asked for.
+                  */
+                  const rate = invoice.lines[0]?.ratePercent ?? 18;
+                  const taxable = Math.round((typed * 100) / (100 + rate));
+                  const result = await raise.run({
+                    invoiceId: invoice.id,
+                    reason: reason.trim(),
+                    lines: [
+                      {
+                        description: `Credit against ${invoice.number ?? "this invoice"} — ${reason.trim()}`,
+                        code: invoice.lines[0]?.code ?? "9987",
+                        kind: "service",
+                        qty: 1,
+                        ratePaise: taxable,
+                        ratePercent: rate,
+                      },
+                    ],
+                  });
+                  if (result?.ok) {
+                    setOpen(false);
+                    setReason("");
+                    setAmount("");
+                    onChanged();
+                  }
+                }}
+              >
+                Raise it as a draft
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Panel>
   );
 }
 
@@ -1099,6 +1340,10 @@ function ReviewInvoice() {
                 "send it again". */}
             {created ? (
               <PaymentsPanel invoice={created} onRecorded={() => setReloads((n) => n + 1)} />
+            ) : null}
+
+            {created ? (
+              <CreditNotePanel invoice={created} onChanged={() => setReloads((n) => n + 1)} />
             ) : null}
 
             {/*

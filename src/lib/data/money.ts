@@ -550,6 +550,32 @@ export const invoiceSchema = z.object({
    * validates both.
    */
   paidPaise: z.number().int().nonnegative().optional(),
+  /**
+   * What credit notes have taken off it — issued ones only.
+   *
+   * A draft credit note has promised the customer nothing and must not reduce
+   * what they owe; a cancelled one never did.
+   */
+  creditedPaise: z.number().int().nonnegative().default(0),
+  /**
+   * The notes themselves, because the total cannot say the thing that matters.
+   *
+   * Since Rule 67B an issued credit note the customer has ignored has NOT
+   * reduced the tax, and looks identical in a total to one that has.
+   */
+  creditNotes: z
+    .array(
+      z.object({
+        id: z.string(),
+        number: z.string().nullable(),
+        grandTotalPaise: z.number().int(),
+        reason: z.string(),
+        status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]),
+        imsState: z.enum(["PENDING", "ACCEPTED", "REJECTED"]),
+        issueDate: z.string(),
+      }),
+    )
+    .default([]),
   outstandingPaise: z.number().int().nonnegative().optional(),
   payments: z
     .array(

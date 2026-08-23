@@ -305,6 +305,42 @@ export const cancelInvoice = (id: string, reason: string) =>
     { reason },
   ));
 
+/* ---------------------------------------------------------- credit notes */
+
+/**
+ * §34(1) — the only lawful way to reduce output tax already declared.
+ *
+ * Raised as a draft, exactly like an invoice: it draws no number until issued,
+ * because a §34 document numbered at draft leaves a permanent hole in its own
+ * series when the draft is abandoned.
+ */
+export const raiseCreditNote = (body: {
+  invoiceId: string;
+  reason: string;
+  lines: {
+    description: string;
+    code: string;
+    kind: "service" | "goods";
+    qty: number;
+    ratePaise: number;
+    ratePercent: number;
+  }[];
+}) => attempt(() => post<{ id: string; grandTotalPaise: number }>("/api/credit-notes", body));
+
+export const issueCreditNote = (id: string) =>
+  attempt(() => post<{ id: string; number: string }>(`/api/credit-notes/${id}/issue`, {}));
+
+/**
+ * What the customer did with it on their portal.
+ *
+ * Reported, never guessed: nobody here can see the customer's IMS dashboard,
+ * and since Rule 67B the difference between accepted and pending is the
+ * difference between the tax being reduced and the liability returning next
+ * month.
+ */
+export const recordCreditNoteIms = (id: string, state: "PENDING" | "ACCEPTED" | "REJECTED") =>
+  attempt(() => patch<{ id: string; imsState: string }>(`/api/credit-notes/${id}/ims`, { state }));
+
 /* --------------------------------------------------------------- payments */
 
 export const recordPayment = (body: {
