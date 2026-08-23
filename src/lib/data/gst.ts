@@ -45,7 +45,14 @@ export const READINESS_LABEL: Record<ReadinessKind, string> = {
   MISSING_CODE: "Invoices without a SAC/HSN code",
   OVERRIDDEN_POS: "Invoices with an overridden place of supply",
   UNADJUSTED_ADVANCE: "Advances received, not yet adjusted",
-  CREDIT_NOTE: "Credit notes issued",
+  /*
+    Not "credit notes issued" — that was the old wording and it flagged nothing
+    worth acting on. What matters is the ones the customer has NOT accepted:
+    under Rule 67B the document is in the return and the liability it was meant
+    to reduce is still standing, so somebody has to chase the portal before the
+    next GSTR-3B.
+  */
+  CREDIT_NOTE: "Credit notes the customer has not accepted",
   RCM_INWARD: "Reverse-charge inward supplies",
   PENDING_IRN: "Documents pending IRN",
   B2C_SMALL: "B2C-small, aggregated",
@@ -76,7 +83,7 @@ export const READINESS_ACTION: Record<ReadinessKind, string> = {
   MISSING_CODE: "Add codes",
   OVERRIDDEN_POS: "Review overrides",
   UNADJUSTED_ADVANCE: "Adjust advances",
-  CREDIT_NOTE: "See credit notes",
+  CREDIT_NOTE: "Chase acceptance",
   RCM_INWARD: "See inward supplies",
   PENDING_IRN: "Retry IRN",
   B2C_SMALL: "See aggregation",
@@ -338,3 +345,33 @@ export function filableYears(today: Date, count = 4): number[] {
   const current = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
   return Array.from({ length: count }, (_, n) => current - 1 - n);
 }
+
+/* ------------------------------------------------------- the credit notes */
+
+export const creditNoteListSchema = z.object({
+  creditNotes: z.array(
+    z.object({
+      id: z.string(),
+      number: z.string().nullable(),
+      issueDate: z.string(),
+      reason: z.string(),
+      grandTotalPaise: z.number().int(),
+      status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]),
+      imsState: z.enum(["PENDING", "ACCEPTED", "REJECTED"]),
+      invoiceId: z.string(),
+      invoiceNumber: z.string().nullable(),
+      customer: z.string(),
+    }),
+  ),
+  /** Issued but not accepted — reported, and not yet reducing anything. */
+  awaitingAcceptance: z.number().int().nonnegative(),
+});
+
+export type CreditNoteList = z.infer<typeof creditNoteListSchema>;
+
+export const getCreditNotes = defineQuery<void, CreditNoteList>({
+  key: "gst.creditNotes",
+  schema: creditNoteListSchema,
+  api: async () => apiFetch<CreditNoteList>("/api/credit-notes"),
+  fixture: async () => ({ raw: { creditNotes: [], awaitingAcceptance: 0 } }),
+});
