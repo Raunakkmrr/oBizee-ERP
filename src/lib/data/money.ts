@@ -563,6 +563,24 @@ export const invoiceSchema = z.object({
    * Since Rule 67B an issued credit note the customer has ignored has NOT
    * reduced the tax, and looks identical in a total to one that has.
    */
+  /**
+   * How long is left to raise a credit note — §34(2).
+   *
+   * `assumed` is the important field: when nobody has recorded the GSTR-9
+   * filing date, this is the statute's outside date and the real window may be
+   * months shorter. Presenting an assumption as a fact is how somebody misses
+   * the deadline by six weeks and loses the tax for good.
+   */
+  creditWindow: z
+    .object({
+      deadline: z.string(),
+      financialYear: z.number().int(),
+      assumed: z.boolean(),
+      daysLeft: z.number().int(),
+      closed: z.boolean(),
+    })
+    .nullable()
+    .optional(),
   creditNotes: z
     .array(
       z.object({

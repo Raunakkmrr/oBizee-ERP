@@ -532,6 +532,7 @@ function CreditNotePanel({
     ),
   );
   const notes = invoice.creditNotes ?? [];
+  const window = invoice.creditWindow ?? null;
 
   const credited = invoice.creditedPaise ?? 0;
   const remaining = Math.max(0, invoice.grandTotalPaise - credited);
@@ -629,6 +630,39 @@ function CreditNotePanel({
               );
             })}
           </ul>
+        ) : null}
+
+        {/*
+          The deadline, as a date rather than a rule.
+
+          §34(2) shuts this window on 30 November after the financial year, or
+          the day the annual return was filed, whichever is earlier — and after
+          it the tax is simply gone, because GST has no bad-debt relief. A
+          negotiation that has already run three months is well into it.
+
+          When nobody has recorded the filing date this is the statute's outside
+          date and the real window may be months shorter, so it says so. An
+          assumption presented as a fact is how somebody misses it by six weeks.
+        */}
+        {window ? (
+          window.closed ? (
+            <p className="text-sm text-destructive">
+              The window to credit this closed on {window.deadline}. The tax on it
+              can no longer be recovered — GST has no bad-debt relief.
+            </p>
+          ) : (
+            <p
+              className={cn(
+                "text-xs",
+                window.daysLeft <= 90 ? "text-warning" : "text-muted-foreground",
+              )}
+            >
+              Creditable until {window.deadline} — {window.daysLeft} days left.
+              {window.assumed
+                ? " That assumes the annual return for that year has not been filed; filing it early shuts this sooner."
+                : ""}
+            </p>
+          )
         ) : null}
 
         {!open ? (
