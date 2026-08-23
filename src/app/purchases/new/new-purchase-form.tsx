@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { requiredName, rupees, validate } from "@/lib/validate";
 import { SLABS } from "@/lib/data/rates";
 import { msmedApplies } from "@/lib/data/vendors";
-import { TDS_SECTIONS, TDS_SECTION_LABEL, adviseTds, billTotals, getVendorBills, reverseChargeFor, suggestSection, type PurchaseBill } from "@/lib/data/purchases";
+import { TDS_SECTIONS, TDS_SECTION_LABEL, adviseTds, billTotals, getVendorBills, paidInFinancialYear, reverseChargeFor, suggestSection, type PurchaseBill } from "@/lib/data/purchases";
 import { getVendors, type Vendor } from "@/lib/data/vendors";
 import { recordPurchaseBill } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
@@ -115,9 +115,7 @@ export function NewPurchaseForm() {
     array meant a second machine's entries were invisible and the form advised
     "no TDS" on a bill that crossed the limit.
   */
-  const paidThisYear = bills
-    .filter((bill) => bill.vendorId === vendorId)
-    .reduce((sum, bill) => sum + bill.taxablePaise, 0);
+  const paidThisYear = paidInFinancialYear(bills, vendorId, new Date());
 
   const tds = vendor
     ? adviseTds(section, taxablePaise, vendor, paidThisYear)

@@ -12,6 +12,7 @@ import {
   deductionAtRiskPaise,
   deductionLostPaise,
   reverseChargeFor,
+  paidInFinancialYear,
   suggestSection,
   type PurchaseBill,
 } from "./purchases";
@@ -181,5 +182,47 @@ describe("the seed vendors cover the cases that differ", () => {
     expect(SEED_VENDORS.some((v) => isUnregistered(v))).toBe(true);
     expect(SEED_VENDORS.some((v) => v.udyamActivity === "TRADING")).toBe(true);
     expect(SEED_VENDORS.some((v) => v.panType === "INDIVIDUAL_HUF")).toBe(true);
+  });
+});
+
+describe("the §194C year", () => {
+  const bill = (billDate: string, taxablePaise: number) => ({
+    vendorId: "v1",
+    billDate,
+    taxablePaise,
+  });
+
+  it("counts only bills inside the financial year", () => {
+    const bills = [
+      bill("2025-06-01", 60_000_00), // FY 2025-26
+      bill("2026-06-01", 50_000_00), // FY 2026-27
+    ];
+    // Standing in FY 2026-27, last year's ₹60,000 is not this year's business.
+    expect(paidInFinancialYear(bills, "v1", new Date("2026-08-23"))).toBe(50_000_00);
+  });
+
+  it("puts March and April on opposite sides of the boundary", () => {
+    const bills = [bill("2026-03-31", 10_000_00), bill("2026-04-01", 20_000_00)];
+    expect(paidInFinancialYear(bills, "v1", new Date("2026-04-15"))).toBe(20_000_00);
+    expect(paidInFinancialYear(bills, "v1", new Date("2026-03-15"))).toBe(10_000_00);
+  });
+
+  it("ignores other vendors", () => {
+    const bills = [bill("2026-06-01", 50_000_00), { vendorId: "v2", billDate: "2026-06-01", taxablePaise: 90_000_00 }];
+    expect(paidInFinancialYear(bills, "v1", new Date("2026-08-23"))).toBe(50_000_00);
+  });
+
+  it("is the difference between deducting and not", () => {
+    /*
+      The whole point: lifetime totalling crossed ₹1,00,000 and advised a
+      deduction on a bill that owed none. Year-scoped, it stays below.
+    */
+    const bills = [bill("2025-06-01", 60_000_00), bill("2026-06-01", 20_000_00)];
+    const yearly = paidInFinancialYear(bills, "v1", new Date("2026-08-23"));
+    const lifetime = bills.reduce((s, b) => s + b.taxablePaise, 0);
+    const vendor = { panType: "COMPANY_FIRM_OTHER" as const, pan: "AAACK1234F" };
+
+    expect(adviseTds("194C", 25_000_00, vendor, yearly).kind).toBe("below_threshold");
+    expect(adviseTds("194C", 25_000_00, vendor, lifetime).kind).toBe("deduct");
   });
 });

@@ -334,3 +334,27 @@ export function deductionLostPaise(
       : sum;
   }, 0);
 }
+
+/**
+ * Bills raised against a vendor **in the current financial year**.
+ *
+ * §194C's ₹1,00,000 is an annual threshold, and both sides of the seam summed
+ * every bill ever instead — so a vendor billed ₹60,000 last year and ₹50,000
+ * this year was treated as having crossed it, and TDS was deducted on a bill
+ * that owed none. The error only ever runs one way, toward over-deduction:
+ * money withheld from a vendor entitled to it, and over-reported on the return.
+ *
+ * 1 April to 31 March, matching the API and every other year boundary here.
+ */
+export function paidInFinancialYear(
+  bills: readonly { vendorId: string; billDate: string; taxablePaise: number }[],
+  vendorId: string,
+  on: Date,
+): number {
+  const fy = on.getMonth() >= 3 ? on.getFullYear() : on.getFullYear() - 1;
+  const start = `${fy}-04-01`;
+  const end = `${fy + 1}-03-31`;
+  return bills
+    .filter((b) => b.vendorId === vendorId && b.billDate >= start && b.billDate <= end)
+    .reduce((sum, b) => sum + b.taxablePaise, 0);
+}
