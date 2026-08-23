@@ -77,6 +77,14 @@ const ADHOC_FORM = z.object({
 export function AdhocInvoiceForm() {
   const router = useRouter();
   const raise = useMutation(createInvoice);
+  /*
+    Whether the reader has said this is not the balance of an existing bill.
+
+    The API refuses an unlinked invoice for a customer who already owes money,
+    because that is the shape the second-invoice habit takes — and it refuses
+    once rather than for ever, so a real new job is one click away.
+  */
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   useEffect(() => {
@@ -442,10 +450,61 @@ export function AdhocInvoiceForm() {
                 <MoneyText amount={asPaise(totals.grandTotalPaise)} />
               </div>
 
-              {raise.error ? (
+              {/*
+                The interruption, not a wall.
+
+                A refusal that only says no is one people learn to route around
+                — and the route around it here is the second invoice this whole
+                feature exists to prevent. So it names what is outstanding and
+                the ways out, and the last of those ways is "this is different
+                work", which is often simply true.
+              */}
+              {raise.error && !acknowledged && "message" in raise.error && /already has an unpaid invoice/i.test(raise.error.message) ? (
+                <div className="space-y-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
+                  <p className="text-sm font-medium">
+                    They already owe you on an invoice
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    If this is the balance of that bill, a second invoice declares
+                    the same work twice and you pay the GST twice. The balance is
+                    a receivable, not a new supply.
+                  </p>
+                  <ul className="ml-4 list-disc space-y-1 text-sm text-muted-foreground">
+                    <li>Record the payment they have made against the original</li>
+                    <li>Send a payment request quoting its number — it carries no GST</li>
+                    <li>Raise a credit note if the value is genuinely coming down</li>
+                  </ul>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setAcknowledged(true);
+                        raise.reset();
+                      }}
+                    >
+                      This is different work
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      render={<Link href="/money" />}
+                      nativeButton={false}
+                    >
+                      Take me to what they owe
+                    </Button>
+                  </div>
+                </div>
+              ) : raise.error ? (
                 <div className="pb-2">
                   <ErrorState error={raise.error} onRetry={raise.reset} />
                 </div>
+              ) : null}
+
+              {acknowledged ? (
+                <p className="text-xs text-muted-foreground">
+                  Recorded as different work from what they already owe.
+                </p>
               ) : null}
 
               <div className="space-y-2 pt-1">
@@ -457,6 +516,13 @@ export function AdhocInvoiceForm() {
                       customerId,
                       siteId,
                       lines: usable,
+                      /*
+                        Only sent once the reader has said, in the interruption
+                        below, that this is different work. Sending it always
+                        would defeat the guard; never sending it would block a
+                        genuine repair for a customer who owes money on an AMC.
+                      */
+                      ...(acknowledged ? { acknowledgedUnpaid: true } : {}),
                     });
                     // The review screen is told which document to show, not left to guess.
     if (result?.ok) router.push(`/money/invoice?id=${result.data.id}`);
