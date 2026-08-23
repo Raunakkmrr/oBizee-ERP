@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Info, Printer, Star, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Check, Info, Printer, Star, Trash2, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,11 +17,13 @@ import { STATE_NAMES, codeForAato, computeTotals, derivePlaceOfSupply, type Invo
 import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { CapacityBar, Panel, ValuePill } from "@/components/shared/panel";
 import { Briefcase, Send, ShieldCheck, Wallet } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getInvoice, type Invoice } from "@/lib/data/money";
 import { todayInIndia } from "@/lib/data/attention";
 import { useMutation } from "@/lib/api/use-mutation";
-import { issueInvoice, recordPayment } from "@/lib/api/mutations";
+import { cancelInvoice, issueInvoice, recordPayment } from "@/lib/api/mutations";
+import { useCurrentUser } from "@/lib/data/use-session";
+import { can, rolesWith, ROLE_LABELS } from "@/lib/roles";
 import { ErrorState } from "@/components/data-states/error-state";
 import { EM_DASH } from "@/lib/data/result";
 import { cn } from "@/lib/utils";
@@ -362,6 +364,120 @@ function PaymentsPanel({
   );
 }
 
+/**
+ * Withdrawing an invoice — discarding a draft, or cancelling an issued one.
+ *
+ * **Nothing could.** `cancelInvoice` sat in the mutation layer, called by no
+ * screen, so a bill raised against the wrong customer or for the wrong amount
+ * could only be left standing. On an issued document that is not a tidiness
+ * problem: it is in the register, it will be in GSTR-1, and the customer has a
+ * copy.
+ *
+ * **The two cases are named separately because they are different acts.** A
+ * draft never drew a number, so discarding it costs nothing and the register
+ * keeps no memory of it. An issued invoice keeps its number for ever —
+ * cancelled, but spent — because reusing it would put two documents in one
+ * series under one number, which is the single thing Rule 46(b) exists to
+ * prevent.
+ *
+ * The reason is required by the API and asked for here rather than invented: a
+ * cancelled number is a number somebody eventually asks about.
+ */
+function WithdrawInvoice({
+  invoice,
+  onWithdrawn,
+}: {
+  invoice: Invoice;
+  onWithdrawn: (discarded: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const me = useCurrentUser();
+  const cancel = useMutation(
+    useCallback((why: string) => cancelInvoice(invoice.id, why), [invoice.id]),
+  );
+
+  const isDraft = invoice.status === "DRAFT";
+  if (invoice.status === "CANCELLED") return null;
+
+  /*
+    Offered only to the roles that can carry it out.
+
+    Cancelling is `invoice:finalise` — the accountant and the owner. Shown to a
+    coordinator, the control was a button whose only possible outcome was a 403,
+    which is the same defect as a dead control: it looks like the product is
+    broken rather than like the answer is no.
+
+    Named rather than hidden, because §6.3 is right that the reader is usually a
+    colleague who needs to know who to ask. Fails closed while the identity is
+    still loading.
+  */
+  if (!me) return null;
+  if (!can(me.role, "invoice:finalise", undefined, me.level ?? undefined)) {
+    const who = rolesWith("invoice:finalise").map((r) => ROLE_LABELS[r]);
+    return (
+      <p className="text-xs text-muted-foreground">
+        {isDraft ? "Discarding a draft" : "Cancelling an invoice"} is{" "}
+        {who.join(" or ")} work. Ask one of them if this should not stand.
+      </p>
+    );
+  }
+
+  // Money received means this is a refund or a credit note, not a cancellation
+  // — and the API refuses it, so the screen says why rather than offering it.
+  if ((invoice.paidPaise ?? 0) > 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Payments have been recorded against this, so it cannot be cancelled. A
+        refund or a credit note is the way back.
+      </p>
+    );
+  }
+
+  if (!open) {
+    return (
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        <Trash2 className="size-3.5" />
+        {isDraft ? "Discard this draft" : "Cancel this invoice"}
+      </Button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg bg-muted p-3">
+      {cancel.error ? <ErrorState error={cancel.error} onRetry={cancel.reset} /> : null}
+      <p className="text-sm">
+        {isDraft
+          ? "Nothing was numbered, so this simply goes away."
+          : `${invoice.number} keeps its number for ever, marked cancelled. The number cannot be reused.`}
+      </p>
+      <Field
+        label="Why"
+        value={reason}
+        onChange={setReason}
+        placeholder={isDraft ? "Raised by mistake" : "Customer withdrew the order"}
+        hint="A cancelled number is a number somebody eventually asks about"
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="destructive"
+          disabled={cancel.pending || reason.trim().length < 3}
+          onClick={async () => {
+            const result = await cancel.run(reason.trim());
+            if (result?.ok) onWithdrawn(Boolean(result.data.discarded));
+          }}
+        >
+          {isDraft ? "Discard it" : "Cancel it"}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+          Keep it
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ReviewInvoice() {
   /**
    * The most recently created invoice, if there is one.
@@ -381,6 +497,13 @@ function ReviewInvoice() {
     freshly raised bill showed the cold-start example instead of itself.
   */
   const invoiceId = useSearchParams().get("id");
+  const router = useRouter();
+  const me = useCurrentUser();
+  /* Fails closed while the identity loads: no identity is not "probably yes". */
+  const canFinalise = Boolean(
+    me && can(me.role, "invoice:finalise", undefined, me.level ?? undefined),
+  );
+  const finalisers = rolesWith("invoice:finalise").map((r) => ROLE_LABELS[r]);
   const [created, setCreated] = useState<Invoice | null>(null);
   const [reloads, setReloads] = useState(0);
   useEffect(() => {
@@ -527,7 +650,23 @@ function ReviewInvoice() {
             me the bill" had no answer anywhere in the product.
           */}
           <div className="flex flex-wrap items-center gap-2">
-            {invoiceId && created?.status === "DRAFT" ? (
+            {/*
+              Issuing is `invoice:finalise` — the accountant and the owner.
+
+              The control carried no permission check of any kind, so a
+              coordinator was shown "Issue this invoice" and got a 403: the same
+              defect as a dead button, and on the one action that spends a
+              number from the statutory series. Named rather than hidden,
+              because the reader is a colleague who needs to know who to ask.
+            */}
+            {invoiceId && created?.status === "DRAFT" && !canFinalise ? (
+              <p className="text-xs text-muted-foreground">
+                Issuing an invoice is {finalisers.join(" or ")} work — it spends a
+                number from the statutory series. Ask one of them to finalise it.
+              </p>
+            ) : null}
+
+            {invoiceId && created?.status === "DRAFT" && canFinalise ? (
               confirming ? (
                 <>
                   <span className="text-xs text-muted-foreground">
@@ -960,6 +1099,24 @@ function ReviewInvoice() {
                 "send it again". */}
             {created ? (
               <PaymentsPanel invoice={created} onRecorded={() => setReloads((n) => n + 1)} />
+            ) : null}
+
+            {/*
+              Withdrawal sits at the bottom, under everything that argues for
+              the document. It is the least likely thing anybody came here to
+              do, and putting it near "Issue" is how the wrong one gets pressed.
+            */}
+            {created ? (
+              <div className="px-1">
+                <WithdrawInvoice
+                  invoice={created}
+                  onWithdrawn={(discarded) =>
+                    // A discarded draft no longer exists, so there is nothing
+                    // to return to; a cancelled invoice still does.
+                    discarded ? router.push("/money") : setReloads((n) => n + 1)
+                  }
+                />
+              </div>
             ) : null}
 
             <Panel title="Send" icon={Send} tone="support">

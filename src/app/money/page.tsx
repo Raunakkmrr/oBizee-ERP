@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleAlert, CircleHelp, Clock, HandCoins, IndianRupee, MessageCircle, Phone, Plus, ReceiptIndianRupee } from "lucide-react";
+import { CircleAlert, CircleHelp, Clock, HandCoins, IndianRupee, MessageCircle, NotebookPen, Phone, Plus, ReceiptIndianRupee } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { QueryBoundary } from "@/components/data-states/query-boundary";
 import { PageHeader } from "@/components/shared/page-header";
 import { MoneyText } from "@/components/shared/money-text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Field } from "@/components/shared/field";
 import { Panel } from "@/components/shared/panel";
 import { AdvancesPanel } from "@/components/money/advances-panel";
 import { RecordedBills } from "@/components/money/recorded-bills";
@@ -20,7 +21,7 @@ import { AGEING_BUCKETS, MSME_LABEL, ageingTotals, bucketFor, countdownFor, dedu
 import { Unavailable, NEEDS_BACKEND, NEEDS_UPLOAD } from "@/components/shared/unavailable";
 import { telHref, whatsappHref } from "@/lib/contact";
 import { useRouter } from "next/navigation";
-import { createInvoice, payPurchaseBill } from "@/lib/api/mutations";
+import { createInvoice, logCollectionContact, payPurchaseBill } from "@/lib/api/mutations";
 import { useMutation } from "@/lib/api/use-mutation";
 import { ErrorState } from "@/components/data-states/error-state";
 
@@ -301,7 +302,36 @@ function AgeingLine({
   );
 }
 
-function ReceivableRow({ row, primary }: { row: Receivable; primary: boolean }) {
+function ReceivableRow({
+  row,
+  primary,
+  onLogged,
+}: {
+  row: Receivable;
+  primary: boolean;
+  onLogged: () => void;
+}) {
+  /*
+    Recording what was said, which nothing did.
+
+    `logCollectionContact` was in the mutation layer and no screen called it, so
+    the row's "No contact logged" was permanent: somebody rang, the customer
+    promised Tuesday, and the next person to open this screen rang them again.
+    FR-904 turns on that note — an unbroken promise suppresses the reminder — so
+    without a way to write one, the restraint the rule describes could never
+    happen.
+  */
+  const [logging, setLogging] = useState(false);
+  const [note, setNote] = useState("");
+  const [promisedFor, setPromisedFor] = useState("");
+  const log = useMutation(
+    useCallback(
+      (body: { note: string; promisedFor?: string | null }) =>
+        logCollectionContact(row.id, body),
+      [row.id],
+    ),
+  );
+
   const call = telHref(row.phone);
   /*
     The message is a draft, never a send. wa.me opens WhatsApp with the text
@@ -314,7 +344,8 @@ function ReceivableRow({ row, primary }: { row: Receivable; primary: boolean }) 
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors odd:bg-muted-bg hover:bg-accent">
+    <div className="odd:bg-muted-bg">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm transition-colors hover:bg-accent">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium">{row.customer}</span>
@@ -397,7 +428,68 @@ function ReceivableRow({ row, primary }: { row: Receivable; primary: boolean }) 
             reason={`No phone number on record for ${row.customer}`}
           />
         )}
+
+        {/*
+          Offered beside Call and Remind, because that is the moment it is
+          written: the note is what somebody just heard on the phone.
+        */}
+        <Button variant="ghost" size="sm" onClick={() => setLogging((on) => !on)}>
+          <NotebookPen className="size-3.5" />
+          Log
+        </Button>
       </div>
+    </div>
+
+    {logging ? (
+      <div className="space-y-2 border-t border-border/60 px-4 py-3">
+        {log.error ? <ErrorState error={log.error} onRetry={log.reset} /> : null}
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
+          <Field
+            label="What was said"
+            value={note}
+            onChange={setNote}
+            placeholder="Spoke to accounts — cheque being raised"
+          />
+          {/*
+            The date is the point, not a detail. FR-904 suppresses the reminder
+            while a promise is unbroken, so a note without one chases the same
+            customer again next week — and a promise recorded is the only thing
+            that tells the next caller not to.
+          */}
+          <Field
+            label="Promised for"
+            optional
+            value={promisedFor}
+            onChange={setPromisedFor}
+            placeholder="2026-09-05"
+            hint="Stops the reminders until it passes"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            disabled={log.pending || note.trim().length < 3}
+            onClick={async () => {
+              const result = await log.run({
+                note: note.trim(),
+                promisedFor: promisedFor.trim() || null,
+              });
+              if (result?.ok) {
+                setLogging(false);
+                setNote("");
+                setPromisedFor("");
+                onLogged();
+              }
+            }}
+          >
+            Save what was said
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setLogging(false)}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    ) : null}
     </div>
   );
 }
@@ -498,7 +590,7 @@ function ReadyToBill({
   );
 }
 
-function Receivables({ data }: { data: MoneyData }) {
+function Receivables({ data, onLogged }: { data: MoneyData; onLogged: () => void }) {
   const [filter, setFilter] = useState<AgeingBucket | null>(null);
   /*
     Part-paid is a separate axis from age, not another bucket.
@@ -580,7 +672,7 @@ function Receivables({ data }: { data: MoneyData }) {
         >
           {chase.map((row, index) => (
             // §6.12.4: one filled Remind, on the top row of the chase queue.
-            <ReceivableRow key={row.id} row={row} primary={index === 0} />
+            <ReceivableRow key={row.id} row={row} primary={index === 0} onLogged={onLogged} />
           ))}
         </Panel>
       ) : (
@@ -602,7 +694,7 @@ function Receivables({ data }: { data: MoneyData }) {
           flush
         >
           {promised.map((row) => (
-            <ReceivableRow key={row.id} row={row} primary={false} />
+            <ReceivableRow key={row.id} row={row} primary={false} onLogged={onLogged} />
           ))}
         </Panel>
       ) : null}
@@ -780,6 +872,9 @@ export default function MoneyPage() {
   const raiseInvoice = useMutation(createInvoice);
   const router = useRouter();
 
+  /* Bumped by any write, so the totals and the list recompute together. */
+  const [reloads, setReloads] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     getMoney().then((result) => {
@@ -794,7 +889,7 @@ export default function MoneyPage() {
     // Re-reads after a bill is paid, so the alarm band and both totals
     // recompute from the same facts rather than drifting from the list.
       // Nothing writes to the store, so nothing here changes because of it.
-  }, []);
+  }, [reloads]);
 
   /*
     TODO(FR-905): the screen should ask *when* it was paid rather than assume
@@ -903,7 +998,7 @@ export default function MoneyPage() {
               <AdvancesPanel />
               <RecordedBills />
               <div className="grid gap-5 xl:grid-cols-2">
-                <Receivables data={data} />
+                <Receivables data={data} onLogged={() => setReloads((n) => n + 1)} />
                 <Payables data={data} onPaid={markPaid} busy={pay.pending} />
               </div>
             </div>
