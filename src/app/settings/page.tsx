@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Building2, Clock, Hash, Landmark, Lock, Percent, ScrollText, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Building2, CalendarCheck, Clock, Hash, Landmark, Lock, Percent, ScrollText, ShieldCheck, type LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Requires } from "@/components/shared/requires";
 import { Numbering } from "@/components/settings/numbering";
@@ -17,6 +17,10 @@ import { SEED_TENANT } from "@/lib/data/fixtures/tenant";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/shared/field";
 import { ErrorState } from "@/components/data-states/error-state";
+import { getAnnualReturns, fyLabel, filableYears, type AnnualReturns } from "@/lib/data/gst";
+import { recordAnnualReturn } from "@/lib/api/mutations";
+import { useCurrentUser } from "@/lib/data/use-session";
+import { can, rolesWith, ROLE_LABELS } from "@/lib/roles";
 import { useMutation } from "@/lib/api/use-mutation";
 import { renameFirm } from "@/lib/api/mutations";
 import { getFirmProfile, type FirmProfile } from "@/lib/data/series";
@@ -57,6 +61,7 @@ const SECTIONS = [
   { key: "policy", label: "Policy", icon: ShieldCheck },
   { key: "numbering", label: "Numbering", icon: Hash },
   { key: "rates", label: "Tax rates", icon: Percent },
+  { key: "returns", label: "GST returns", icon: CalendarCheck },
   { key: "activity", label: "Activity", icon: ScrollText },
   { key: "data", label: "Data", icon: Lock },
 ] as const;
@@ -152,6 +157,7 @@ function Settings() {
             {section === "policy" ? <Policy /> : null}
             {section === "numbering" ? <Numbering /> : null}
             {section === "rates" ? <Rates /> : null}
+            {section === "returns" ? <AnnualReturn /> : null}
             {section === "activity" ? <Activity /> : null}
             {section === "data" ? <DataSection /> : null}
           </div>
@@ -495,5 +501,145 @@ export default function SettingsPage() {
         <Settings />
       </Suspense>
     </Requires>
+  );
+}
+
+/**
+ * When the annual return was filed — the date that quietly moves every
+ * credit-note deadline.
+ *
+ * **Why the firm records it and nobody assumes it.** §34(2) shuts the window to
+ * credit an invoice on 30 November following its financial year, *or* the day
+ * GSTR-9 for that year was filed, whichever is earlier. Nothing in this product
+ * can observe that date: it happens on the portal, usually by the CA. Until it
+ * is recorded here, every deadline the product shows is the statute's outside
+ * date — the generous one — and a firm that files in September has two months
+ * less than it is being told.
+ *
+ * GSTR-9 is optional below ₹2 crore turnover and mandatory above it, so this
+ * matters precisely to the firms large enough to be filing it, and being
+ * well-organised is what costs them.
+ *
+ * ⚠️ Not tax advice. The CA confirms the deadline before anything is decided
+ * on it.
+ */
+function AnnualReturn() {
+  const [filings, setFilings] = useState<AnnualReturns["filings"]>([]);
+  const [year, setYear] = useState<number | null>(null);
+  const [filedOn, setFiledOn] = useState("");
+  const me = useCurrentUser();
+  const record = useMutation(recordAnnualReturn);
+
+  const load = useCallback(() => {
+    void getAnnualReturns().then((result) => {
+      if (result.status === "ready") setFilings(result.data.filings);
+    });
+  }, []);
+  useEffect(load, [load]);
+
+  /* A return cannot have been filed for a year that has not ended. */
+  const years = filableYears(new Date());
+  const recorded = new Map(filings.map((f) => [f.financialYear, f.filedOn]));
+  const mayEdit = Boolean(me && can(me.role, "gst:write", undefined, me.level ?? undefined));
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-card p-6 shadow-[var(--shadow-card)]">
+        <p className="text-[11px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">
+          Annual return
+        </p>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Recording when GSTR-9 was filed moves the deadline for crediting any
+          invoice from that year. §34(2) allows a credit note until 30 November
+          after the year ends <em>or</em> the day the return was filed —
+          whichever comes first. Until a date is here, every deadline the product
+          shows assumes the return has not been filed, which is the generous
+          answer.
+        </p>
+
+        {record.error ? (
+          <div className="mt-3">
+            <ErrorState error={record.error} onRetry={record.reset} />
+          </div>
+        ) : null}
+
+        <ul className="mt-4 space-y-2">
+          {years.map((fy) => {
+            const on = recorded.get(fy);
+            const editing = year === fy;
+            return (
+              <li
+                key={fy}
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-muted/40 px-4 py-3"
+              >
+                <span className="w-24 shrink-0 font-medium tabular-nums">{fyLabel(fy)}</span>
+
+                {editing ? (
+                  <>
+                    <input
+                      type="date"
+                      value={filedOn}
+                      onChange={(e) => setFiledOn(e.target.value)}
+                      aria-label={`GSTR-9 filing date for ${fyLabel(fy)}`}
+                      className="min-h-9 rounded-lg border border-border bg-background px-3 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={record.pending || !filedOn}
+                      onClick={async () => {
+                        const result = await record.run({ financialYear: fy, filedOn });
+                        if (result?.ok) {
+                          setYear(null);
+                          setFiledOn("");
+                          load();
+                        }
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setYear(null)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="min-w-0 flex-1 text-sm">
+                      {on ? (
+                        <span className="tabular-nums">Filed {on}</span>
+                      ) : (
+                        /* Not the same as "not filed", and it says so: one is a
+                           fact about the return, the other about our records. */
+                        <span className="text-muted-foreground">
+                          Not recorded — deadlines for this year assume 30 November
+                        </span>
+                      )}
+                    </span>
+                    {mayEdit ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setYear(fy);
+                          setFiledOn(on ?? "");
+                        }}
+                      >
+                        {on ? "Change" : "Record the date"}
+                      </Button>
+                    ) : null}
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        {!mayEdit ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Only {rolesWith("gst:write").map((r) => ROLE_LABELS[r]).join(" or ")} can
+            record this.
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }

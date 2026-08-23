@@ -305,6 +305,18 @@ export const cancelInvoice = (id: string, reason: string) =>
     { reason },
   ));
 
+/* ------------------------------------------------------- the annual return */
+
+/**
+ * Record when GSTR-9 for a year was filed.
+ *
+ * It moves every credit-note deadline for that year, which is why the firm
+ * records it rather than anybody assuming: filing early shuts the §34(2) window
+ * early, and nothing in the product can observe the portal.
+ */
+export const recordAnnualReturn = (body: { financialYear: number; filedOn: string }) =>
+  attempt(() => post<{ financialYear: number; filedOn: string }>("/api/gst/annual-return", body));
+
 /* ---------------------------------------------------------- credit notes */
 
 /**

@@ -285,3 +285,56 @@ export function periodToFile(today: Date = new Date()): string {
   const d = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
+
+/* ------------------------------------------------------- the annual return */
+
+/**
+ * When GSTR-9 was filed, per financial year.
+ *
+ * **Why the product asks rather than assumes.** §34(2) shuts the credit-note
+ * window on 30 November following the financial year *or* the day the annual
+ * return for that year was filed, whichever is earlier. Nothing here can see
+ * that date — it happens on the portal, usually by the CA — so until the firm
+ * records it, every deadline shown is the statute's outside date, which is the
+ * generous one.
+ *
+ * Above ₹2 crore turnover GSTR-9 is mandatory, so for this firm the gap is the
+ * difference between believing there is until November and finding the window
+ * shut in September.
+ */
+export const annualReturnsSchema = z.object({
+  filings: z.array(
+    z.object({
+      /** 2026 means the 2026-27 year. */
+      financialYear: z.number().int(),
+      filedOn: z.string(),
+    }),
+  ),
+});
+
+export type AnnualReturns = z.infer<typeof annualReturnsSchema>;
+
+export const getAnnualReturns = defineQuery<void, AnnualReturns>({
+  key: "gst.annualReturns",
+  schema: annualReturnsSchema,
+  api: async () => apiFetch<AnnualReturns>("/api/gst/annual-returns"),
+  // Nothing recorded is the honest offline answer: it makes every deadline
+  // read as assumed, which is the safe direction to be wrong in.
+  fixture: async () => ({ raw: { filings: [] } }),
+});
+
+/** `2026-27`, the way a return is spoken about. */
+export function fyLabel(year: number): string {
+  return `${year}-${String(year + 1).slice(2)}`;
+}
+
+/**
+ * The years worth offering, newest first.
+ *
+ * A return cannot have been filed for a year that has not ended, so the current
+ * year is excluded — offering it invites a date that means nothing.
+ */
+export function filableYears(today: Date, count = 4): number[] {
+  const current = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+  return Array.from({ length: count }, (_, n) => current - 1 - n);
+}
