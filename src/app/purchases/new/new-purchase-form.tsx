@@ -31,7 +31,7 @@ import { ErrorState } from "@/components/data-states/error-state";
  * charge without saying so, because that is a liability the owner did not know
  * he had. It will not deduct TDS under §194J on a maintenance contract, which
  * is this industry's commonest deduction error and hands 8% of every bill to
- * the department for a year. And it will not start a §43B(h) clock without
+ * the department for a year. And it will not start a §37(2)(g) clock without
  * showing the date it runs out.
  *
  * Everything is proposed with its reason and confirmed by a person. The
@@ -49,7 +49,7 @@ export function NewPurchaseForm() {
   const record = useMutation(recordPurchaseBill);
 
   /*
-    From the register, not the browser. Reverse charge and the 43B(h) limit are
+    From the register, not the browser. Reverse charge and the 37(2)(g) limit are
     properties of the vendor — their GSTIN decides whether §9(4) applies, and a
     written agreement decides 15 days or 45. A stale local copy tells somebody
     the wrong date to pay by.

@@ -22,8 +22,15 @@ import { recordAnnualReturn } from "@/lib/api/mutations";
 import { useCurrentUser } from "@/lib/data/use-session";
 import { can, rolesWith, ROLE_LABELS } from "@/lib/roles";
 import { useMutation } from "@/lib/api/use-mutation";
-import { renameFirm } from "@/lib/api/mutations";
-import { getFirmProfile, type FirmProfile } from "@/lib/data/series";
+import { renameFirm, setFirmMsmed } from "@/lib/api/mutations";
+import {
+  getFirmProfile,
+  MSME_CLASSES,
+  UDYAM_ACTIVITIES,
+  type FirmProfile,
+  type FirmMsmeClass,
+  type FirmUdyamActivity,
+} from "@/lib/data/series";
 import { EM_DASH } from "@/lib/data/result";
 
 /**
@@ -201,6 +208,7 @@ function Business() {
   useEffect(load, [load]);
 
   return (
+    <div className="space-y-4">
     <div className="grid gap-4 lg:grid-cols-3">
       {/* The identity surface is the one thing that gets a moving light. */}
       <div className="relative overflow-hidden rounded-2xl bg-card p-8 shadow-[var(--shadow-card)] lg:col-span-2">
@@ -306,6 +314,153 @@ function Business() {
         value={LANGUAGE_NAMES[SEED_TENANT.regionalLanguage] ?? "English"}
       />
       <Tile label="Financial year" value="1 Apr – 31 Mar" />
+    </div>
+
+    <MsmedRegistration firm={firm} onSaved={load} />
+    </div>
+  );
+}
+
+/**
+ * The firm's own Udyam registration — the other side of §37(2)(g).
+ *
+ * `vendors.ts` asks every vendor this and computes a payables clock from the
+ * answer; the same clock runs against this firm's own corporate customers
+ * once *this* card has an answer too. `UNVERIFIED`, the default every tenant
+ * starts with, keeps the lever off rather than guessing — so an owner who
+ * never opens this card loses nothing, they simply do not get the lever yet.
+ */
+function MsmedRegistration({ firm, onSaved }: { firm: FirmProfile | null; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [msmeClass, setMsmeClass] = useState<FirmMsmeClass>("UNVERIFIED");
+  const [udyamNumber, setUdyamNumber] = useState("");
+  const [udyamActivity, setUdyamActivity] = useState<FirmUdyamActivity | "">("");
+  const set = useMutation(setFirmMsmed);
+  const me = useCurrentUser();
+  const mayEdit = Boolean(me && can(me.role, "settings:write", undefined, me.level ?? undefined));
+
+  const startEditing = () => {
+    setMsmeClass(firm?.msmeClass ?? "UNVERIFIED");
+    setUdyamNumber(firm?.udyamNumber ?? "");
+    setUdyamActivity(firm?.udyamActivity ?? "");
+    setEditing(true);
+  };
+
+  const attractsTimeline =
+    (firm?.msmeClass === "MICRO" || firm?.msmeClass === "SMALL") &&
+    firm?.udyamActivity !== "TRADING";
+
+  return (
+    <div className={cn(SURFACE, "p-6")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">
+            Udyam registration
+          </p>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            If this firm is itself a registered micro or small enterprise, a
+            corporate customer who pays late loses their own deduction for the
+            whole bill — §37(2)(g). That is a fact worth telling them, and
+            nothing can compute it until this is recorded.
+          </p>
+        </div>
+        {!editing && mayEdit ? (
+          <Button variant="outline" size="sm" onClick={startEditing}>
+            {firm?.msmeClass && firm.msmeClass !== "UNVERIFIED" ? "Update" : "Record it"}
+          </Button>
+        ) : null}
+      </div>
+
+      {set.error ? (
+        <div className="mt-3">
+          <ErrorState error={set.error} onRetry={set.reset} />
+        </div>
+      ) : null}
+
+      {editing ? (
+        <div className="mt-4 flex max-w-xl flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-muted-foreground">Udyam class</span>
+            <select
+              value={msmeClass}
+              onChange={(e) => setMsmeClass(e.target.value as FirmMsmeClass)}
+              className="min-h-9 rounded-lg border border-border bg-background px-3 text-sm"
+            >
+              {MSME_CLASSES.map((c) => (
+                <option key={c} value={c}>
+                  {c === "NOT_REGISTERED" ? "Not registered" : c[0] + c.slice(1).toLowerCase()}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-muted-foreground">Udyam number</span>
+            <input
+              type="text"
+              value={udyamNumber}
+              onChange={(e) => setUdyamNumber(e.target.value)}
+              placeholder="UDYAM-DL-05-0012345"
+              className="min-h-9 rounded-lg border border-border bg-background px-3 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-muted-foreground">Activity</span>
+            <select
+              value={udyamActivity}
+              onChange={(e) => setUdyamActivity(e.target.value as FirmUdyamActivity | "")}
+              className="min-h-9 rounded-lg border border-border bg-background px-3 text-sm"
+            >
+              <option value="">Not set</option>
+              {UDYAM_ACTIVITIES.map((a) => (
+                <option key={a} value={a}>
+                  {a[0] + a.slice(1).toLowerCase()}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button
+            size="sm"
+            disabled={set.pending}
+            onClick={async () => {
+              const result = await set.run({
+                msmeClass,
+                udyamNumber: udyamNumber.trim() || null,
+                udyamActivity: udyamActivity || null,
+              });
+              if (result?.ok) {
+                setEditing(false);
+                onSaved();
+              }
+            }}
+          >
+            Save
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+          <span>
+            <span className="text-muted-foreground">Class </span>
+            <span className="font-medium">
+              {firm ? (firm.msmeClass === "NOT_REGISTERED" ? "Not registered" : firm.msmeClass[0] + firm.msmeClass.slice(1).toLowerCase()) : EM_DASH}
+            </span>
+          </span>
+          <span>
+            <span className="text-muted-foreground">Number </span>
+            <span className="font-mono text-xs">{firm?.udyamNumber ?? EM_DASH}</span>
+          </span>
+          <span
+            className={cn(
+              "rounded-lg px-2.5 py-1 text-xs font-semibold",
+              attractsTimeline ? "bg-success-bg text-success" : "bg-muted text-muted-foreground",
+            )}
+          >
+            {attractsTimeline ? "§37(2)(g) lever is on" : "§37(2)(g) lever is off"}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

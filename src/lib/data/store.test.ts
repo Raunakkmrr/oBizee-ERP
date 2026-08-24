@@ -386,7 +386,7 @@ describe("restoring data written before a slice existed", () => {
       new Date("2026-08-06T10:00:00"),
     );
     expect(after.money.payables.map((b) => b.id)).not.toContain(target);
-    // A settled bill must not keep counting down: a 43B(h) warning against a
+    // A settled bill must not keep counting down: a 37(2)(g) warning against a
     // bill that is already paid is a warning about nothing.
     expect(after.money.payables.length).toBe(before.money.payables.length - 1);
   });

@@ -204,15 +204,35 @@ export const getNumbering = defineQuery<void, Numbering>({
  * this to a customer's door, and printing a seeded demo name on it would be a
  * document that misrepresents the business handing it over.
  */
+export const MSME_CLASSES = ["MICRO", "SMALL", "MEDIUM", "NOT_REGISTERED", "UNVERIFIED"] as const;
+export type FirmMsmeClass = (typeof MSME_CLASSES)[number];
+export const UDYAM_ACTIVITIES = ["MANUFACTURING", "SERVICE", "TRADING"] as const;
+export type FirmUdyamActivity = (typeof UDYAM_ACTIVITIES)[number];
+
 export type FirmProfile = {
   businessName: string;
   legalName: string;
+  /**
+   * The firm's own Udyam registration — the other side of §37(2)(g).
+   *
+   * `vendors.ts` asks this about every supplier the firm pays; a corporate
+   * customer's own deduction risk depends on this same fact about the firm
+   * itself, so it lives on the same profile as the name and GSTIN.
+   */
+  msmeClass: FirmMsmeClass;
+  udyamNumber: string | null;
+  udyamActivity: FirmUdyamActivity | null;
+  udyamVerifiedOn: string | null;
   branch: { name: string; gstin: string; stateCode: string } | null;
 };
 
 const firmProfileSchema = z.object({
   businessName: z.string(),
   legalName: z.string(),
+  msmeClass: z.enum(MSME_CLASSES).default("UNVERIFIED"),
+  udyamNumber: z.string().nullable().default(null),
+  udyamActivity: z.enum(UDYAM_ACTIVITIES).nullable().default(null),
+  udyamVerifiedOn: z.string().nullable().default(null),
   branch: z
     .object({ name: z.string(), gstin: z.string(), stateCode: z.string() })
     .nullable(),

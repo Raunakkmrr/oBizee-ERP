@@ -936,7 +936,7 @@ function applyAction(state: StoreState, action: Action, now: Date): StoreState {
 
     case "MARK_PAYABLE_PAID": {
       // Paid bills leave the list entirely. A "paid" row that stays put keeps
-      // its 43B(h) countdown on screen, and a countdown against a settled bill
+      // its 37(2)(g) countdown on screen, and a countdown against a settled bill
       // is a warning about nothing.
       const payables = state.money.payables.filter(
         (bill) => bill.id !== action.billId,

@@ -99,6 +99,7 @@ export function NewCustomerForm() {
     useState<(typeof TYPES)[number]["key"]>("BUSINESS");
   const [gstin, setGstin] = useState("");
   const [creditDays, setCreditDays] = useState("15");
+  const [hasWrittenAgreement, setHasWrittenAgreement] = useState(false);
   const [siteLabel, setSiteLabel] = useState("Main site");
   const [addressLine1, setAddressLine1] = useState("");
   const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
@@ -220,8 +221,29 @@ export function NewCustomerForm() {
                 className="tabular-nums"
                 value={creditDays}
                 onChange={(next) => setCreditDays(next.replace(/\D/g, "").slice(0, 3))}
-                hint="Drives the ageing buckets and the §43B(h) clock"
+                hint="Drives the ageing buckets on the Money screen"
               />
+
+              <div>
+                <p className="mb-1.5 text-sm font-medium">Written agreement on payment terms</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <Chip
+                    label="Yes — 45 days"
+                    selected={hasWrittenAgreement}
+                    onClick={() => setHasWrittenAgreement(true)}
+                  />
+                  <Chip
+                    label="No — 15 days"
+                    selected={!hasWrittenAgreement}
+                    onClick={() => setHasWrittenAgreement(false)}
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Only matters once the firm's own Udyam status is on file in
+                  Settings — sets whether this customer's own §37(2)(g)
+                  deduction is at risk in 15 days or 45.
+                </p>
+              </div>
 
               <div className="border-t pt-3">
                 <p className="mb-1.5 text-sm font-medium">Primary contact</p>
@@ -315,6 +337,7 @@ export function NewCustomerForm() {
                 customerType,
                 gstin: gstin.trim() === "" ? null : gstin.trim(),
                 creditDays: Number(creditDays) || 0,
+                hasWrittenAgreement,
                 site: {
                   label: siteLabel.trim() || "Main site",
                   addressLine1: addressLine1.trim(),

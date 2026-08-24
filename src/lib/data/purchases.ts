@@ -182,7 +182,7 @@ export const purchaseBillSchema = z.object({
   payablePaise: z.number().int(),
   status: z.enum(["UNPAID", "PAID"]),
   /**
-   * The §43B(h) countdown, computed by the register.
+   * The §37(2)(g) countdown, computed by the register.
    *
    * Sent rather than derived here: the clock depends on the vendor's Udyam
    * activity and written-agreement status, and a screen that recomputes it
@@ -206,7 +206,7 @@ export type PurchaseBill = z.infer<typeof purchaseBillSchema>;
 export const purchaseBillsSchema = z.array(purchaseBillSchema);
 
 /**
- * Every vendor bill the office has entered, with the §43B(h) clock on each.
+ * Every vendor bill the office has entered, with the §37(2)(g) clock on each.
  *
  * The two money figures are computed by the register rather than here. They are
  * **never summed**: money on day 38 of 45 is saved by paying today, money past
@@ -275,7 +275,7 @@ export function daysSince(billDateIso: string, now: Date): number {
 }
 
 /**
- * The §43B(h) position for a recorded bill — FR-905, now on real data.
+ * The §37(2)(g) position for a recorded bill — FR-905, now on real data.
  *
  * Deliberately mirrors `money.ts`'s `Countdown` union: "lapsed" is a different
  * shape from "counting" because paying today still saves the deduction in one

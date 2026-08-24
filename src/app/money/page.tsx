@@ -32,7 +32,7 @@ import { ErrorState } from "@/components/data-states/error-state";
  * been promised?* **On payables:** *which bill costs me a deduction if I let it
  * slip?*
  *
- * **What was wrong.** The two sides were tabs, and the §43B(h) clock lived on
+ * **What was wrong.** The two sides were tabs, and the §37(2)(g) clock lived on
  * the second one — so a deduction that had *already lapsed* was one click away
  * from never being seen. On the fixture that is ₹26,000 gone for the financial
  * year, hidden behind a tab. A deadline with a legal consequence and no undo
@@ -358,12 +358,30 @@ function ReceivableRow({
     one would be wrong.
   */
   const itc = row.itcReversal;
+  const ded = row.deductionRisk;
+
+  /*
+    Two independent clocks, and either or both may be running: Rule 37 needs
+    the customer to be GST-registered, §37(2)(g) needs this firm to be a
+    registered micro or small enterprise. §37(2)(g) is stated first because it
+    bites first — 15 or 45 days against Rule 37's 180.
+  */
+  const dedClause = ded.applies
+    ? ded.passed
+      ? `It has been outstanding for more than ${ded.limitDays} days — under §37(2)(g) the deduction for ${rupees(ded.deductionAtRiskPaise)} claimed against it is now disallowed for the year, with no way to recover it by paying later.`
+      : `Under §37(2)(g), if it remains unpaid on ${ded.lapsesOn} — ${ded.limitDays} days from the invoice — the deduction for ${rupees(ded.deductionAtRiskPaise)} claimed against it is disallowed for the year.`
+    : null;
+  const itcClause = itc.applies
+    ? itc.passed
+      ? `It has been outstanding for more than 180 days — under Rule 37 the input tax credit of ${rupees(itc.creditAtRiskPaise)} claimed on it is now reversible with interest, and can be re-availed once payment is made.`
+      : `Under Rule 37, if it remains unpaid on ${itc.reversesOn} — 180 days from the invoice — the input tax credit of ${rupees(itc.creditAtRiskPaise)} claimed on it has to be reversed with interest.`
+    : null;
+  const consequenceClauses = [dedClause, itcClause].filter((c): c is string => c !== null);
+
   const remindText =
-    itc.applies && itc.passed
-      ? `Dear ${row.customer}, invoice ${row.invoiceNumber} dated ${row.invoiceDate} has been outstanding for more than 180 days. Under Rule 37 the input tax credit of ${rupees(itc.creditAtRiskPaise)} claimed on it is now reversible with interest, and can be re-availed once payment is made. Please let us know when we can expect it.`
-      : itc.applies
-        ? `Dear ${row.customer}, invoice ${row.invoiceNumber} dated ${row.invoiceDate} is still open. Under Rule 37, if it is unpaid on ${itc.reversesOn} — 180 days from the invoice — the input tax credit of ${rupees(itc.creditAtRiskPaise)} claimed on it has to be reversed with interest. We would rather you kept it.`
-        : `Hello ${row.customer}, this is a reminder about invoice ${row.invoiceNumber} dated ${row.invoiceDate}, which is now ${row.daysOverdue} days overdue. Kindly let us know when we can expect payment. Thank you.`;
+    consequenceClauses.length > 0
+      ? `Dear ${row.customer}, invoice ${row.invoiceNumber} dated ${row.invoiceDate} is still open. ${consequenceClauses.join(" ")} We would rather you kept it.`
+      : `Hello ${row.customer}, this is a reminder about invoice ${row.invoiceNumber} dated ${row.invoiceDate}, which is now ${row.daysOverdue} days overdue. Kindly let us know when we can expect payment. Thank you.`;
 
   const remind = whatsappHref(row.phone, remindText);
 
@@ -388,6 +406,18 @@ function ReceivableRow({
           a row that already carries five numbers; a date inside a month is the
           reason to ring today.
         */}
+        {/*
+          §37(2)(g)'s whole window is 15 or 45 days, unlike Rule 37's 180 — so
+          unlike the ITC line below, there is no "still far off" case to hide:
+          every day this applies is inside the last month of a much shorter clock.
+        */}
+        {ded.applies ? (
+          <p className={cn("truncate text-xs", ded.passed ? "text-destructive" : "text-warning")}>
+            {ded.passed
+              ? `Their deduction of ${rupees(ded.deductionAtRiskPaise)} is already disallowed — §37(2)(g)`
+              : `Their deduction of ${rupees(ded.deductionAtRiskPaise)} lapses on ${ded.lapsesOn}`}
+          </p>
+        ) : null}
         {itc.applies && (itc.passed || itc.daysUntil <= 30) ? (
           <p className={cn("truncate text-xs", itc.passed ? "text-destructive" : "text-warning")}>
             {itc.passed

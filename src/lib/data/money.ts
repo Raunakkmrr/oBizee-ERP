@@ -8,7 +8,7 @@
  *    already promised is how MSMEs damage relationships." A generic collections
  *    tool does not have this restraint; it is deliberate.
  *
- * 2. **§43B(h)**: pay a micro or small supplier late and the expense stops being
+ * 2. **§37(2)(g)**: pay a micro or small supplier late and the expense stops being
  *    deductible **this year**. The owner's CA tells him in October about an
  *    April bill. The rupee figure at the top of the payables tab is the whole
  *    pitch of the screen.
@@ -99,6 +99,25 @@ const receivableSchema = z.object({
         daysUntil: z.number().int(),
         passed: z.boolean(),
         creditAtRiskPaise: z.number().int().nonnegative(),
+      }),
+    ])
+    .default({ applies: false, reason: "settled" }),
+  /**
+   * When the customer's own income-tax deduction turns against them —
+   * §37(2)(g). The other side of the payables clock: it bites whether or not
+   * the customer is GST-registered, and it bites first — 15 or 45 days, not
+   * 180 — but only once this firm has recorded its own Udyam status.
+   */
+  deductionRisk: z
+    .union([
+      z.object({ applies: z.literal(false), reason: z.string() }),
+      z.object({
+        applies: z.literal(true),
+        limitDays: z.union([z.literal(15), z.literal(45)]),
+        lapsesOn: z.string(),
+        daysUntil: z.number().int(),
+        passed: z.boolean(),
+        deductionAtRiskPaise: z.number().int().nonnegative(),
       }),
     ])
     .default({ applies: false, reason: "settled" }),
@@ -200,7 +219,7 @@ const payableSchema = z.object({
 export type Payable = z.infer<typeof payableSchema>;
 
 /**
- * The §43B(h) countdown for one bill.
+ * The §37(2)(g) countdown for one bill.
  *
  * Modelled as a discriminated union so that **"we cannot calculate this"** is a
  * different shape from **"day 38 of 45"** — a suppressed countdown must never be
@@ -299,7 +318,7 @@ export function deductionLostPaise(bills: Payable[]): number {
 /**
  * What is irreversible or running out — the band at the top of the screen.
  *
- * The §43B(h) clock used to live on the *second tab* of this screen, so a
+ * The §37(2)(g) clock used to live on the *second tab* of this screen, so a
  * deduction that had already lapsed was one click away from never being seen.
  * A deadline with a legal consequence does not belong behind a tab.
  *
@@ -502,7 +521,7 @@ export const getMoney = defineQuery<void, MoneyData>({
   /**
    * Read from the store, not from the constant.
    *
-   * `Mark paid` is the action that saves a §43B(h) deduction — the single most
+   * `Mark paid` is the action that saves a §37(2)(g) deduction — the single most
    * consequential button in the product — and it cannot be real while this
    * screen reads a frozen fixture. Money now lives in the store like leads and
    * the board, so paying a bill survives a reload and the alarm band recomputes

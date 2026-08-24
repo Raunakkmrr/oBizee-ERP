@@ -17,7 +17,7 @@ import { toComputed, type HomeSnapshot } from "@/lib/data/home";
  *
  * - **Receivables ageing** across §5.9's buckets. The 45-day boundary is present
  *   because it is the boundary the counterparty's tax position turns on
- *   (§43B(h)), which makes it a lever in a collection call rather than trivia.
+ *   (§37(2)(g)), which makes it a lever in a collection call rather than trivia.
  * - **AMC renewals inside 45 days** (FR-506) — a lapsed AMC is the
  *   highest-conversion lead this business will ever get.
  * - **Contracts under-delivering their committed visits.** §6.14 calls the

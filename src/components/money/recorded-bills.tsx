@@ -32,7 +32,7 @@ export function RecordedBills() {
     Read from the register, not the browser.
 
     Marking a bill paid now goes to the API, and a panel still reading a local
-    array would leave the row on screen with its §43B(h) clock running against
+    array would leave the row on screen with its §37(2)(g) clock running against
     a bill that was settled — the exact contradiction this panel exists to
     prevent.
 
@@ -87,7 +87,7 @@ export function RecordedBills() {
       ) : null}
       {bills.length === 0 ? (
         <p className="p-4 text-sm text-muted-foreground">
-          Nothing recorded yet. A bill entered here starts its own §43B(h) clock.
+          Nothing recorded yet. A bill entered here starts its own §37(2)(g) clock.
         </p>
       ) : (
         <>

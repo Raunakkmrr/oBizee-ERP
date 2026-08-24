@@ -159,7 +159,7 @@ export const NAV_ITEMS: Record<NavKey, NavItem> = {
     href: "/vendors",
     icon: "Store",
     badge: null,
-    // FR-705 promoted to Must by decision D1: FR-905's §43B(h) countdown is a
+    // FR-705 promoted to Must by decision D1: FR-905's §37(2)(g) countdown is a
     // Must and cannot count without vendor records. Sits under Money because a
     // vendor is a payable, not an operation.
     requires: "invoice:read",

@@ -6,7 +6,7 @@ import { MSME_CLASSES } from "./money";
 /**
  * Vendors — FR-705.
  *
- * **Why this is a Must and not a Should.** FR-905's §43B(h) countdown is a Must,
+ * **Why this is a Must and not a Should.** FR-905's §37(2)(g) countdown is a Must,
  * and it cannot count anything without knowing whether the vendor is a micro or
  * small enterprise, when the bill was dated, and whether there is a written
  * agreement. Same for FR-807 (reverse charge, which turns on the vendor's

@@ -248,6 +248,27 @@ export const renameFirm = (body: { legalName?: string; businessName?: string }) 
     patch<{ legalName: string; businessName: string }>("/api/settings/profile", body),
   );
 
+/**
+ * The firm's own Udyam registration — the other side of §37(2)(g).
+ *
+ * `vendors.ts` already asks this about every supplier the firm pays; a
+ * corporate customer's own deduction turns on the same fact about *this*
+ * firm, and nothing can compute that risk until it is recorded.
+ */
+export const setFirmMsmed = (body: {
+  msmeClass: "MICRO" | "SMALL" | "MEDIUM" | "NOT_REGISTERED" | "UNVERIFIED";
+  udyamNumber: string | null;
+  udyamActivity: "MANUFACTURING" | "SERVICE" | "TRADING" | null;
+}) =>
+  attempt(() =>
+    patch<{
+      msmeClass: string;
+      udyamNumber: string | null;
+      udyamActivity: string | null;
+      udyamVerifiedOn: string | null;
+    }>("/api/settings/profile/msmed", body),
+  );
+
 /** FR-502 — idempotent by visit key, so running it twice cannot double a year. */
 export const generateVisits = (id: string) =>
   attempt(() => post<{ created: number; skipped: number }>(
@@ -450,7 +471,7 @@ export const recordPurchaseBill = (body: Record<string, unknown>) =>
   attempt(() => post<{ id: string }>("/api/vendors/bills", body));
 
 /**
- * Settle a purchase bill — the §43B(h) clock stops on `paidOn`.
+ * Settle a purchase bill — the §37(2)(g) clock stops on `paidOn`.
  *
  * The date is a parameter and not the server's clock: a bill paid on the 14th
  * and recorded on the 16th was paid on the 14th, and against a 15-day MSMED

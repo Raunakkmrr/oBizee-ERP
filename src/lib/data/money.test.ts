@@ -26,6 +26,7 @@ function receivable(over: Partial<Receivable> = {}): Receivable {
     paidPaise: 0,
     taxOnUncollectedPaise: 0,
     itcReversal: { applies: false, reason: "settled" } as const,
+    deductionRisk: { applies: false, reason: "settled" } as const,
     lastContact: null,
     phone: "98200 12345",
     promise: null,
@@ -115,7 +116,7 @@ describe("promise-to-pay restraint (FR-904)", () => {
   });
 });
 
-describe("§43B(h) countdown (§6.12.2)", () => {
+describe("§37(2)(g) countdown (§6.12.2)", () => {
   it("uses 15 days with no written agreement and 45 with one", () => {
     const withAgreement = countdownFor(payable({ hasWrittenAgreement: true }));
     const without = countdownFor(payable({ hasWrittenAgreement: false }));
@@ -172,7 +173,7 @@ describe("deduction at risk", () => {
   });
 });
 
-describe("lapsed is not a big 'counting' (§43B(h))", () => {
+describe("lapsed is not a big 'counting' (§37(2)(g))", () => {
   it("switches to lapsed the day after the limit", () => {
     expect(
       countdownFor(payable({ hasWrittenAgreement: false, daysElapsed: 15 }))
