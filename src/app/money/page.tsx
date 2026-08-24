@@ -302,6 +302,11 @@ function AgeingLine({
   );
 }
 
+/** `₹1,180` — inline in a sentence, so no decimals and no component. */
+function rupees(paise: number): string {
+  return `₹${(paise / 100).toLocaleString("en-IN")}`;
+}
+
 function ReceivableRow({
   row,
   primary,
@@ -338,10 +343,29 @@ function ReceivableRow({
     ready and the person presses send — chasing ₹86,400 is not something
     software should do on someone's behalf without them seeing it.
   */
-  const remind = whatsappHref(
-    row.phone,
-    `Hello ${row.customer}, this is a reminder about invoice ${row.invoiceNumber} dated ${row.invoiceDate}, which is now ${row.daysOverdue} days overdue. Kindly let us know when we can expect payment. Thank you.`,
-  );
+  /*
+    The message, and why it changes when Rule 37 applies.
+
+    "Kindly let us know when we can expect payment" asks a favour, and a
+    corporate AP department is very good at not granting favours. Where the
+    customer is registered, the second proviso to §16(2) gives a better
+    sentence: at 180 days from the invoice they must reverse the input tax
+    credit they claimed, with interest, and can only re-avail it once they pay.
+
+    That is a fact about *their* books, so it gets escalated past whoever reads
+    the inbox — which the polite version never does. The unregistered case keeps
+    the polite version, because they claimed no credit and threatening them with
+    one would be wrong.
+  */
+  const itc = row.itcReversal;
+  const remindText =
+    itc.applies && itc.passed
+      ? `Dear ${row.customer}, invoice ${row.invoiceNumber} dated ${row.invoiceDate} has been outstanding for more than 180 days. Under Rule 37 the input tax credit of ${rupees(itc.creditAtRiskPaise)} claimed on it is now reversible with interest, and can be re-availed once payment is made. Please let us know when we can expect it.`
+      : itc.applies
+        ? `Dear ${row.customer}, invoice ${row.invoiceNumber} dated ${row.invoiceDate} is still open. Under Rule 37, if it is unpaid on ${itc.reversesOn} — 180 days from the invoice — the input tax credit of ${rupees(itc.creditAtRiskPaise)} claimed on it has to be reversed with interest. We would rather you kept it.`
+        : `Hello ${row.customer}, this is a reminder about invoice ${row.invoiceNumber} dated ${row.invoiceDate}, which is now ${row.daysOverdue} days overdue. Kindly let us know when we can expect payment. Thank you.`;
+
+  const remind = whatsappHref(row.phone, remindText);
 
   return (
     <div className="odd:bg-muted-bg">
@@ -359,6 +383,18 @@ function ReceivableRow({
         <p className="truncate text-xs text-muted-foreground">
           {row.lastContact ?? "No contact logged"}
         </p>
+        {/*
+          Said only when it is close or gone. A date 163 days away is noise on
+          a row that already carries five numbers; a date inside a month is the
+          reason to ring today.
+        */}
+        {itc.applies && (itc.passed || itc.daysUntil <= 30) ? (
+          <p className={cn("truncate text-xs", itc.passed ? "text-destructive" : "text-warning")}>
+            {itc.passed
+              ? `Their ITC of ${rupees(itc.creditAtRiskPaise)} is already reversible — Rule 37`
+              : `Their ITC of ${rupees(itc.creditAtRiskPaise)} reverses on ${itc.reversesOn}`}
+          </p>
+        ) : null}
       </div>
 
       {/* Days overdue as a word, never a bare integer (§6.12.1). */}

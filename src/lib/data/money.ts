@@ -79,6 +79,29 @@ const receivableSchema = z.object({
    * money that has not arrived.
    */
   taxOnUncollectedPaise: z.number().int().nonnegative().default(0),
+  /**
+   * When the customer's own input tax credit turns against them — Rule 37.
+   *
+   * The strongest lever a small supplier has and the one nobody uses: at day
+   * 180 an unpaid invoice costs the *customer* their credit plus interest.
+   * Absent for an unregistered customer, who claimed no credit and has none to
+   * reverse.
+   */
+  itcReversal: z
+    .union([
+      z.object({
+        applies: z.literal(false),
+        reason: z.enum(["customer_not_registered", "settled"]),
+      }),
+      z.object({
+        applies: z.literal(true),
+        reversesOn: z.string(),
+        daysUntil: z.number().int(),
+        passed: z.boolean(),
+        creditAtRiskPaise: z.number().int().nonnegative(),
+      }),
+    ])
+    .default({ applies: false, reason: "settled" }),
   lastContact: z.string().nullable(),
   /**
    * The number to chase on. Added because `Remind` and `Log call` existed as
