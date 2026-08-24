@@ -24,6 +24,7 @@ function receivable(over: Partial<Receivable> = {}): Receivable {
     amountPaise: 1_000_00,
     billedPaise: 1_000_00,
     paidPaise: 0,
+    taxOnUncollectedPaise: 0,
     lastContact: null,
     phone: "98200 12345",
     promise: null,

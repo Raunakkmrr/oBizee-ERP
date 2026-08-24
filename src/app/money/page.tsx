@@ -628,6 +628,29 @@ function Receivables({ data, onLogged }: { data: MoneyData; onLogged: () => void
         </p>
       </div>
 
+      {/*
+        The GST already handed over on money that has not arrived.
+
+        This is the figure the firm asked about before any of this was built —
+        "paying GST for money which never showed up" — and nothing could answer
+        it. Stated under the receivable rather than beside it, because it is a
+        consequence of that number rather than a second version of it.
+
+        Deliberately not called recoverable. Getting it back needs a credit note
+        inside the §34(2) window and the customer's acceptance; where the money
+        is merely late, the answer is to collect it.
+      */}
+      {data.taxOnUncollectedPaise > 0 ? (
+        <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
+          <span>GST already paid on this uncollected money</span>
+          <MoneyText
+            amount={asPaise(data.taxOnUncollectedPaise)}
+            className="font-medium text-brand-brown"
+          />
+          <span>— it went out when the invoices were issued, not when they are paid.</span>
+        </p>
+      ) : null}
+
       <AgeingLine rows={data.receivables} active={filter} onPick={setFilter} />
 
       {/*

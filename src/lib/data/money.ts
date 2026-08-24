@@ -71,6 +71,14 @@ const receivableSchema = z.object({
    */
   billedPaise: z.number().int().nonnegative().default(0),
   paidPaise: z.number().int().nonnegative().default(0),
+  /**
+   * The GST already handed over against this uncollected money.
+   *
+   * §13(2) made the whole liability fall due when the invoice was issued,
+   * whatever had been collected, so this is the share of it sitting against
+   * money that has not arrived.
+   */
+  taxOnUncollectedPaise: z.number().int().nonnegative().default(0),
   lastContact: z.string().nullable(),
   /**
    * The number to chase on. Added because `Remind` and `Log call` existed as
@@ -324,6 +332,14 @@ export function moneyAlarms(bills: Payable[]): MoneyAlarm[] {
 
 export const moneySchema = z.object({
   receivables: z.array(receivableSchema),
+  /**
+   * GST already paid on money that has not arrived — totalled server-side so
+   * every screen showing it shows the same figure.
+   *
+   * This is the number the firm asked about first, and nothing in the product
+   * could answer it.
+   */
+  taxOnUncollectedPaise: z.number().int().nonnegative().default(0),
   payables: z.array(payableSchema),
   /** §6.12.3's empty state needs the upcoming figure, not just a zero. */
   dueNext15Paise: z.number().int(),
