@@ -70,3 +70,15 @@ a real credential. Backend deploy/rollback details are in deploy/ERP-RUNTIME-004
 Rollback: revert web candidate through hosting CI or remove server target to fail closed.
 Keep the same host-only /auth cookie scope; never point to fixture/platform or reveal a
 refresh token in browser JSON. Preserve deployment/build/hash records and session tables.
+
+## Hosting timezone correction
+
+Amplify canary job1 at approved commit a2ab771 failed the inherited weekly visit-horizon
+test under the AWS UTC default (four visits instead of its expected three). Product and
+test logic are deliberately unchanged. Amplify now runs vitest and the production build
+with TZ=Asia/Kolkata; GitHub's check job uses the same timezone so both build paths agree.
+This is the product timezone, not a relaxed test assertion or fixture backend. The UTC
+reproduction remains recorded as a known inherited portability limit. The historical
+vitest-config comment about running in UTC is not a guarantee for this horizon test.
+No timezone is added to public API configuration or the SSR secret allowlist. A future
+timezone-independent scheduling/test correction requires its own bounded assignment.

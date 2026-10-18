@@ -9,12 +9,12 @@ frontend:
     build:
       commands:
         - pnpm exec tsc --noEmit --incremental false
-        - pnpm exec vitest run
+        - TZ=Asia/Kolkata pnpm exec vitest run
         # Only the fixed server runtime configuration is persisted for Next SSR.
         # No database credentials, JWT, admin secret, or NEXT_PUBLIC_API_URL.
         - >-
           node -e 'const fs = require("node:fs"); const keys = ["ERP_TENANT_API_URL", "ERP_WEB_ORIGIN"].filter(key => process.env[key]); fs.writeFileSync(".env.production", keys.map(key => key + "=" + JSON.stringify(process.env[key]).replace(/\$/g, "\\$")).join("\n") + "\n", { mode: 0o600 });'
-        - NEXT_PUBLIC_DATA_SOURCE=api pnpm run build
+        - TZ=Asia/Kolkata NEXT_PUBLIC_DATA_SOURCE=api pnpm run build
   artifacts:
     baseDirectory: .next
     files:
