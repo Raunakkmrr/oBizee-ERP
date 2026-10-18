@@ -33,6 +33,7 @@ import type { Permission, Role } from "../roles";
  * "Something went wrong" screen that tells a coordinator nothing.
  */
 export type AppError =
+  | { kind: "session"; message: string; code: "SESSION_ENDED" | "SESSION_CHANGED" }
   /**
    * Connectivity. §6.3: keep the last-known content on screen, add a top
    * banner, offer Retry. **Never blank the screen.** `lastKnownAsOf` is what

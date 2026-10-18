@@ -7,7 +7,11 @@ import {
   endSession,
   getAccessToken,
   hasSessionHint,
+  isValidCaller,
   loadCaller,
+  rotateSession,
+  sessionPrincipalRevision,
+  sessionRevision,
   startSession,
 } from "./session";
 
@@ -24,7 +28,8 @@ import {
  * exchanged and the request replayed. If that fails the session ends, because
  * two failures in a row is a session that is genuinely over rather than stale.
  */
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+// The server proxy owns the upstream. No browser-to-API cross-site cookie hop.
+const BASE = "";
 
 /**
  * Every call that must carry or receive the refresh cookie.
@@ -41,21 +46,44 @@ const WITH_COOKIE = "include" as const;
 /** In flight, so ten simultaneous 401s cause one refresh rather than ten. */
 let refreshing: Promise<boolean> | null = null;
 
+async function boundedFetch(url:string,init:RequestInit,timeoutMs=10_000){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  try{return await fetch(url,{...init,signal:controller.signal});}
+  finally{clearTimeout(timer);}
+}
+
 async function refresh(): Promise<boolean> {
   // Nothing to send: the token is a cookie this code cannot read. The hint only
   // saves a round trip for a visitor who has never signed in.
   if (!hasSessionHint()) return false;
 
   refreshing ??= (async () => {
+    const begunAt = sessionRevision();
     try {
-      const response = await fetch(`${BASE}/auth/refresh`, {
+      const response = await boundedFetch(`${BASE}/auth/refresh`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: WITH_COOKIE,
         body: "{}",
       });
       if (!response.ok) return false;
-      startSession(await response.json());
+      const tokens=await response.json() as {accessToken:string};
+      if(typeof tokens.accessToken!=="string")return false;
+      // The cookie may have been replaced by a different account in another
+      // tab. Confirm /me with the new token before changing the visible caller.
+      // Use a direct request here: apiFetch would recursively await this very
+      // refresh promise on a 401.
+      const identity=await boundedFetch(`${BASE}/api/me`,{
+        headers:{Authorization:`Bearer ${tokens.accessToken}`},
+      });
+      if(!identity.ok)return false;
+      const confirmed=await identity.json() as unknown;
+      if(!isValidCaller(confirmed))return false;
+      // A password sign-in or sign-out may have happened while the old cookie
+      // request was in flight. It must never install the old identity over it.
+      if(sessionRevision()!==begunAt)return getAccessToken()!==null;
+      rotateSession(tokens,confirmed);
       return true;
     } catch {
       return false;
@@ -70,6 +98,10 @@ async function refresh(): Promise<boolean> {
 type ApiFailure = { error?: string; needs?: string; role?: string; constraint?: string };
 
 function toDataSourceError(status: number, body: ApiFailure): DataSourceError {
+  if (status === 401) {
+    return new DataSourceError({kind:"session",
+      message:"Your session ended. Sign in again to continue.",code:"SESSION_ENDED"});
+  }
   if (status === 403 && body.needs) {
     /*
       §6.3 requires naming *who can act* — "the difference between a dead end
@@ -111,11 +143,18 @@ function toDataSourceError(status: number, body: ApiFailure): DataSourceError {
   });
 }
 
+function sessionChangedError():DataSourceError{
+  return new DataSourceError({kind:"session",
+    message:"Your account changed while this request was in progress. Review and retry it from the current account.",
+    code:"SESSION_CHANGED"});
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
   retried = false,
 ): Promise<Fetched<T>> {
+  const principalAtStart=sessionPrincipalRevision();
   /*
     Replace the token before it is refused, not after.
 
@@ -148,8 +187,10 @@ export async function apiFetch<T>(
   if (!retried && (accessTokenIsStale() || (!getAccessToken() && hasSessionHint()))) {
     await refresh();
   }
+  if(principalAtStart!==sessionPrincipalRevision())throw sessionChangedError();
 
   const token = getAccessToken();
+  const requestedAt = sessionRevision();
 
   let response: Response;
   try {
@@ -167,9 +208,15 @@ export async function apiFetch<T>(
     throw new DataSourceError({ kind: "connectivity", lastKnownAsOf: null });
   }
 
-  if (response.status === 401 && !retried) {
-    if (await refresh()) return apiFetch<T>(path, init, true);
-    endSession();
+  if (response.status === 401) {
+    if(principalAtStart!==sessionPrincipalRevision())throw sessionChangedError();
+    if (!retried && requestedAt !== sessionRevision() && getAccessToken())
+      return apiFetch<T>(path, init, true);
+    if (!retried && await refresh()) {
+      if(principalAtStart!==sessionPrincipalRevision())throw sessionChangedError();
+      return apiFetch<T>(path, init, true);
+    }
+    if (requestedAt === sessionRevision()) endSession("expired");
   }
 
   if (!response.ok) {
@@ -185,18 +232,89 @@ export async function apiFetch<T>(
   return { raw: (await response.json()) as T, staleAsOf: null };
 }
 
+/** Authenticated binary retrieval; document bytes are never exposed at a public URL. */
+export async function apiDownload(path: string, retried = false): Promise<Blob> {
+  const principalAtStart=sessionPrincipalRevision();
+  if (!retried && (accessTokenIsStale() || (!getAccessToken() && hasSessionHint()))) {
+    await refresh();
+  }
+  if(principalAtStart!==sessionPrincipalRevision())throw sessionChangedError();
+  let response: Response;
+  const requestedAt=sessionRevision();
+  try {
+    response = await fetch(`${BASE}${path}`, {
+      headers: { ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}) },
+    });
+  } catch {
+    throw new DataSourceError({ kind: "connectivity", lastKnownAsOf: null });
+  }
+  if (response.status === 401) {
+    if(principalAtStart!==sessionPrincipalRevision())throw sessionChangedError();
+    if (!retried && requestedAt!==sessionRevision() && getAccessToken())
+      return apiDownload(path,true);
+    if (!retried && await refresh()) {
+      if(principalAtStart!==sessionPrincipalRevision())throw sessionChangedError();
+      return apiDownload(path, true);
+    }
+    if(requestedAt===sessionRevision())endSession("expired");
+  }
+  if (!response.ok) {
+    let body: ApiFailure = {};
+    try { body = await response.json() as ApiFailure; } catch { /* A non-JSON refusal. */ }
+    throw toDataSourceError(response.status, body);
+  }
+  return response.blob();
+}
+
+/** Authenticated POST download for reviewed exports that must not put selections in a URL. */
+export async function apiDownloadPost(path:string,body:unknown,retried=false):Promise<Blob>{
+  const principalAtStart=sessionPrincipalRevision();
+  if(!retried&&(accessTokenIsStale()||(!getAccessToken()&&hasSessionHint())))
+    await refresh();
+  if(principalAtStart!==sessionPrincipalRevision())throw sessionChangedError();
+  let response:Response;
+  const requestedAt=sessionRevision();
+  try{response=await fetch(`${BASE}${path}`,{method:"POST",headers:{
+    "content-type":"application/json",
+    ...(getAccessToken()?{Authorization:`Bearer ${getAccessToken()}`}:{})},
+    body:JSON.stringify(body)});
+  }catch{throw new DataSourceError({kind:"connectivity",lastKnownAsOf:null});}
+  if(response.status===401){
+    if(principalAtStart!==sessionPrincipalRevision())throw sessionChangedError();
+    if(!retried&&requestedAt!==sessionRevision()&&getAccessToken())
+      return apiDownloadPost(path,body,true);
+    if(!retried&&await refresh()){
+      if(principalAtStart!==sessionPrincipalRevision())throw sessionChangedError();
+      return apiDownloadPost(path,body,true);
+    }
+    if(requestedAt===sessionRevision())endSession("expired");
+  }
+  if(!response.ok){let failure:ApiFailure={};
+    try{failure=await response.json() as ApiFailure;}catch{/* Non-JSON refusal. */}
+    throw toDataSourceError(response.status,failure);
+  }
+  return response.blob();
+}
+
 export async function signInWithPassword(
   email: string,
   password: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
+  // A previous tab-session refresh may still be receiving Set-Cookie. Let it
+  // finish before this sign-in sets a new cookie, so a late old reply cannot
+  // replace the newly chosen account's refresh credential in the browser.
+  if(refreshing)await refreshing;
   const response = await fetch(`${BASE}/auth/password`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: WITH_COOKIE,
     body: JSON.stringify({ email, password }),
   });
-  const body = await response.json();
-  if (!response.ok) return { ok: false, message: body.error ?? "Could not sign in" };
+  const body = await response.json().catch(() => null);
+  if (!response.ok) return { ok: false, message: typeof body?.error==="string"?
+    body.error:"Could not sign in just now" };
+  if(typeof body?.accessToken!=="string"||body.accessToken.length===0)
+    return {ok:false,message:"Sign-in service returned an incomplete response. Try again."};
   startSession(body);
   /*
     Fetch the identity as part of signing in, not afterwards.
@@ -206,7 +324,8 @@ export async function signInWithPassword(
     gets redirected straight back to this screen. Whoever starts the session
     is responsible for completing it.
   */
-  await loadCaller();
+  if(!await loadCaller())return {ok:false,
+    message:"Signed in, but your account could not be confirmed. Check the connection and try again."};
   return { ok: true };
 }
 

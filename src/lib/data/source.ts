@@ -33,6 +33,8 @@ export type DataSourceKind = "fixture" | "api";
  * is the whole migration for a screen whose contract has not changed.
  */
 export function resolveDataSourceKind(): DataSourceKind {
+  // A production screen must never fall back to sample company data.
+  if (process.env.NODE_ENV === "production") return "api";
   return process.env.NEXT_PUBLIC_DATA_SOURCE === "api" ? "api" : "fixture";
 }
 

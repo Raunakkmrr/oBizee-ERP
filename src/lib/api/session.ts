@@ -14,11 +14,13 @@
  * made to wait for a pointless refresh attempt on every cold load. Forged, it
  * buys an attacker one 401.
  */
-import type { Role } from "../roles";
+import {ROLES,type Role} from "../roles";
+import { DataSourceError } from "../data/source";
 import { apiFetch } from "./client";
 
 /** A hint, not a key. See the note above — the credential is a cookie. */
 const SESSION_HINT = "obizee.session";
+const SESSION_ENDED = "obizee.session-ended";
 
 /**
  * Who is signed in — the whole of it, from `/api/me`.
@@ -37,6 +39,17 @@ export type Caller = {
   /** True while the password in use was chosen by somebody else. */
   mustChangePassword: boolean;
 };
+
+export function isValidCaller(value:unknown):value is Caller{
+  if(!value||typeof value!=="object")return false;
+  const row=value as Record<string,unknown>;
+  return typeof row.id==="string"&&row.id.length>0&&
+    typeof row.tenantId==="string"&&row.tenantId.length>0&&
+    typeof row.name==="string"&&
+    typeof row.role==="string"&&ROLES.some(role=>role===row.role)&&
+    (row.level===null||typeof row.level==="string")&&
+    typeof row.mustChangePassword==="boolean";
+}
 
 let accessToken: string | null = null;
 /**
@@ -84,9 +97,18 @@ export function accessTokenIsStale(marginMs = 60_000): boolean {
   if (accessToken === null || accessTokenExpiresAt === null) return false;
   return Date.now() + marginMs >= accessTokenExpiresAt;
 }
+/** Local gate only; the server remains authoritative and remote revocation waits for reconnect. */
+export function localAccessTokenUnexpired():boolean{
+  return accessToken!==null&&accessTokenExpiresAt!==null&&Date.now()<accessTokenExpiresAt;
+}
 let caller: Caller | null = null;
 /** Distinguishes "nobody is signed in" from "we have not asked yet". */
 let resolved = false;
+let loadFailure: "connectivity" | "unavailable" | null = null;
+/** Fence late responses from a previous sign-in, refresh, or sign-out. */
+let revision = 0;
+/** Changes only when the principal changes, not for a same-person token refresh. */
+let principalRevision = 0;
 const listeners = new Set<() => void>();
 
 function announce() {
@@ -110,6 +132,18 @@ export function callerResolved(): boolean {
   return resolved;
 }
 
+export function sessionLoadFailure():"connectivity"|"unavailable"|null{
+  return loadFailure;
+}
+
+export function sessionRevision(): number {
+  return revision;
+}
+
+export function sessionPrincipalRevision(): number {
+  return principalRevision;
+}
+
 /**
  * Ask the API who this token belongs to.
  *
@@ -118,21 +152,44 @@ export function callerResolved(): boolean {
  * and the switcher it replaces.
  */
 export async function loadCaller(): Promise<Caller | null> {
+  const requestedAt = revision;
   if (!accessToken && !hasSessionHint()) {
-    resolved = true;
-    announce();
-    return null;
+    if (revision === requestedAt) {
+      loadFailure=null;
+      resolved = true;
+      announce();
+    }
+    return caller;
   }
 
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),10_000);
   try {
-    const { raw } = await apiFetch<Caller>("/api/me");
-    caller = raw;
-  } catch {
-    // A token we cannot exchange for an identity is not a session.
-    caller = null;
+    // Never leave every protected page blank indefinitely when an identity
+    // request stalls. A timeout leaves the session hint/drafts untouched; the
+    // person can retry sign-in when connectivity returns.
+    const { raw } = await apiFetch<Caller>("/api/me",{
+      signal:controller.signal});
+    if(!isValidCaller(raw))throw new DataSourceError({kind:"server",
+      message:"Account verification returned incomplete information.",
+      code:"IDENTITY_INCOMPLETE"});
+    if (revision === requestedAt) {
+      caller = raw;
+      loadFailure=null;
+    }
+  } catch(error) {
+    // A network/server fault is not a sign-out. Preserve the token and
+    // identity-bound drafts, and offer another verification attempt.
+    if (revision === requestedAt && !caller) {
+      loadFailure=error instanceof DataSourceError &&
+        error.appError.kind==="connectivity"?"connectivity":"unavailable";
+    }
   }
-  resolved = true;
-  announce();
+  if (revision === requestedAt) {
+    resolved = true;
+    announce();
+  }
+  clearTimeout(timeout);
   return caller;
 }
 
@@ -149,8 +206,13 @@ export function hasSessionHint(): boolean {
 }
 
 export function startSession(tokens: { accessToken: string }): void {
+  revision++;
+  principalRevision++;
   accessToken = tokens.accessToken;
   accessTokenExpiresAt = expiryOf(tokens.accessToken);
+  caller=null;
+  resolved=false;
+  loadFailure=null;
   /*
     The identity is not taken from the sign-in response. That reply carries a
     name and a role for the greeting, and half an identity is worse than none —
@@ -159,20 +221,53 @@ export function startSession(tokens: { accessToken: string }): void {
   */
   if (typeof window !== "undefined") {
     window.localStorage.setItem(SESSION_HINT, "1");
+    window.sessionStorage.removeItem(SESSION_ENDED);
   }
   announce();
 }
 
-export function endSession(): void {
-  caller = null;
+/**
+ * A refresh cookie can change in another tab. Confirm the identity with the
+ * server before replacing both the token and caller together; never show the
+ * previous person's details under a newly rotated token.
+ */
+export function rotateSession(tokens:{accessToken:string},confirmedCaller:Caller):void{
+  revision++;
+  if(caller && (caller.id!==confirmedCaller.id || caller.tenantId!==confirmedCaller.tenantId))
+    principalRevision++;
+  accessToken=tokens.accessToken;
+  accessTokenExpiresAt=expiryOf(tokens.accessToken);
+  caller=confirmedCaller;
+  resolved=true;
+  loadFailure=null;
+  if(typeof window!=="undefined"){
+    window.localStorage.setItem(SESSION_HINT,"1");
+    window.sessionStorage.removeItem(SESSION_ENDED);
+  }
+  announce();
+}
+
+export function endSession(reason: "signed-out" | "expired" = "signed-out"): void {
+  revision++;
+  principalRevision++;
+  // This bounded runtime does not ship the later offline/field-work store.
+  // End authentication without reading, replacing, or deleting local drafts.
   resolved = true;
   accessToken = null;
   accessTokenExpiresAt = null;
   caller = null;
+  loadFailure=null;
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(SESSION_HINT);
+    if(reason==="expired")window.sessionStorage.setItem(SESSION_ENDED,
+      "Your session ended. Sign in again to continue.");
+    else window.sessionStorage.removeItem(SESSION_ENDED);
   }
   announce();
+}
+
+export function sessionEndedNotice():string|null{
+  return typeof window==="undefined"?null:window.sessionStorage.getItem(SESSION_ENDED);
 }
 
 export function isSignedIn(): boolean {
