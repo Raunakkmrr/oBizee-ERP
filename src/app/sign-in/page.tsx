@@ -34,7 +34,7 @@ export default function SignInPage() {
     setProblem(null);
     try {
       const result = await run();
-      if (result.ok) router.push("/account");
+      if (result.ok) router.push("/");
       else setProblem(result.message);
     } catch {
       setProblem("Cannot reach the sign-in service right now. Check your connection and try again; your local drafts are unchanged.");

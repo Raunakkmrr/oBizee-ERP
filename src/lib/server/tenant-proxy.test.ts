@@ -14,6 +14,26 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 describe("real HTTPS tenant API proxy", () => {
+  it("forwards only reviewed cohort methods, tenant bearer and directory page; no cookies/actor overrides", async () => {
+    for (const [path,method] of [["/api/core/workspace","GET"],["/api/core/customers?page=2","GET"],["/api/core/customers","POST"]]) {
+      await tenantProxy(request(path!, method!, { authorization: "Bearer unit-access",
+        cookie: "obizee_refresh=do-not-forward", "x-tenant-id": "foreign" }));
+      const [url,init] = vi.mocked(fetch).mock.calls.at(-1)!;
+      expect(String(url)).toBe(api + path);
+      const headers = new Headers(init!.headers);
+      expect(headers.get("authorization")).toBe("Bearer unit-access");
+      expect(headers.has("cookie")).toBe(false); expect(headers.has("x-tenant-id")).toBe(false);
+    }
+  });
+  it("refuses arbitrary methods/paths and query-based backend or tenant overrides", async () => {
+    for (const path of ["/api/core/workspace?tenantId=foreign","/api/core/customers?api=http://localhost",
+      "/api/core/customers?page=0&page=1","/api/core/customers?page=-1"]) {
+      expect((await tenantProxy(request(path,"GET"))).status).toBe(400);
+    }
+    expect((await tenantProxy(request("/api/core/customers","DELETE"))).status).toBe(404);
+    expect((await tenantProxy(request("/api/core/jobs","GET"))).status).toBe(404);
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("uses one fixed upstream and preserves the host-only auth cookie", async () => {
     const res = await tenantProxy(request("/auth/refresh", "POST", {
       cookie: "admin_session=do-not-forward; obizee_refresh=synthetic-refresh",

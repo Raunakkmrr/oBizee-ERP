@@ -3,6 +3,9 @@ const ROUTES: Record<string, string> = {
   "POST /auth/refresh": "/auth/refresh",
   "POST /auth/sign-out": "/auth/sign-out",
   "GET /api/me": "/api/me",
+  "GET /api/core/workspace": "/api/core/workspace",
+  "GET /api/core/customers": "/api/core/customers",
+  "POST /api/core/customers": "/api/core/customers",
   "GET /api/health": "/health",
 };
 const LIMIT = 16_384;
@@ -67,11 +70,19 @@ export async function tenantProxy(request: Request): Promise<Response> {
         .find(x => /^obizee_refresh=[A-Za-z0-9_-]+$/.test(x));
       if (cookie) headers.set("cookie", cookie);
     }
-    if (path === "/api/me") {
+    if (path === "/api/me" || path.startsWith("/api/core/")) {
       const authorization = request.headers.get("authorization");
       if (authorization) headers.set("authorization", authorization);
     }
     config.upstream.pathname = targetPath;
+    // Only the directory page parameter is part of this cohort's contract.
+    const query = new URL(request.url).searchParams;
+    if (path === "/api/core/customers" && request.method === "GET") {
+      if ([...query.keys()].some(key => key !== "page") || query.getAll("page").length > 1 ||
+          (query.has("page") && !/^(0|[1-9][0-9]{0,4})$/.test(query.get("page")!)))
+        return Response.json({ error: "Invalid page" }, { status: 400 });
+      if (query.has("page")) config.upstream.searchParams.set("page", query.get("page")!);
+    } else if (query.size) return Response.json({ error: "Unexpected query" }, { status: 400 });
     const response = await fetch(config.upstream, { method: request.method, headers,
       ...(body !== undefined ? { body } : {}), cache: "no-store", redirect: "error",
       signal: AbortSignal.timeout(10_000) });

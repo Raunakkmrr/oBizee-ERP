@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, LogOut } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useCurrentUser, useSessionResolved } from "@/lib/data/use-session";
 import { loadCaller, sessionLoadFailure, subscribeToSession } from "@/lib/api/session";
@@ -45,7 +46,8 @@ export default function AccountCheckpoint() {
               <div><dt className="text-muted-foreground">Role</dt><dd className="mt-1 font-medium">{ROLE_LABELS[me.role]}</dd></div>
             </dl>
             <div className="mt-6 text-sm leading-relaxed text-muted-foreground">
-              <p>This release confirms sign-in and session continuity only. The operational workspace is not available here yet. No sample company activity is shown.</p>
+              <p>Your company workspace includes a live service overview and customer directory. Other modules will appear when their operational services are ready. No sample company activity is shown.</p>
+              <Link href="/" className="mt-3 inline-block underline">Open your company workspace</Link>
               <p className="mt-3">These are your company ERP credentials, not an oBizee Admin account.</p>
               {me.mustChangePassword ? <p className="mt-3" role="alert">Your account requires a password change. Password changes are not available in this connection checkpoint; contact your company owner for assistance.</p> : null}
             </div>

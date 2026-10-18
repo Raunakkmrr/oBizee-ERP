@@ -18,14 +18,15 @@ describe("real-identity-only account checkpoint", () => {
     expect(html).not.toContain("Role</dt>");
     expect(html).not.toContain("Company account ID</dt>");
   });
-  it("renders only the server-confirmed identity, without business links, ratings, counters or fixture role", () => {
+  it("renders the confirmed identity and real workspace link without ratings, counters or fixture role", () => {
     state.user = { id: "unit-user", tenantId: "confirmed-tenant", name: "Confirmed person",
       role: "technician", level: null, mustChangePassword: false };
     const html = renderToStaticMarkup(createElement(AccountCheckpoint));
     expect(html).toContain("Confirmed person"); expect(html).toContain("confirmed-tenant");
     expect(html).toContain("Technician");
-    expect(html).toContain("operational workspace is not available");
-    for (const value of ["leads_overdue", "rating", "href=", "Create job", "Dispatch", "Owner</dd>"])
+    expect(html).toContain("live service overview and customer directory");
+    expect(html).toContain('href="/"');
+    for (const value of ["leads_overdue", "rating", "Create job", "Dispatch", "Owner</dd>"])
       expect(html).not.toContain(value);
   });
   it("does not invent a working password-change path", () => {
@@ -33,6 +34,6 @@ describe("real-identity-only account checkpoint", () => {
       role: "owner", level: null, mustChangePassword: true };
     const html = renderToStaticMarkup(createElement(AccountCheckpoint));
     expect(html).toContain("Password changes are not available");
-    expect(html).not.toContain("href=");
+    expect(html).not.toContain('href="/change-password"');
   });
 });
